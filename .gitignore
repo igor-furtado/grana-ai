@@ -1,0 +1,39 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xcuserdata
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.swiftpm/
+.build/
+Package.resolved
+
+# Banco local — não vai pro git
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+
+# Segredos
+Config.swift
+
+# Arquivos gerados / IDE
+*.orig
+.vscode/
+.idea/
