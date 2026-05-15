@@ -46,7 +46,7 @@ struct ImportHistoryView: View {
             ContentUnavailableView(
                 "Sem importações",
                 systemImage: AppIcon.inbox.systemImage,
-                description: Text("Use o botão **Importar OFX** na tela de Transações para importar um extrato bancário.")
+                description: Text("Toque no ícone de importação na barra superior para importar um extrato bancário.")
             )
         } else {
             list(store: store)

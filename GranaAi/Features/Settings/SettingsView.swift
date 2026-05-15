@@ -1,54 +1,34 @@
 import SwiftUI
 
-/// Preferência de tema do app. Persistida em `UserDefaults` via `@AppStorage`
-/// — sobrevive entre execuções sem precisar tocar no `AppEnvironment`.
+/// Hub de Configurações usado no **iPhone** (TabView). Cada item navega pra
+/// sua tela própria — Categorias, Contas e Tema. No Mac o equivalente é a
+/// `Section("Configurações")` da sidebar em `ContentView`, que aponta
+/// direto pras mesmas três telas sem passar por hub.
 ///
-/// O caso `.system` (default) deixa o app seguir o tema do sistema
-/// operacional, que é a expectativa nativa de macOS/iOS.
-enum AppColorScheme: String, CaseIterable, Identifiable {
-    case system, light, dark
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .system: "Sistema"
-        case .light:  "Claro"
-        case .dark:   "Escuro"
-        }
-    }
-
-    /// `nil` significa "deixa o sistema decidir" — é o que o
-    /// `.preferredColorScheme(_:)` espera pra desligar o override.
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: nil
-        case .light:  .light
-        case .dark:   .dark
-        }
-    }
-}
-
+/// Mantido como `SettingsView` (em vez de `SettingsHubView`) porque o ponto
+/// de entrada no tab continua sendo "Configurações" — o tipo já comunica
+/// que é a tela raiz daquela aba.
 struct SettingsView: View {
-    /// A mesma chave é lida pelo `ContentView` pra aplicar
-    /// `.preferredColorScheme` no root — qualquer mudança aqui reflete
-    /// instantâneamente no app inteiro.
-    @AppStorage("appColorScheme") private var appColorScheme: AppColorScheme = .system
-
     var body: some View {
-        Form {
-            Section("Aparência") {
-                Picker("Tema", selection: $appColorScheme) {
-                    ForEach(AppColorScheme.allCases) { scheme in
-                        Text(scheme.displayName).tag(scheme)
-                    }
-                }
-                #if os(macOS)
-                .pickerStyle(.segmented)
-                #endif
+        List {
+            NavigationLink {
+                CategoriesView()
+            } label: {
+                Label("Categorias", systemImage: AppSection.categories.systemImage)
+            }
+
+            NavigationLink {
+                AccountsView()
+            } label: {
+                Label("Contas", systemImage: AppSection.accounts.systemImage)
+            }
+
+            NavigationLink {
+                ThemeView()
+            } label: {
+                Label("Tema", systemImage: AppSection.theme.systemImage)
             }
         }
-        .formStyle(.grouped)
         .navigationTitle("Configurações")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -60,5 +40,5 @@ struct SettingsView: View {
     NavigationStack {
         SettingsView()
     }
-    .frame(width: 600, height: 400)
+    .environment(AppEnvironment())
 }
