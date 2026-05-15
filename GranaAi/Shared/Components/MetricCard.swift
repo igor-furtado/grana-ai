@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// Card de métrica única, usado pelos 4 cards do dashboard Mac e pelo card
-/// grande de saldo no iPhone.
+/// Card de métrica única, usado pelos 4 cards do dashboard.
 struct MetricCard: View {
     let title: String
     let value: Decimal

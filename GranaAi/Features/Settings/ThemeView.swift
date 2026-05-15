@@ -3,8 +3,8 @@ import SwiftUI
 /// Preferência de tema do app. Persistida em `UserDefaults` via `@AppStorage`
 /// — sobrevive entre execuções sem precisar tocar no `AppEnvironment`.
 ///
-/// O caso `.system` (default) deixa o app seguir o tema do sistema
-/// operacional, que é a expectativa nativa de macOS/iOS.
+/// O caso `.system` (default) deixa o app seguir o tema do macOS, que é
+/// a expectativa nativa de qualquer app desktop Apple.
 enum AppColorScheme: String, CaseIterable, Identifiable {
     case system, light, dark
 
@@ -47,16 +47,11 @@ struct ThemeView: View {
                         Text(scheme.displayName).tag(scheme)
                     }
                 }
-                #if os(macOS)
                 .pickerStyle(.segmented)
-                #endif
             }
         }
         .formStyle(.grouped)
         .navigationTitle("Tema")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
     }
 }
 

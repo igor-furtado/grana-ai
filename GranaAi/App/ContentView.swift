@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// Seções principais do app, usadas pelo sidebar (Mac) e pela TabView (iPhone).
+/// Seções principais do app, exibidas na sidebar do `NavigationSplitView`.
 ///
-/// **Top vs. configurações:** os cases de `top` ficam soltos no topo da
-/// sidebar — uso frequente, viagem direta. Os de `settings` ficam agrupados
-/// sob a seção "Configurações" — uso ocasional, raramente trocados. A
-/// separação evita um sidebar de 8 itens "achatado" onde Tema e Dashboard
-/// têm o mesmo peso visual.
+/// **Top vs. configurações:** os cases de `topItems` ficam soltos no topo
+/// da sidebar — uso frequente, viagem direta. Os de `settingsItems` ficam
+/// agrupados sob a seção "Configurações" — uso ocasional, raramente
+/// trocados. A separação evita um sidebar de 8 itens "achatado" onde
+/// Tema e Dashboard têm o mesmo peso visual.
 enum AppSection: String, Hashable, CaseIterable, Identifiable {
     case dashboard
     case transactions
@@ -16,20 +16,13 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
     case categories
     case accounts
     case theme
-    /// Tab-only no iPhone: abre a `SettingsView` (hub que lista Categorias,
-    /// Contas e Tema). No Mac não tem equivalente — a sidebar usa a
-    /// `Section("Configurações")` agrupando direto os 3 itens, sem hub.
-    /// Fora dos arrays `topItems`/`settingsItems` de propósito: não vira
-    /// linha de sidebar no Mac.
-    case settings
 
     var id: String { rawValue }
 
-    /// Itens fixos no topo da sidebar (e tabs no iPhone).
+    /// Itens fixos no topo da sidebar.
     static let topItems: [AppSection] = [.dashboard, .transactions, .investments, .import, .chat]
 
-    /// Itens sob a seção "Configurações" da sidebar (no iPhone aparecem
-    /// dentro do hub `SettingsView` acessado pelo `case .settings`).
+    /// Itens sob a seção "Configurações" da sidebar.
     static let settingsItems: [AppSection] = [.categories, .accounts, .theme]
 
     var title: String {
@@ -42,7 +35,6 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
         case .categories:   "Categorias"
         case .accounts:     "Contas"
         case .theme:        "Tema"
-        case .settings:     "Configurações"
         }
     }
 
@@ -56,7 +48,6 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
         case .categories:   "tag.fill"
         case .accounts:     "wallet.pass.fill"
         case .theme:        "paintpalette.fill"
-        case .settings:     "gearshape"
         }
     }
 }
@@ -69,28 +60,6 @@ struct ContentView: View {
     /// `.preferredColorScheme(_:)`.
     @AppStorage("appColorScheme") private var appColorScheme: AppColorScheme = .system
 
-    // No iPhone usamos `TabView`. Decisão: um app financeiro pessoal alterna
-    // muito entre "ver dashboard" e "adicionar gasto"; tabs deixam o tap pra
-    // entrar nas Transações sempre a um toque, sem empilhar navegação.
-    //
-    // O tab "Configurações" abre o `SettingsView` (hub) — Categorias, Contas
-    // e Tema vivem lá dentro como `NavigationLink`. Contas saiu do topo (era
-    // tab antes) porque é uso menos frequente que Dashboard/Transações.
-    #if !os(macOS)
-    var body: some View {
-        TabView {
-            NavigationStack { DashboardView() }
-                .tabItem { Label(AppSection.dashboard.title, systemImage: AppSection.dashboard.systemImage) }
-
-            NavigationStack { TransactionsView() }
-                .tabItem { Label(AppSection.transactions.title, systemImage: AppSection.transactions.systemImage) }
-
-            NavigationStack { SettingsView() }
-                .tabItem { Label(AppSection.settings.title, systemImage: AppSection.settings.systemImage) }
-        }
-        .preferredColorScheme(appColorScheme.colorScheme)
-    }
-    #else
     @State private var selection: AppSection = .dashboard
 
     var body: some View {
@@ -127,10 +96,6 @@ struct ContentView: View {
                 case .categories:   CategoriesView()
                 case .accounts:     AccountsView()
                 case .theme:        ThemeView()
-                // `.settings` é iPhone-only (não está em `top` nem em
-                // `settings`, portanto nunca chega aqui via sidebar). Cobrir
-                // o case só pra deixar o switch exhaustive e não usar @unknown.
-                case .settings:     EmptyView()
                 }
             }
             .tint(.brandSecondary)
@@ -151,16 +116,10 @@ struct ContentView: View {
             description: Text("Entra em uma fase futura do roadmap.")
         )
     }
-    #endif
 }
 
-#Preview("Mac") {
+#Preview {
     ContentView()
         .environment(AppEnvironment())
         .frame(width: 900, height: 600)
-}
-
-#Preview("iPhone") {
-    ContentView()
-        .environment(AppEnvironment())
 }

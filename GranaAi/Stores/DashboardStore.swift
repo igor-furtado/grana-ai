@@ -55,8 +55,6 @@ final class DashboardStore {
     private(set) var weekdayExpenses: [WeekdayTotal] = []
     /// Populadas só em `scope == .multiMonth`. Mesma lógica de zeramento.
     private(set) var monthlyByKind: [MonthlyKindTotal] = []
-    /// Usado só pelo layout iPhone (lista das 5 últimas transações no topo).
-    private(set) var lastFiveTransactions: [Transaction] = []
     private(set) var isLoading = false
     var lastError: Error?
 
@@ -78,19 +76,17 @@ final class DashboardStore {
         let (from, to) = filter.dateRange()
 
         do {
-            // Comuns aos dois modos: cards do topo + última 5 (iPhone).
+            // Cards do topo: rodam em qualquer escopo de filtro.
             async let balanceTask = computeTotalBalance()
             async let expensesTask = database.transactions.sum(kind: .expense, from: from, to: to)
             async let incomeTask   = database.transactions.sum(kind: .income,  from: from, to: to)
-            async let lastFiveTask = lastFive()
 
-            let (balance, expenses, income, lastFive) =
-                try await (balanceTask, expensesTask, incomeTask, lastFiveTask)
+            let (balance, expenses, income) =
+                try await (balanceTask, expensesTask, incomeTask)
 
             self.totalBalance = balance
             self.periodExpenses = expenses
             self.periodIncome = income
-            self.lastFiveTransactions = lastFive
 
             switch filter.scope {
             case .singleMonth:
@@ -146,11 +142,5 @@ final class DashboardStore {
 
         let (initial, income, expense) = try await (initialTask, incomeTask, expenseTask)
         return initial + income - expense
-    }
-
-    private func lastFive() async throws -> [Transaction] {
-        // `getAll` já ordena por occurred_at DESC; pegamos o prefix.
-        let all = try await database.transactions.getAll()
-        return Array(all.prefix(5))
     }
 }

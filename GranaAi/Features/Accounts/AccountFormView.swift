@@ -66,9 +66,6 @@ struct AccountFormView: View {
             }
             .formStyle(.grouped)
             .navigationTitle(existing == nil ? "Nova conta" : "Editar conta")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancelar") { dismiss() }

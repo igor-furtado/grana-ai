@@ -35,9 +35,6 @@ struct CategoriesView: View {
             }
         }
         .navigationTitle("Categorias")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
         .task { await watch() }
     }
 
@@ -52,7 +49,6 @@ struct CategoriesView: View {
         let expense  = makeBucket(from: byKind[.expense]  ?? [])
         let transfer = makeBucket(from: byKind[.transfer] ?? [])
 
-        #if os(macOS)
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 kindBlock("Receitas",       bucket: income,   color: .income)
@@ -62,17 +58,8 @@ struct CategoriesView: View {
             .padding()
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        #else
-        List {
-            kindSection("Receitas",       bucket: income,   color: .income)
-            kindSection("Despesas",       bucket: expense,  color: .expense)
-            kindSection("Transferências", bucket: transfer, color: .transfer)
-        }
-        .headerProminence(.increased)
-        #endif
     }
 
-    #if os(macOS)
     /// Bloco "header + tabela" pra um kind. Construído com `VStack` de
     /// `HStack`s em vez de `Table` nativa: `Table` é virtualizada e não
     /// declara intrinsic height — embedded num `ScrollView` ela só renderiza
@@ -152,32 +139,6 @@ struct CategoriesView: View {
     private static let iconColumnWidth: CGFloat      = 56
     private static let colorColumnWidth: CGFloat     = 80
     private static let rowHorizontalPadding: CGFloat = 12
-    #endif
-
-    #if !os(macOS)
-    @ViewBuilder
-    private func kindSection(_ title: String, bucket: KindBucket, color: Color) -> some View {
-        Section {
-            ForEach(bucket.rows) { row in
-                HStack(spacing: 12) {
-                    IconCell(row: row)
-                    NameCell(row: row)
-                    Spacer()
-                    ColorSwatch(row: row)
-                }
-            }
-        } header: {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(color)
-                    .frame(width: 8, height: 8)
-                Text(title)
-                Text("(\(bucket.rootCount))")
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-    #endif
 
     /// Achata a hierarquia raiz→subs (já filtradas por kind pelo caller)
     /// numa lista linear: cada raiz vem seguida das próprias subs

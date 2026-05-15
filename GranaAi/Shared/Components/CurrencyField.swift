@@ -1,15 +1,12 @@
+import AppKit
 import Foundation
 import SwiftUI
-
-#if os(macOS)
-import AppKit
-#endif
 
 /// Campo monetário estilo "calculadora": guarda em centavos (Int) e
 /// formata em BRL automaticamente. O usuário só digita números —
 /// vírgula e separador de milhar aparecem em tempo real.
 ///
-/// **Por que NSViewRepresentable no macOS:**
+/// **Por que NSViewRepresentable em vez de `TextField` puro:**
 /// `NSTextField` usa um *field editor* interno durante a edição. Atribuir
 /// `stringValue` via Binding SwiftUI atualiza o source, mas o field editor
 /// só re-lê quando perde o foco — daí o "formata só no blur" que aparece
@@ -20,31 +17,13 @@ struct CurrencyField: View {
     var placeholder: String = "R$ 0,00"
 
     var body: some View {
-        #if os(macOS)
-        MacCurrencyTextField(cents: $cents, placeholder: placeholder)
+        CurrencyTextField(cents: $cents, placeholder: placeholder)
             // NSTextField default tem altura ~22; deixa parecido com TextField nativo.
             .frame(height: 22)
-        #else
-        TextField("", text: binding, prompt: Text(placeholder))
-            .keyboardType(.numberPad)
-            .multilineTextAlignment(.trailing)
-        #endif
     }
-
-    #if !os(macOS)
-    private var binding: Binding<String> {
-        Binding(
-            get: { CurrencyFormat.format(cents) },
-            set: { newValue in
-                let digits = newValue.filter(\.isNumber)
-                cents = Int(digits) ?? 0
-            }
-        )
-    }
-    #endif
 }
 
-/// Formatação compartilhada entre as plataformas.
+/// Formatação reaproveitável (usada também na exibição read-only).
 enum CurrencyFormat {
     static let formatter: NumberFormatter = {
         let f = NumberFormatter()
@@ -62,8 +41,7 @@ enum CurrencyFormat {
     }
 }
 
-#if os(macOS)
-struct MacCurrencyTextField: NSViewRepresentable {
+struct CurrencyTextField: NSViewRepresentable {
     @Binding var cents: Int
     let placeholder: String
 
@@ -94,10 +72,10 @@ struct MacCurrencyTextField: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: MacCurrencyTextField
+        var parent: CurrencyTextField
         var isEditing = false
 
-        init(parent: MacCurrencyTextField) { self.parent = parent }
+        init(parent: CurrencyTextField) { self.parent = parent }
 
         func controlTextDidBeginEditing(_ obj: Notification) { isEditing = true }
         func controlTextDidEndEditing(_ obj: Notification) { isEditing = false }
@@ -124,7 +102,6 @@ struct MacCurrencyTextField: NSViewRepresentable {
         }
     }
 }
-#endif
 
 #Preview {
     @Previewable @State var cents = 0

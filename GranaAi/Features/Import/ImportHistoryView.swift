@@ -1,10 +1,10 @@
 import Foundation
 import SwiftUI
 
-/// Tela "Importações" do menu lateral (Mac) e do tab (iOS): lista de
-/// `ImportBatch` ordenada por data de importação, com ação de desfazer
-/// (apaga o batch + cascade nas transactions). Não inicia importação nova
-/// — pra isso, o usuário usa o botão "Importar OFX" no header de Transações.
+/// Tela "Importações" do menu lateral: lista de `ImportBatch` ordenada por
+/// data de importação, com ação de desfazer (apaga o batch + cascade nas
+/// transactions). Também tem botão pra iniciar uma nova importação na
+/// própria toolbar.
 struct ImportHistoryView: View {
     @Environment(AppEnvironment.self) private var environment
     @State private var store: ImportStore?
@@ -32,12 +32,10 @@ struct ImportHistoryView: View {
                 }
             }
         }
-        #if os(macOS)
         .sheet(isPresented: $showingImportSheet) {
             ImportView()
                 .environment(environment)
         }
-        #endif
     }
 
     @ViewBuilder
@@ -73,7 +71,6 @@ struct ImportHistoryView: View {
 
     @ViewBuilder
     private func list(store: ImportStore) -> some View {
-        #if os(macOS)
         Table(store.batches) {
             TableColumn("Arquivo") { batch in
                 Text(batch.sourceFilename)
@@ -102,47 +99,6 @@ struct ImportHistoryView: View {
             }
             .width(110)
         }
-        #else
-        List {
-            ForEach(store.batches) { batch in
-                BatchRow(batch: batch, accountName: store.account(for: batch.accountId)?.name)
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            pendingDeleteBatch = batch
-                        } label: {
-                            Label("Desfazer", systemImage: AppIcon.undo.systemImage)
-                        }
-                    }
-            }
-        }
-        #endif
-    }
-}
-
-private struct BatchRow: View {
-    let batch: ImportBatch
-    let accountName: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(batch.sourceFilename)
-                .font(.body.weight(.medium))
-            HStack(spacing: 8) {
-                Text(batch.sourceKind.displayName)
-                Text("·")
-                Text("\(batch.rowCount) transações")
-                Text("·")
-                Text(batch.importedAt, style: .date)
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            if let accountName {
-                Text(accountName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
     }
 }
 

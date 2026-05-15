@@ -2,10 +2,9 @@ import SwiftUI
 
 /// Tela principal de visualização da saúde financeira do período.
 ///
-/// **Layouts divergentes Mac vs iPhone** (via `#if os(macOS)`):
-/// - Mac: 4 cards + 2 gráficos grandes, idiomático "command center" desktop.
-/// - iPhone: card grande de saldo + lista de últimas 5 transações + botão `+`.
-///   Sem gráficos no celular — não cabem com qualidade no espaço disponível.
+/// Layout "command center": 4 cards no topo + 2 gráficos full-width
+/// empilhados. Sem grid 2-colunas — barras horizontais precisam de
+/// largura pra comparar magnitudes.
 struct DashboardView: View {
     @Environment(AppEnvironment.self) private var environment
     @State private var store: DashboardStore?
@@ -32,7 +31,6 @@ struct DashboardView: View {
         .navigationTitle("Dashboard")
     }
 
-    #if os(macOS)
     @ViewBuilder
     private func content(store: DashboardStore) -> some View {
         // `@Bindable` é o equivalente moderno do `@ObservedObject` legado pra
@@ -117,7 +115,7 @@ struct DashboardView: View {
     private func chartsRow(store: DashboardStore) -> some View {
         // Ambos os modos usam VStack full-width — bar chart horizontal de
         // categoria precisa de espaço pra comparar comprimentos, e o weekday
-        // ganha respiro pras 7 barras. Padrão único Mac, sem grid 2-colunas.
+        // ganha respiro pras 7 barras.
         switch store.filter.scope {
         case .singleMonth:
             VStack(spacing: 16) {
@@ -200,109 +198,12 @@ struct DashboardView: View {
             .clipShape(RoundedRectangle(cornerRadius: 8))
             .foregroundStyle(.danger)
     }
-    #else
-
-    // MARK: - iPhone
-
-    @State private var transactionStore: TransactionStore?
-    @State private var showingForm = false
-
-    @ViewBuilder
-    private func content(store: DashboardStore) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if let error = store.lastError {
-                    Label(error.localizedDescription, systemImage: AppIcon.warning.systemImage)
-                        .foregroundStyle(.danger)
-                        .font(.callout)
-                        .padding(.horizontal)
-                }
-
-                MetricCard(
-                    title: "Saldo total",
-                    value: store.totalBalance,
-                    icon: .balance,
-                    accent: .brandPrimary
-                )
-                .padding(.horizontal)
-
-                Section {
-                    if store.lastFiveTransactions.isEmpty {
-                        ContentUnavailableView(
-                            "Sem transações ainda",
-                            systemImage: AppIcon.transactionsList.systemImage,
-                            description: Text("Toque em + pra adicionar a primeira.")
-                        )
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
-                    } else {
-                        LazyVStack(spacing: 4) {
-                            ForEach(store.lastFiveTransactions) { transaction in
-                                TransactionRow(
-                                    transaction: transaction,
-                                    category: transactionStore?.category(for: transaction.categoryId),
-                                    account: transactionStore?.account(for: transaction.accountId),
-                                    icon: transactionStore?.icon(for: transaction.categoryId)
-                                )
-                                .padding(.horizontal)
-                                Divider().padding(.leading)
-                            }
-                        }
-                    }
-                } header: {
-                    Text("Últimas transações")
-                        .font(.headline)
-                        .padding(.horizontal)
-                }
-            }
-            .padding(.vertical)
-        }
-        .onAppear {
-            if transactionStore == nil {
-                transactionStore = TransactionStore(database: environment.database)
-            }
-        }
-        .task {
-            await store.refresh()
-        }
-        .task {
-            // Precisamos do `TransactionStore` só pra resolver nome/ícone
-            // de categoria e conta na lista das últimas 5. `start()` fica
-            // rodando enquanto a View existir (`.task` cancela no dismiss).
-            await transactionStore?.start()
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingForm = true
-                } label: {
-                    Label("Adicionar", systemImage: AppIcon.add.systemImage)
-                }
-            }
-        }
-        .sheet(isPresented: $showingForm, onDismiss: {
-            Task { await store.refresh() }
-        }) {
-            if let transactionStore {
-                TransactionFormView()
-                    .environment(transactionStore)
-            }
-        }
-    }
-    #endif
 }
 
-#Preview("Mac") {
+#Preview {
     NavigationStack {
         DashboardView()
             .environment(AppEnvironment())
     }
     .frame(width: 1000, height: 700)
-}
-
-#Preview("iPhone") {
-    NavigationStack {
-        DashboardView()
-            .environment(AppEnvironment())
-    }
 }

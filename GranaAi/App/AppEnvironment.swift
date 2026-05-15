@@ -6,7 +6,7 @@ import Foundation
 /// - `@Observable` é a macro do Swift 5.9 que substitui o protocolo legado.
 /// - Não precisa marcar propriedades com `@Published`: a macro gera o tracking
 ///   por propriedade, então a UI re-renderiza só quando *o campo lido* muda.
-/// - Em SwiftUI moderno (iOS 17+/macOS 14+), Views observam classes `@Observable`
+/// - Em SwiftUI moderno (macOS 14+), Views observam classes `@Observable`
 ///   automaticamente quando elas vêm do Environment ou de `@State`.
 ///
 /// Por que injeção via Environment em vez de singleton:

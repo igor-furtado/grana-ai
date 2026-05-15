@@ -31,8 +31,8 @@ nonisolated enum Converters {
     }
 
     /// ISO8601 com frações de segundo. `ISO8601DateFormatter` é thread-safe
-    /// desde iOS 10/macOS 10.12 (diferente de `DateFormatter`), então usar
-    /// como singleton é seguro e mais barato que criar a cada chamada.
+    /// desde macOS 10.12 (diferente de `DateFormatter`), então usar como
+    /// singleton é seguro e mais barato que criar a cada chamada.
     static let iso8601: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

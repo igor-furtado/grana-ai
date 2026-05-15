@@ -6,7 +6,7 @@
 
 ## O que é
 
-App financeiro pessoal **single-user** (macOS principal, iOS companion). SwiftUI + PowerSync (SQLite local-first) + Supabase (entra na Fase 5).
+App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-first) + Supabase (entra na Fase 5).
 
 **Status:** Fases 0–3 ✅ (fundação, CRUD, dashboard, importação CSV/XLSX/OFX). Fases 4+ no [ROADMAP.md](./ROADMAP.md).
 
@@ -16,7 +16,7 @@ App financeiro pessoal **single-user** (macOS principal, iOS companion). SwiftUI
 - PowerSync Swift SDK `1.13.1` exact — produto `PowerSync` estático (não `PowerSyncDynamic` nem `PowerSyncGRDB`)
 - CoreXLSX, Swift Charts, URLSession
 - Anthropic via HTTP direto (sem SDK); Supabase via `supabase-swift` (auth) — ambos entram em fases futuras
-- Targets: macOS 26.1+, iOS 26.2+
+- Target: macOS 26.1+
 
 ## Arquitetura num parágrafo
 

@@ -1,12 +1,12 @@
 # Grana AI
 
-Aplicação financeira pessoal multiplataforma (macOS principal, iOS companion) para gerenciar gastos, investimentos e visualizar a saúde financeira através de dashboards e conversa com IA.
+Aplicação financeira pessoal **macOS** para gerenciar gastos, investimentos e visualizar a saúde financeira através de dashboards e conversa com IA.
 
 **Status:** Fases 0–3 completas ✅ (Fundação, CRUD de transações, Dashboard, Importação CSV/XLSX/OFX). Próxima: Fase 4 — categorização automática com IA.
 
 ## Stack
 
-- **UI:** SwiftUI (macOS 26+, iOS 26+)
+- **UI:** SwiftUI (macOS 26+)
 - **Linguagem:** Swift 5.9+
 - **Persistência + Sync:** [PowerSync Swift SDK](https://github.com/powersync-ja/powersync-swift) `1.13.1` (SQLite local-first com sync bidirecional)
 - **Backend de dados:** Supabase (Postgres) — entra na Fase 5
@@ -23,7 +23,7 @@ Aplicação financeira pessoal multiplataforma (macOS principal, iOS companion) 
    ```
    Pode deixar os placeholders até as fases que usam chaves reais (Anthropic na Fase 4, Supabase/PowerSync na Fase 5).
 3. Abra `GranaAi.xcodeproj` no Xcode (15.4+ recomendado).
-4. Selecione destination **My Mac** (ou um simulador iOS 26+) → `cmd+R`.
+4. Selecione destination **My Mac** → `cmd+R`.
 
 Primeira build demora alguns minutos porque o PowerSync usa Kotlin Multiplatform internamente e precisa baixar/compilar artefatos. Builds subsequentes são rápidas.
 

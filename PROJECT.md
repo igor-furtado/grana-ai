@@ -7,14 +7,13 @@
 ## 1. Visão e escopo
 
 ### O que é
-Aplicação financeira pessoal multiplataforma (macOS principal, iOS companion) para gerenciar gastos mensais, investimentos, e visualizar a saúde financeira do usuário através de dashboards e gráficos.
+Aplicação financeira pessoal **macOS** para gerenciar gastos mensais, investimentos, e visualizar a saúde financeira do usuário através de dashboards e gráficos.
 
 ### Quem usa
 **Apenas o desenvolvedor** (single-user app). Sem multi-tenancy, sem onboarding genérico, sem suporte. Decisões podem ser opinativas e personalizadas.
 
 ### Modelo mental
-- **Mac (app principal):** análise profunda, importação de planilhas, configuração, dashboards completos, conversa com IA sobre finanças.
-- **iPhone (app companion):** entrada rápida de gastos, consulta rápida de saldo, push de cotações relevantes. Não replica o Mac — complementa.
+Análise profunda, importação de planilhas, configuração, dashboards completos, conversa com IA sobre finanças — tudo desktop. App nasceu pra rodar no Mac do dev e ficar lá.
 
 ### Não-objetivos (o que este app NÃO é)
 - Não é app de banco/corretora — não executa transações reais.
@@ -28,14 +27,14 @@ Aplicação financeira pessoal multiplataforma (macOS principal, iOS companion) 
 
 | Camada | Escolha | Razão |
 |---|---|---|
-| UI | SwiftUI | Nativo Mac+iOS, ecossistema Apple, integração com sistema |
+| UI | SwiftUI | Nativo macOS, ecossistema Apple, integração com sistema |
 | Linguagem | Swift 5.9+ | Padrão Apple, type-safe, async/await maduro |
 | Persistência local + sync | **PowerSync Swift SDK** | SQLite local-first com sync bidirecional automático |
 | Backend de dados | **Supabase** (Postgres) | Source of truth remoto, integração nativa com PowerSync |
 | Auth | Supabase Auth (magic link) | Simples, sem senha pra gerenciar |
 | Estado | `@Observable` (Swift 5.9 macro) | Substitui ObservableObject, mais simples |
 | Reatividade DB→UI | `PowerSyncDatabase.watch` (AsyncThrowingStream) | Streams nativas, integra com SwiftUI |
-| Navegação | NavigationSplitView (Mac), NavigationStack (iPhone) | Idiomático por plataforma |
+| Navegação | NavigationSplitView | Idiomático no macOS pra apps com sidebar |
 | Charts | Swift Charts (nativo) | Performance + integração visual |
 | HTTP (APIs externas) | URLSession + async/await | Sem dependência externa |
 | IA | Anthropic API (HTTP direto) | Categorização e chat sobre finanças |
@@ -51,7 +50,7 @@ Aplicação financeira pessoal multiplataforma (macOS principal, iOS companion) 
 
 **Produto do PowerSync a vincular:** `PowerSync` (estático). **NUNCA** vincular `PowerSyncDynamic` (wrapper dinâmico que tem bugs de link em Xcode 26) nem `PowerSyncGRDB` (alpha — ver sub-decisão abaixo).
 
-**Deployment targets:** iOS `26.2`, macOS `26.1`. Mais alto que o mínimo necessário pra `@Observable` (iOS 17/macOS 14) porque é app single-user nas máquinas do dev, que ficam sempre atualizadas — assim ganhamos APIs modernas sem `#available`.
+**Deployment target:** macOS `26.1`. Mais alto que o mínimo necessário pra `@Observable` (macOS 14) porque é app single-user na máquina do dev, que fica sempre atualizada — assim ganhamos APIs modernas sem `#available`.
 
 ### Sub-decisão: PowerSync API direta vs GRDB integration
 Usaremos a **API direta do PowerSync** (`PowerSyncDatabase.get`, `getAll`, `watch`, `execute`). A integração GRDB do PowerSync existe mas está em alpha — não vamos depender dela. Se mais tarde sentirmos falta de query builder tipado, reavaliamos.
@@ -251,15 +250,14 @@ Termos canônicos do projeto. Não invente sinônimos.
   - **Mês único** (`currentMonth`/`previousMonth`/`custom`): bar horizontal de gastos por categoria + barras por dia da semana.
   - **Multi-mês** (`last6Months`/`last12Months`): bar horizontal de gastos acumulados no período + receita vs. despesa por mês com Picker de modo (`Ambos`/`Receitas`/`Despesas`).
   - A View bifurca pelo `scope`; o `DashboardStore.refresh()` também — só dispara as queries que serão renderizadas. Estado do modo oposto fica vazio (evita stale ao trocar de filtro).
-- **Dashboard principal (Mac):** 4 cards no topo (saldo total lifetime, gastos no período, receitas no período, patrimônio investido placeholder até Fase 6) + gráficos full-width empilhados verticalmente. Sem grid 2-colunas — barras horizontais precisam de largura pra comparar magnitudes.
-- **Dashboard iPhone:** 1 card de saldo + lista de últimas 5 transações + botão "+ adicionar gasto".
+- **Dashboard principal:** 4 cards no topo (saldo total lifetime, gastos no período, receitas no período, patrimônio investido placeholder até Fase 6) + gráficos full-width empilhados verticalmente. Sem grid 2-colunas — barras horizontais precisam de largura pra comparar magnitudes.
 - **Transferências (`kind = .transfer`) NÃO entram em cards/gráficos do dashboard:** são neutras de saldo (PIX enviado + PIX recebido idealmente zeram), e como não modelamos o par ainda, contá-las distorceria os totais. Continuam sendo registradas como transactions normais; só ficam de fora das agregações.
 - **Importação:** XLSX, CSV e OFX (1.x SGML + 2.x XML).
   - **CSV/XLSX:** mapping de colunas interativo na primeira importação; salva como template (`mapping_json`) pra reuso.
   - **OFX:** auto-detect de instituição (`<FI><FID>` ou `<BANKID>` → enum `InstitutionKind` via `fromCode`) e de conta (tripla `institution_id` + `branch_id` + `account_number`). Múltiplos `STMTRS` no mesmo arquivo viram batches independentes — todos os inserts (Institutions novas + Accounts novas + N batches + N×M transactions) acontecem numa única `writeTransaction` pra "tudo ou nada".
   - Dedup OFX exata via FITID (`external_id`), batched via `externalIds(forAccount:)` que devolve um `Set<String>` — match O(1) em vez de N queries.
   - Dedup CSV/XLSX heurística: mesmo dia local + mesmo valor + mesma descrição case-insensitive.
-- **Tema:** preferência `system`/`light`/`dark` em `SettingsView`, persistida em `UserDefaults` via `@AppStorage("appColorScheme")` e aplicada no root via `.preferredColorScheme`. Mesma chave é lida pelo `ContentView` — sincronização automática.
+- **Tema:** preferência `system`/`light`/`dark` em `ThemeView` (sob "Configurações > Tema" na sidebar), persistida em `UserDefaults` via `@AppStorage("appColorScheme")` e aplicada no root via `.preferredColorScheme`. Mesma chave é lida pelo `ContentView` — sincronização automática.
 
 ---
 

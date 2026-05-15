@@ -49,7 +49,6 @@ struct TransactionsView: View {
             .searchable(text: $searchText, prompt: "Buscar")
             .navigationTitle("Transações")
             .toolbar {
-                #if os(macOS)
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showingImport = true
@@ -57,7 +56,6 @@ struct TransactionsView: View {
                         Label("Importar OFX", systemImage: AppIcon.importFile.systemImage)
                     }
                 }
-                #endif
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showingForm = true
@@ -74,12 +72,10 @@ struct TransactionsView: View {
                 TransactionFormView(existing: transaction)
                     .environment(store)
             }
-            #if os(macOS)
             .sheet(isPresented: $showingImport) {
                 ImportView()
                     .environment(environment)
             }
-            #endif
             .confirmationDialog(
                 "Apagar transação?",
                 isPresented: Binding(
@@ -105,7 +101,6 @@ struct TransactionsView: View {
 
     @ViewBuilder
     private func list(store: TransactionStore) -> some View {
-        #if os(macOS)
         // Table nativa do macOS: virtualizada (escala bem com milhares de
         // linhas), colunas redimensionáveis pelo usuário, e segue o padrão
         // visual do `ImportHistoryView`.
@@ -172,27 +167,6 @@ struct TransactionsView: View {
             }
             .width(60)
         }
-        #else
-        List {
-            ForEach(filtered(store: store).sorted(using: sortOrder)) { transaction in
-                TransactionRow(
-                    transaction: transaction,
-                    category: store.category(for: transaction.categoryId),
-                    account: store.account(for: transaction.accountId),
-                    icon: store.icon(for: transaction.categoryId)
-                )
-                .contentShape(Rectangle())
-                .onTapGesture { editing = transaction }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        pendingDelete = transaction
-                    } label: {
-                        Label("Apagar", systemImage: AppIcon.delete.systemImage)
-                    }
-                }
-            }
-        }
-        #endif
     }
 
     private func amountColor(for transaction: Transaction, store: TransactionStore) -> Color {

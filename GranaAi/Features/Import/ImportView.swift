@@ -1,4 +1,3 @@
-#if os(macOS)
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -892,5 +891,3 @@ private struct FailedStepView: View {
     ImportView()
         .environment(AppEnvironment())
 }
-
-#endif

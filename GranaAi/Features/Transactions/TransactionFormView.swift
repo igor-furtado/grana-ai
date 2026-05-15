@@ -33,8 +33,8 @@ struct TransactionFormView: View {
         NavigationStack {
             Form {
                 // `prompt:` é o placeholder DENTRO do campo. O primeiro
-                // argumento ("Descrição") é o LABEL — no macOS aparece à
-                // esquerda do campo; no iOS é só pra acessibilidade.
+                // argumento ("Descrição") é o LABEL que aparece à esquerda
+                // do campo no Form do macOS.
                 TextField(
                     "Descrição",
                     text: $description,
@@ -114,9 +114,6 @@ struct TransactionFormView: View {
             }
             .formStyle(.grouped)
             .navigationTitle(existing == nil ? "Nova transação" : "Editar transação")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancelar") { dismiss() }

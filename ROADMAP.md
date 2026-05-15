@@ -34,7 +34,7 @@
 
 ## Fase 5 — Sync via PowerSync + Supabase
 
-**Objetivo:** dados sincronizam entre Mac e iPhone via PowerSync.
+**Objetivo:** dados ficam num backend remoto (Postgres via Supabase) com sync bidirecional, garantindo backup off-machine e abrindo caminho pra outros clientes no futuro se o roadmap mudar.
 
 **Entregáveis:**
 - Schema Supabase (Postgres) espelhando schema PowerSync (script SQL versionado)
@@ -49,7 +49,7 @@
 - Indicador visual de status de sync na UI (sync rodando / pendente / erro / offline)
 - Tratamento gracioso: app continua funcionando offline, sync retoma sozinho
 
-**Sem isto, não avança:** logar no Mac, adicionar transação, abrir app no iPhone (logado mesma conta), ver transação aparecer.
+**Sem isto, não avança:** desligar a máquina, voltar depois e ter os dados intactos vindos do Supabase; reinstalar o app e recuperar tudo via sync.
 
 ---
 
@@ -89,7 +89,6 @@
 ## Fase 8+ — Features avançadas (a decidir conforme uso)
 
 Possibilidades, sem ordem definida:
-- Widget iOS de saldo na home/lock screen
 - Atalhos Siri pra adicionar gasto por voz
 - Open Finance (quando viável tecnicamente)
 - **Menu "Patrimônio"** — tela dedicada agregando net worth (saldos + investimentos da Fase 6 + ativos manuais tipo imóvel/veículo). Conteúdo: gráfico de linha de evolução do patrimônio líquido (rolling 12 meses / YTD / desde início), composição por classe, variação mês a mês.
