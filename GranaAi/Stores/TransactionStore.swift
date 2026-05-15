@@ -147,8 +147,8 @@ final class TransactionStore {
     }
 
     /// Ícone "efetivo" da categoria. Se a categoria for raiz, retorna o ícone
-    /// dela. Se for subcategoria, retorna o ícone do pai (porque por design
-    /// só raízes têm ícone — ver `Category.icon`).
+    /// dela (resolvido via slug). Se for subcategoria, retorna o ícone do pai
+    /// (porque por design só raízes têm slug — ver `Category.icon`).
     func icon(for categoryId: UUID) -> CategoryIcon? {
         guard let cat = category(for: categoryId) else { return nil }
         if let icon = cat.icon { return icon }

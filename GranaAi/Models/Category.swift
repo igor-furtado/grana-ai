@@ -3,16 +3,30 @@ import Foundation
 /// Classificação hierárquica de transação. Categoria raiz tem `parentId == nil`;
 /// subcategorias apontam para a raiz via `parentId`.
 ///
-/// **`icon` só na raiz:** decisão de produto — subcategorias herdam o ícone
-/// do pai pra reduzir ruído visual. No banco, subcategoria tem `icon = NULL`;
+/// **`slug` só na raiz:** decisão de produto — subcategorias herdam o ícone
+/// do pai pra reduzir ruído visual. No banco, subcategoria tem `slug = NULL`;
 /// a UI consulta o ícone do pai via `TransactionStore.icon(for:)`.
+///
+/// **Por que slug em vez de coluna `icon`:** categorias são seed estático
+/// (usuário não cria nem edita por enquanto), então gravar o `CategoryIcon`
+/// em cada linha é desperdício — o ícone é função pura do slug. O mapping
+/// `slug → CategoryIcon` vive em `CategoryIcon+Slug.swift`, fonte única
+/// da verdade. Slug também serve como id estável pra IA na Fase 4 (few-shot
+/// prompting) — sem isso precisaríamos de UUIDs hard-coded.
 struct Category: Identifiable, Codable, Hashable {
     let id: UUID
     var parentId: UUID?
     var name: String
     var kind: CategoryKind
-    var icon: CategoryIcon?
+    var slug: String?
     let createdAt: Date
+
+    /// Ícone derivado do slug. Subcategorias sempre retornam `nil` aqui —
+    /// quem precisa do ícone "efetivo" da subcategoria usa
+    /// `TransactionStore.icon(for:)`, que cai no pai.
+    var icon: CategoryIcon? {
+        slug.flatMap(CategoryIcon.forSlug)
+    }
 }
 
 enum CategoryKind: String, Codable, CaseIterable {

@@ -83,7 +83,7 @@ let appSchema = Schema(tables: [
             .text("parent_id"),    // nullable — null = raiz
             .text("name"),
             .text("kind"),         // expense | income | transfer
-            .text("icon"),         // nullable — só categorias raiz têm ícone (CategoryIcon rawValue)
+            .text("slug"),         // nullable — só categorias raiz têm slug; mapping slug→ícone vive em CategoryIcon+Slug.swift
             .text("created_at"),
         ]
     ),

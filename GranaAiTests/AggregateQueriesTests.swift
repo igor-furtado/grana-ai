@@ -24,14 +24,14 @@ struct AggregateQueriesTests {
         _ categories: CategoryRepository,
         name: String,
         kind: CategoryKind,
-        icon: CategoryIcon? = nil
+        slug: String? = nil
     ) async throws -> GranaAi.Category {
         let category = GranaAi.Category(
             id: UUID(),
             parentId: nil,
             name: name,
             kind: kind,
-            icon: icon,
+            slug: slug,
             createdAt: Date()
         )
         try await categories.insert(category)
@@ -82,8 +82,8 @@ struct AggregateQueriesTests {
         let txs = TransactionRepository(db: db)
         let cats = CategoryRepository(db: db)
 
-        let food   = try await seedCategory(cats, name: "Alimentação", kind: .expense, icon: .utensils)
-        let salary = try await seedCategory(cats, name: "Salário",     kind: .income,  icon: .dollarSign)
+        let food   = try await seedCategory(cats, name: "Alimentação", kind: .expense, slug: "alimentacao-e-supermercado")
+        let salary = try await seedCategory(cats, name: "Salário",     kind: .income,  slug: "renda-e-pagamentos")
 
         let march10 = date(2026, 3, 10)
         let march20 = date(2026, 3, 20)
@@ -128,9 +128,9 @@ struct AggregateQueriesTests {
         let txs = TransactionRepository(db: db)
         let cats = CategoryRepository(db: db)
 
-        let food      = try await seedCategory(cats, name: "Alimentação", kind: .expense, icon: .utensils)
-        let transport = try await seedCategory(cats, name: "Transporte",  kind: .expense, icon: .car)
-        let leisure   = try await seedCategory(cats, name: "Lazer",       kind: .expense, icon: .monitor)
+        let food      = try await seedCategory(cats, name: "Alimentação", kind: .expense, slug: "alimentacao-e-supermercado")
+        let transport = try await seedCategory(cats, name: "Transporte",  kind: .expense, slug: "transporte-e-viagem")
+        let leisure   = try await seedCategory(cats, name: "Lazer",       kind: .expense, slug: "entretenimento-e-lazer")
 
         let day = date(2026, 3, 10)
 
@@ -183,7 +183,7 @@ struct AggregateQueriesTests {
         let txs = TransactionRepository(db: db)
         let cats = CategoryRepository(db: db)
 
-        let food = try await seedCategory(cats, name: "Alimentação", kind: .expense, icon: .utensils)
+        let food = try await seedCategory(cats, name: "Alimentação", kind: .expense, slug: "alimentacao-e-supermercado")
 
         // Calendar.weekday: 2 = segunda, 4 = quarta, 6 = sexta.
         // Março/2026: 02 = seg, 04 = qua, 09 = seg, 11 = qua, 13 = sex.

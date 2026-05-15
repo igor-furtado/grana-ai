@@ -72,7 +72,7 @@ enum Seed {
 
             let insertSQL = """
                 INSERT INTO categories
-                    (id, parent_id, name, kind, icon, created_at)
+                    (id, parent_id, name, kind, slug, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """
 
@@ -85,15 +85,16 @@ enum Seed {
                         nil,                            // raiz
                         definition.name,
                         definition.kind.rawValue,
-                        definition.icon.rawValue,       // ícone só na raiz
+                        definition.slug,                // slug só na raiz; ícone resolve via CategoryIcon.forSlug
                         nowString,
                     ]
                 )
 
                 // Subcategoria herda o kind do pai — uma sub de "Despesa" é
                 // necessariamente despesa, não faz sentido misturar.
-                // Ícone fica NULL: a UI cai no ícone do pai via
-                // `TransactionStore.icon(for:)`.
+                // Slug fica NULL: a UI cai no ícone do pai via
+                // `TransactionStore.icon(for:)`. Sub ganha slug próprio quando
+                // a Fase 4 (IA) precisar — hoje não há consumidor.
                 for subName in definition.subcategories {
                     try tx.execute(
                         sql: insertSQL,

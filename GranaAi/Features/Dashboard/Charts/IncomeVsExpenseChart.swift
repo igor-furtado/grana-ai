@@ -50,7 +50,7 @@ struct IncomeVsExpenseChart: View {
         if totals.isEmpty {
             ContentUnavailableView(
                 "Sem dados de receita/despesa",
-                systemImage: "chart.bar",
+                systemImage: AppIcon.chart.systemImage,
                 description: Text("Adicione transações pra comparar entradas e saídas mês a mês.")
             )
             .frame(maxWidth: .infinity)

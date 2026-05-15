@@ -45,7 +45,7 @@ struct CategoryBadge: View {
             category: Category(
                 id: UUID(), parentId: nil,
                 name: "Alimentação e Supermercado",
-                kind: .expense, icon: .utensils, createdAt: Date()
+                kind: .expense, slug: "alimentacao-e-supermercado", createdAt: Date()
             ),
             icon: .utensils
         )
@@ -53,7 +53,7 @@ struct CategoryBadge: View {
             category: Category(
                 id: UUID(), parentId: nil,
                 name: "Renda e Pagamentos",
-                kind: .income, icon: .dollarSign, createdAt: Date()
+                kind: .income, slug: "renda-e-pagamentos", createdAt: Date()
             ),
             icon: .dollarSign
         )

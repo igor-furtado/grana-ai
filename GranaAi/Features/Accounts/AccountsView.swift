@@ -36,7 +36,7 @@ struct AccountsView: View {
                 Button {
                     formMode = .create
                 } label: {
-                    Label("Nova conta", systemImage: "plus")
+                    Label("Nova conta", systemImage: AppIcon.add.systemImage)
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
@@ -62,7 +62,7 @@ struct AccountsView: View {
         if store.accounts.isEmpty {
             ContentUnavailableView(
                 "Nenhuma conta",
-                systemImage: "wallet.pass",
+                systemImage: AppIcon.walletEmpty.systemImage,
                 description: Text("Crie uma conta para começar a registrar transações.")
             )
         } else {
@@ -75,13 +75,13 @@ struct AccountsView: View {
                             Button(role: .destructive) {
                                 Task { try? await store.delete(id: account.id) }
                             } label: {
-                                Label("Apagar", systemImage: "trash")
+                                Label("Apagar", systemImage: AppIcon.delete.systemImage)
                             }
                             Button {
                                 Task { try? await store.setArchived(account, archived: !account.archived) }
                             } label: {
                                 Label(account.archived ? "Desarquivar" : "Arquivar",
-                                      systemImage: account.archived ? "tray.and.arrow.up" : "archivebox")
+                                      systemImage: account.archived ? AppIcon.unarchive.systemImage : AppIcon.archive.systemImage)
                             }
                             .tint(.warning)
                         }

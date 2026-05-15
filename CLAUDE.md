@@ -64,6 +64,7 @@ App financeiro pessoal **single-user** (macOS principal, iOS companion). SwiftUI
 | Adicionar tabela nova | `GranaAi/Core/Database/AppSchema.swift` + novo Repository + model |
 | Adicionar categoria/subcategoria padrão | `GranaAi/Core/Database/CategorySeedData.swift` |
 | Adicionar ícone novo de categoria | `GranaAi/Models/Category.swift` (enum `CategoryIcon`) + `GranaAi/Shared/Components/CategoryIcon+Color.swift` |
+| Adicionar ícone de UI (toolbar, empty state, ação) | `GranaAi/Shared/Components/AppIcon.swift` (enum `AppIcon`) — nunca usar string literal de SF Symbol direto na View |
 | Adicionar instituição "rica" (logo + auto-detect) | `GranaAi/Models/Institution.swift` (enum `InstitutionKind`) + `GranaAi/Core/Database/Seed.swift` (seed) |
 | Adicionar cor do tema | `GranaAi/Resources/Assets.xcassets/<Nome>.colorset/` (variante dark obrigatória) — Xcode gera o `Color.<nome>` automático |
 | Mudar filtros de período | `GranaAi/Models/PeriodFilter.swift` |

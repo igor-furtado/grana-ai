@@ -371,14 +371,14 @@ final class TransactionRepository: Sendable {
     ) async throws -> [CategoryTotal] {
         try await db.getAll(
             sql: """
-                SELECT c.id AS id, c.name AS name, c.icon AS icon,
+                SELECT c.id AS id, c.name AS name, c.slug AS slug,
                        SUM(t.amount_cents) AS total
                 FROM transactions t
                 JOIN categories c ON t.category_id = c.id
                 WHERE c.kind = ?
                   AND t.occurred_at >= ?
                   AND t.occurred_at <= ?
-                GROUP BY c.id, c.name, c.icon
+                GROUP BY c.id, c.name, c.slug
                 ORDER BY total DESC
                 """,
             parameters: [
@@ -449,14 +449,14 @@ final class TransactionRepository: Sendable {
                 SELECT SUBSTR(t.occurred_at, 1, 7) AS month,
                        c.id   AS id,
                        c.name AS name,
-                       c.icon AS icon,
+                       c.slug AS slug,
                        SUM(t.amount_cents) AS total
                 FROM transactions t
                 JOIN categories c ON t.category_id = c.id
                 WHERE c.kind = ?
                   AND t.occurred_at >= ?
                   AND t.occurred_at <= ?
-                GROUP BY month, c.id, c.name, c.icon
+                GROUP BY month, c.id, c.name, c.slug
                 ORDER BY month ASC, total DESC
                 """,
             parameters: [
@@ -624,9 +624,14 @@ final class TransactionRepository: Sendable {
     }
 
     // Mappers de agregado são separados do `mapTransaction` porque leem colunas
-    // *computadas* (`total`) e/ou colunas vindas de JOIN (`name`, `icon` da
+    // *computadas* (`total`) e/ou colunas vindas de JOIN (`name`, `slug` da
     // `categories`) — formatos diferentes da row "transaction completa".
     // Manter como funções distintas evita um `if cursor.has(...)` frágil.
+    //
+    // O ícone não vem do banco: resolve aqui via `CategoryIcon.forSlug` pra
+    // que `CategoryTotal` chegue na View já com o ícone pronto (evita
+    // segunda viagem). Slug `nil` ou desconhecido → ícone `nil` e a View cai
+    // pra cor default.
 
     private nonisolated static func mapCategoryTotal(_ cursor: SqlCursor) throws -> CategoryTotal {
         let idString = try cursor.getString(name: "id")
@@ -634,15 +639,7 @@ final class TransactionRepository: Sendable {
             throw DatabaseError.invalidUUID(column: "id", value: idString)
         }
 
-        let icon: CategoryIcon?
-        if let iconRaw = try cursor.getStringOptional(name: "icon") {
-            guard let parsed = CategoryIcon(rawValue: iconRaw) else {
-                throw DatabaseError.invalidEnum(column: "icon", value: iconRaw)
-            }
-            icon = parsed
-        } else {
-            icon = nil
-        }
+        let icon = try cursor.getStringOptional(name: "slug").flatMap(CategoryIcon.forSlug)
 
         let cents = try cursor.getInt64(name: "total")
 
@@ -689,15 +686,7 @@ final class TransactionRepository: Sendable {
             throw DatabaseError.invalidUUID(column: "id", value: idString)
         }
 
-        let icon: CategoryIcon?
-        if let iconRaw = try cursor.getStringOptional(name: "icon") {
-            guard let parsed = CategoryIcon(rawValue: iconRaw) else {
-                throw DatabaseError.invalidEnum(column: "icon", value: iconRaw)
-            }
-            icon = parsed
-        } else {
-            icon = nil
-        }
+        let icon = try cursor.getStringOptional(name: "slug").flatMap(CategoryIcon.forSlug)
 
         return MonthlyCategoryTotal(
             monthStart: monthStart,

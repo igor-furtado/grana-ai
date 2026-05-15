@@ -89,7 +89,7 @@ private struct IdleStepView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Importar extrato", systemImage: "square.and.arrow.down")
+            Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
         } description: {
             Text("Selecione um arquivo **OFX** (preferido — auto-detecta a conta e o banco) ou um CSV/XLSX exportado do seu banco.")
         } actions: {
@@ -363,9 +363,9 @@ private struct PreviewStepView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                StatusSummaryCard(title: "Válidas", count: summary.valid, color: .green, systemImage: "checkmark.circle.fill")
-                StatusSummaryCard(title: "Duplicadas", count: summary.duplicate, color: .yellow, systemImage: "exclamationmark.triangle.fill")
-                StatusSummaryCard(title: "Inválidas", count: summary.invalid, color: .red, systemImage: "xmark.circle.fill")
+                StatusSummaryCard(title: "Válidas", count: summary.valid, color: .green, icon: .success)
+                StatusSummaryCard(title: "Duplicadas", count: summary.duplicate, color: .yellow, icon: .warning)
+                StatusSummaryCard(title: "Inválidas", count: summary.invalid, color: .red, icon: .error)
             }
 
             Toggle("Incluir duplicadas", isOn: $store.includeDuplicates)
@@ -438,15 +438,15 @@ private struct PreviewStepView: View {
     private func statusBadge(_ status: PreviewStatus) -> some View {
         switch status {
         case .valid:
-            Label("Válida", systemImage: "checkmark.circle.fill").foregroundStyle(.success)
+            Label("Válida", systemImage: AppIcon.success.systemImage).foregroundStyle(.success)
         case .duplicate:
-            Label("Duplicada", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.warning)
+            Label("Duplicada", systemImage: AppIcon.warning.systemImage).foregroundStyle(.warning)
         case .invalidDate:
-            Label("Data inválida", systemImage: "calendar.badge.exclamationmark").foregroundStyle(.danger)
+            Label("Data inválida", systemImage: AppIcon.invalidDate.systemImage).foregroundStyle(.danger)
         case .invalidAmount:
-            Label("Valor inválido", systemImage: "dollarsign.circle.trianglebadge.exclamationmark").foregroundStyle(.danger)
+            Label("Valor inválido", systemImage: AppIcon.invalidAmount.systemImage).foregroundStyle(.danger)
         case .missingFields:
-            Label("Vazia", systemImage: "questionmark.circle").foregroundStyle(.secondary)
+            Label("Vazia", systemImage: AppIcon.unknown.systemImage).foregroundStyle(.secondary)
         }
     }
 
@@ -468,11 +468,11 @@ private struct StatusSummaryCard: View {
     let title: String
     let count: Int
     let color: Color
-    let systemImage: String
+    let icon: AppIcon
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: systemImage)
+            Image(systemName: icon.systemImage)
                 .font(.title3)
                 .foregroundStyle(color)
             VStack(alignment: .leading, spacing: 2) {
@@ -573,7 +573,7 @@ private struct StatementCard: View {
         GroupBox {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
-                    Label("Informações do banco", systemImage: "building.columns")
+                    Label("Informações do banco", systemImage: AppIcon.institution.systemImage)
                         .labelStyle(.titleAndIcon)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -797,7 +797,7 @@ private struct OFXRowView: View {
             Text(text)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: "chevron.up.chevron.down")
+            Image(systemName: AppIcon.sort.systemImage)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
@@ -855,7 +855,7 @@ private struct DoneStepView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Importação concluída", systemImage: "checkmark.seal.fill")
+            Label("Importação concluída", systemImage: AppIcon.completedSeal.systemImage)
         } description: {
             Text("\(rowCount) \(rowCount == 1 ? "transação importada" : "transações importadas") em \(batchIds.count) \(batchIds.count == 1 ? "lote" : "lotes"). A categorização inicial é heurística — você pode ajustar manualmente ou esperar a IA refinar.")
         } actions: {
@@ -878,7 +878,7 @@ private struct FailedStepView: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label("Algo deu errado", systemImage: "exclamationmark.triangle.fill")
+            Label("Algo deu errado", systemImage: AppIcon.warning.systemImage)
         } description: {
             Text(message)
         } actions: {

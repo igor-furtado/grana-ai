@@ -6,14 +6,20 @@ import Foundation
 /// Subcategoria sempre herda o `CategoryKind` da raiz — não há mistura de
 /// kinds dentro de uma mesma árvore.
 ///
-/// **TODO (Fase 4):** quando a IA entrar pra categorizar transações, vamos
-/// precisar de IDs estáveis pra few-shot prompting. Ou: adicionar coluna
-/// `slug text` no schema (pra usar como external_id estável), ou: persistir
-/// um mapeamento `name → UUID` em outro lugar. Decidir na Fase 4.
+/// **`slug` é id estável da raiz.** Resolve duas coisas: (1) lookup do ícone
+/// via `CategoryIcon.forSlug(_:)` sem precisar gravar `icon` no banco,
+/// (2) anchor estável pra IA na Fase 4 (few-shot prompting). UUIDs do seed
+/// são aleatórios e mudam a cada banco recriado — slug não.
+///
+/// **Invariante:** ao adicionar uma raiz nova aqui, **DEVE** existir uma
+/// entrada correspondente em `CategoryIcon+Slug.swift` mapeando o slug pro
+/// ícone — caso contrário a UI renderiza sem ícone (silencioso). O teste
+/// `CategorySeedConsistencyTests.everySeedSlugHasIcon` quebra em CI se o
+/// mapping ficar faltando.
 struct CategorySeedDefinition {
+    let slug: String
     let name: String
     let kind: CategoryKind
-    let icon: CategoryIcon
     let subcategories: [String]
 }
 
@@ -22,7 +28,7 @@ struct CategorySeedDefinition {
 nonisolated enum CategorySeedData {
     static let categories: [CategorySeedDefinition] = [
         // MARK: - Receitas
-        CategorySeedDefinition(name: "Renda e Pagamentos", kind: .income, icon: .dollarSign, subcategories: [
+        CategorySeedDefinition(slug: "renda-e-pagamentos", name: "Renda e Pagamentos", kind: .income, subcategories: [
             "Salário",
             "Freelance",
             "Aposentadoria",
@@ -41,7 +47,7 @@ nonisolated enum CategorySeedData {
         ]),
 
         // MARK: - Despesas
-        CategorySeedDefinition(name: "Compras Pessoais", kind: .expense, icon: .shoppingBag, subcategories: [
+        CategorySeedDefinition(slug: "compras-pessoais", name: "Compras Pessoais", kind: .expense, subcategories: [
             "Roupas e Calçados",
             "Acessórios e Joias",
             "Eletrônicos",
@@ -59,7 +65,7 @@ nonisolated enum CategorySeedData {
             "Hobbies e Coleções",
         ]),
 
-        CategorySeedDefinition(name: "Transporte e Viagem", kind: .expense, icon: .car, subcategories: [
+        CategorySeedDefinition(slug: "transporte-e-viagem", name: "Transporte e Viagem", kind: .expense, subcategories: [
             "Uber e 99",
             "Táxi",
             "Combustível",
@@ -79,7 +85,7 @@ nonisolated enum CategorySeedData {
             "Aluguel de Carros",
         ]),
 
-        CategorySeedDefinition(name: "Entretenimento e Lazer", kind: .expense, icon: .monitor, subcategories: [
+        CategorySeedDefinition(slug: "entretenimento-e-lazer", name: "Entretenimento e Lazer", kind: .expense, subcategories: [
             "Netflix",
             "Amazon Prime",
             "Disney Plus",
@@ -97,7 +103,7 @@ nonisolated enum CategorySeedData {
             "Software e Licenças",
         ]),
 
-        CategorySeedDefinition(name: "Alimentação e Supermercado", kind: .expense, icon: .utensils, subcategories: [
+        CategorySeedDefinition(slug: "alimentacao-e-supermercado", name: "Alimentação e Supermercado", kind: .expense, subcategories: [
             "Supermercados",
             "Hipermercados",
             "Mercearias",
@@ -116,7 +122,7 @@ nonisolated enum CategorySeedData {
             "Hortifrúti",
         ]),
 
-        CategorySeedDefinition(name: "Contas e Serviços", kind: .expense, icon: .zap, subcategories: [
+        CategorySeedDefinition(slug: "contas-e-servicos", name: "Contas e Serviços", kind: .expense, subcategories: [
             "Energia Elétrica",
             "Água e Esgoto",
             "Internet Banda Larga",
@@ -133,7 +139,7 @@ nonisolated enum CategorySeedData {
             "Correios",
         ]),
 
-        CategorySeedDefinition(name: "Créditos e Empréstimos", kind: .expense, icon: .creditCard, subcategories: [
+        CategorySeedDefinition(slug: "creditos-e-emprestimos", name: "Créditos e Empréstimos", kind: .expense, subcategories: [
             "Cartão de Crédito",
             "Empréstimos Pessoais",
             "Crediário",
@@ -147,7 +153,7 @@ nonisolated enum CategorySeedData {
             "Juros e Multas",
         ]),
 
-        CategorySeedDefinition(name: "Saúde e Medicina", kind: .expense, icon: .heart, subcategories: [
+        CategorySeedDefinition(slug: "saude-e-medicina", name: "Saúde e Medicina", kind: .expense, subcategories: [
             "Plano de Saúde",
             "Consultas Médicas",
             "Consultas Dentárias",
@@ -164,7 +170,7 @@ nonisolated enum CategorySeedData {
             "Suplementos",
         ]),
 
-        CategorySeedDefinition(name: "Seguros", kind: .expense, icon: .shield, subcategories: [
+        CategorySeedDefinition(slug: "seguros", name: "Seguros", kind: .expense, subcategories: [
             "Seguro de Vida",
             "Seguro de Automóvel",
             "Seguro Residencial",
@@ -175,7 +181,7 @@ nonisolated enum CategorySeedData {
             "Seguro Acidentes Pessoais",
         ]),
 
-        CategorySeedDefinition(name: "Investimentos e Poupança", kind: .expense, icon: .trendingUp, subcategories: [
+        CategorySeedDefinition(slug: "investimentos-e-poupanca", name: "Investimentos e Poupança", kind: .expense, subcategories: [
             "Poupança",
             "CDB",
             "Tesouro Direto",
@@ -190,7 +196,7 @@ nonisolated enum CategorySeedData {
             "Bancos de Investimento",
         ]),
 
-        CategorySeedDefinition(name: "Impostos e Taxas", kind: .expense, icon: .fileText, subcategories: [
+        CategorySeedDefinition(slug: "impostos-e-taxas", name: "Impostos e Taxas", kind: .expense, subcategories: [
             "Imposto de Renda",
             "IPVA",
             "IPTU",
@@ -205,7 +211,7 @@ nonisolated enum CategorySeedData {
             "Certidões",
         ]),
 
-        CategorySeedDefinition(name: "Saques e ATM", kind: .expense, icon: .banknote, subcategories: [
+        CategorySeedDefinition(slug: "saques-e-atm", name: "Saques e ATM", kind: .expense, subcategories: [
             "Saque ATM Próprio",
             "Saque ATM Terceiros",
             "Saque em Agência",
@@ -214,14 +220,14 @@ nonisolated enum CategorySeedData {
             "Saque Cartão Crédito",
         ]),
 
-        CategorySeedDefinition(name: "Não Classificado", kind: .expense, icon: .helpCircle, subcategories: [
+        CategorySeedDefinition(slug: "nao-classificado", name: "Não Classificado", kind: .expense, subcategories: [
             "Transação Desconhecida",
             "Requer Análise Manual",
             "Transação Suspeita",
             "Categoria Indefinida",
         ]),
 
-        CategorySeedDefinition(name: "Jogos e Apostas", kind: .expense, icon: .dice, subcategories: [
+        CategorySeedDefinition(slug: "jogos-e-apostas", name: "Jogos e Apostas", kind: .expense, subcategories: [
             "Steam",
             "Epic Games",
             "Battle.net",
@@ -231,7 +237,7 @@ nonisolated enum CategorySeedData {
         ]),
 
         // MARK: - Transferências
-        CategorySeedDefinition(name: "Transferências", kind: .transfer, icon: .arrowRightLeft, subcategories: [
+        CategorySeedDefinition(slug: "transferencias", name: "Transferências", kind: .transfer, subcategories: [
             "PIX Enviado",
             "PIX Recebido",
             "TED Enviada",

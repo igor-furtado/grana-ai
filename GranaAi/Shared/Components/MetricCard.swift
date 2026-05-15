@@ -5,7 +5,7 @@ import SwiftUI
 struct MetricCard: View {
     let title: String
     let value: Decimal
-    let systemImage: String?
+    let icon: AppIcon?
     let accent: Color
 
     /// Mostra "—" em vez do valor. Usado em "Patrimônio investido" enquanto
@@ -17,8 +17,8 @@ struct MetricCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                if let systemImage {
-                    Image(systemName: systemImage)
+                if let icon {
+                    Image(systemName: icon.systemImage)
                         .font(.callout)
                         .foregroundStyle(accent)
                 }
@@ -48,19 +48,19 @@ struct MetricCard: View {
         MetricCard(
             title: "Saldo total",
             value: 12_345.67,
-            systemImage: "wallet.pass.fill",
+            icon: .balance,
             accent: .brandPrimary
         )
         MetricCard(
             title: "Gastos do mês",
             value: 2_340.00,
-            systemImage: "arrow.down.right.circle.fill",
+            icon: .expenseFlow,
             accent: .expense
         )
         MetricCard(
             title: "Patrimônio investido",
             value: 0,
-            systemImage: "chart.line.uptrend.xyaxis",
+            icon: .netResult,
             accent: .income,
             placeholder: true
         )

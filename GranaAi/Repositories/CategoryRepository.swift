@@ -12,7 +12,7 @@ final class CategoryRepository: Sendable {
         try await db.execute(
             sql: """
                 INSERT INTO categories
-                    (id, parent_id, name, kind, icon, created_at)
+                    (id, parent_id, name, kind, slug, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
             parameters: [
@@ -20,7 +20,7 @@ final class CategoryRepository: Sendable {
                 category.parentId?.uuidString,
                 category.name,
                 category.kind.rawValue,
-                category.icon?.rawValue,
+                category.slug,
                 Converters.dateToString(category.createdAt),
             ]
         )
@@ -102,15 +102,7 @@ final class CategoryRepository: Sendable {
             throw DatabaseError.invalidEnum(column: "kind", value: kindRaw)
         }
 
-        let icon: CategoryIcon?
-        if let iconRaw = try cursor.getStringOptional(name: "icon") {
-            guard let parsed = CategoryIcon(rawValue: iconRaw) else {
-                throw DatabaseError.invalidEnum(column: "icon", value: iconRaw)
-            }
-            icon = parsed
-        } else {
-            icon = nil
-        }
+        let slug = try cursor.getStringOptional(name: "slug")
 
         let createdAtString = try cursor.getString(name: "created_at")
         guard let createdAt = Converters.stringToDate(createdAtString) else {
@@ -122,7 +114,7 @@ final class CategoryRepository: Sendable {
             parentId: parentId,
             name: try cursor.getString(name: "name"),
             kind: kind,
-            icon: icon,
+            slug: slug,
             createdAt: createdAt
         )
     }

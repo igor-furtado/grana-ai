@@ -35,7 +35,7 @@ struct WeekdayExpensesChart: View {
         if totals.isEmpty {
             ContentUnavailableView(
                 "Sem gastos no período",
-                systemImage: "calendar",
+                systemImage: AppIcon.calendar.systemImage,
                 description: Text("Adicione transações pra ver o padrão semanal.")
             )
             .frame(maxWidth: .infinity)

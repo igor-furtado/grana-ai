@@ -41,7 +41,7 @@ struct TransactionsView: View {
                 if store.transactions.isEmpty && !store.isLoading {
                     ContentUnavailableView(
                         "Sem transações",
-                        systemImage: "list.bullet.rectangle",
+                        systemImage: AppIcon.transactionsList.systemImage,
                         description: Text("Toque em + pra adicionar a primeira.")
                     )
                 }
@@ -54,7 +54,7 @@ struct TransactionsView: View {
                     Button {
                         showingImport = true
                     } label: {
-                        Label("Importar OFX", systemImage: "square.and.arrow.down")
+                        Label("Importar OFX", systemImage: AppIcon.importFile.systemImage)
                     }
                 }
                 #endif
@@ -62,7 +62,7 @@ struct TransactionsView: View {
                     Button {
                         showingForm = true
                     } label: {
-                        Label("Adicionar", systemImage: "plus")
+                        Label("Adicionar", systemImage: AppIcon.add.systemImage)
                     }
                 }
             }
@@ -156,7 +156,7 @@ struct TransactionsView: View {
                     Button {
                         editing = transaction
                     } label: {
-                        Image(systemName: "pencil")
+                        Image(systemName: AppIcon.edit.systemImage)
                     }
                     .buttonStyle(.borderless)
                     .help("Editar")
@@ -164,7 +164,7 @@ struct TransactionsView: View {
                     Button(role: .destructive) {
                         pendingDelete = transaction
                     } label: {
-                        Image(systemName: "trash")
+                        Image(systemName: AppIcon.delete.systemImage)
                     }
                     .buttonStyle(.borderless)
                     .help("Apagar")
@@ -187,7 +187,7 @@ struct TransactionsView: View {
                     Button(role: .destructive) {
                         pendingDelete = transaction
                     } label: {
-                        Label("Apagar", systemImage: "trash")
+                        Label("Apagar", systemImage: AppIcon.delete.systemImage)
                     }
                 }
             }

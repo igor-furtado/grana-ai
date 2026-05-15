@@ -23,7 +23,7 @@ struct CategoryBarChart: View {
             // alinha tudo à esquerda em vez de centralizar.
             ContentUnavailableView(
                 "Sem gastos no período",
-                systemImage: "chart.bar.fill",
+                systemImage: AppIcon.categoryRankingEmpty.systemImage,
                 description: Text("Adicione transações pra ver o ranking por categoria.")
             )
             .frame(maxWidth: .infinity)

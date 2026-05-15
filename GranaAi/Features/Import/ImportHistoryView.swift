@@ -28,7 +28,7 @@ struct ImportHistoryView: View {
                 Button {
                     showingImportSheet = true
                 } label: {
-                    Label("Importar OFX", systemImage: "square.and.arrow.down")
+                    Label("Importar OFX", systemImage: AppIcon.importFile.systemImage)
                 }
             }
         }
@@ -45,7 +45,7 @@ struct ImportHistoryView: View {
         if store.batches.isEmpty {
             ContentUnavailableView(
                 "Sem importações",
-                systemImage: "tray",
+                systemImage: AppIcon.inbox.systemImage,
                 description: Text("Use o botão **Importar OFX** na tela de Transações para importar um extrato bancário.")
             )
         } else {
@@ -97,7 +97,7 @@ struct ImportHistoryView: View {
                 Button(role: .destructive) {
                     pendingDeleteBatch = batch
                 } label: {
-                    Label("Desfazer", systemImage: "arrow.uturn.backward")
+                    Label("Desfazer", systemImage: AppIcon.undo.systemImage)
                 }
             }
             .width(110)
@@ -110,7 +110,7 @@ struct ImportHistoryView: View {
                         Button(role: .destructive) {
                             pendingDeleteBatch = batch
                         } label: {
-                            Label("Desfazer", systemImage: "arrow.uturn.backward")
+                            Label("Desfazer", systemImage: AppIcon.undo.systemImage)
                         }
                     }
             }

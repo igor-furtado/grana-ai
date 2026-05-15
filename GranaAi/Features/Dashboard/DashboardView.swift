@@ -85,7 +85,7 @@ struct DashboardView: View {
             MetricCard(
                 title: "Saldo total",
                 value: store.totalBalance,
-                systemImage: "wallet.pass.fill",
+                icon: .balance,
                 accent: .brandPrimary
             )
             // Títulos genéricos ("no período") porque o filtro também muda
@@ -94,19 +94,19 @@ struct DashboardView: View {
             MetricCard(
                 title: "Gastos no período",
                 value: store.periodExpenses,
-                systemImage: "arrow.down.right.circle.fill",
+                icon: .expenseFlow,
                 accent: .expense
             )
             MetricCard(
                 title: "Receitas no período",
                 value: store.periodIncome,
-                systemImage: "arrow.up.right.circle.fill",
+                icon: .incomeFlow,
                 accent: .income
             )
             MetricCard(
                 title: "Patrimônio investido",
                 value: store.investmentValue,
-                systemImage: "chart.line.uptrend.xyaxis",
+                icon: .netResult,
                 accent: .brandSecondary,
                 placeholder: true
             )
@@ -193,7 +193,7 @@ struct DashboardView: View {
     }
 
     private func errorBanner(_ error: Error) -> some View {
-        Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+        Label(error.localizedDescription, systemImage: AppIcon.warning.systemImage)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.danger.opacity(0.15))
@@ -212,7 +212,7 @@ struct DashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if let error = store.lastError {
-                    Label(error.localizedDescription, systemImage: "exclamationmark.triangle.fill")
+                    Label(error.localizedDescription, systemImage: AppIcon.warning.systemImage)
                         .foregroundStyle(.danger)
                         .font(.callout)
                         .padding(.horizontal)
@@ -221,7 +221,7 @@ struct DashboardView: View {
                 MetricCard(
                     title: "Saldo total",
                     value: store.totalBalance,
-                    systemImage: "wallet.pass.fill",
+                    icon: .balance,
                     accent: .brandPrimary
                 )
                 .padding(.horizontal)
@@ -230,7 +230,7 @@ struct DashboardView: View {
                     if store.lastFiveTransactions.isEmpty {
                         ContentUnavailableView(
                             "Sem transações ainda",
-                            systemImage: "list.bullet.rectangle",
+                            systemImage: AppIcon.transactionsList.systemImage,
                             description: Text("Toque em + pra adicionar a primeira.")
                         )
                         .frame(maxWidth: .infinity)
@@ -276,7 +276,7 @@ struct DashboardView: View {
                 Button {
                     showingForm = true
                 } label: {
-                    Label("Adicionar", systemImage: "plus")
+                    Label("Adicionar", systemImage: AppIcon.add.systemImage)
                 }
             }
         }

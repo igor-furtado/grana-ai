@@ -85,7 +85,7 @@ struct TransactionRow: View {
         parentId: nil,
         name: "Alimentação e Supermercado",
         kind: .expense,
-        icon: .utensils,
+        slug: "alimentacao-e-supermercado",
         createdAt: now
     )
     let account = Account(
