@@ -15,28 +15,6 @@
 
 ## Fase 3 — Importação de planilhas (XLSX e CSV) e extratos OFX ✅
 
-**Objetivo:** importar histórico de transações de planilhas existentes e extratos bancários.
-
-**Entregue:**
-- Tela "Importar" no Mac com wizard de fase (`idle → loading → mapping/ofxReview → preview → confirming → done`)
-- **CSV** (parser manual, autodetect `,` vs `;`, BOM UTF-8, CRLF, aspas escapadas)
-- **XLSX** (CoreXLSX, shared strings, colunas esparsas)
-- **OFX 1.x SGML + OFX 2.x XML** (não estava no escopo original — bônus): parser SGML lenient unificado, suporte a CHARSET 1252/Windows-1252 dos extratos brasileiros
-- Mapeamento interativo de colunas (CSV/XLSX) — exclusividade entre `amount` unificado e `débito`/`crédito` separados
-- Templates salvos por nome com `mapping_json` reutilizável
-- `ImportBatch` + cascade delete pra "desfazer lote" atômico (writeTransaction)
-- Preview com status por linha (`valid`/`duplicate`/`invalidDate`/`invalidAmount`/`missingFields`)
-- Detecção de duplicata CSV/XLSX por (dia local + valor + descrição) — calendário injetável pra testes
-- Detecção de duplicata OFX exata via FITID (batched: um Set por conta, evita N+1)
-- **Multi-account no OFX**: cada `STMTRS` vira batch independente; auto-detect de instituição via FEBRABAN code; auto-create de Account + Institution se inéditas, tudo na mesma `writeTransaction`
-- `OFXCategoryHeuristic` — chute educado por `TRNTYPE` + MEMO/NAME (PIX/TED → Transferências; CREDIT → Renda; resto → Não Classificado)
-- Convenção de sinal padronizada: valor sempre magnitude positiva; sinal vem do `kind` da categoria (normalizado via `abs()` no insert OFX/CSV)
-- Telas: `ImportView` (wizard), `ImportHistoryView` (lista de batches com desfazer)
-
-**Adicionado fora do escopo da fase:**
-- **Tela Configurações** (`SettingsView`): tema `system`/`light`/`dark` persistido em `UserDefaults` via `@AppStorage("appColorScheme")`. Aplicado no root via `.preferredColorScheme`.
-
----
 
 ## Fase 4 — Integração Claude API: categorização automática
 
