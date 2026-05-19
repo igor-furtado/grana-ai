@@ -113,53 +113,29 @@ final class TransactionRepository: Sendable {
         )
     }
 
-    // MARK: - Importação em batch (Fase 3)
+    // MARK: - Importação em batch (Fase 4)
 
-    /// Insere o `ImportBatch` e todas as `transactions` que pertencem a ele
-    /// em **uma única `writeTransaction`**. Atomicidade obrigatória — sem
-    /// isso, uma falha no meio deixaria o batch criado sem suas transactions
-    /// (ou vice-versa) e o "desfazer batch" não funcionaria.
-    func insertBatch(_ transactions: [Transaction], batch: ImportBatch) async throws {
-        try await db.writeTransaction { tx in
-            try tx.execute(
-                sql: """
-                    INSERT INTO import_batches
-                        (id, source_filename, source_kind, template_id,
-                         account_id, row_count, imported_at,
-                         created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                parameters: [
-                    batch.id.uuidString,
-                    batch.sourceFilename,
-                    batch.sourceKind.rawValue,
-                    batch.templateId?.uuidString,
-                    batch.accountId.uuidString,
-                    Int64(batch.rowCount),
-                    Converters.dateToString(batch.importedAt),
-                    Converters.dateToString(batch.createdAt),
-                    Converters.dateToString(batch.updatedAt),
-                ]
-            )
-
-            for transaction in transactions {
-                try tx.execute(
-                    sql: Self.insertTransactionSQL,
-                    parameters: Self.insertParameters(for: transaction)
-                )
-            }
-        }
-    }
-
-    /// Insere vários batches em uma única `writeTransaction`. Usado pelo
-    /// import OFX quando um arquivo traz múltiplos `STMTRS` (uma conta por
-    /// statement) — atomicidade: ou todos os batches entram, ou nenhum.
-    /// Também grava as `Account`s e `Institution`s novas no mesmo `tx`,
-    /// fazendo o auto-create de identidade bancária num único all-or-nothing.
-    func insertMultipleBatches(
+    /// Fase 4: commit atômico do import + categorização.
+    ///
+    /// Faz tudo em UMA `writeTransaction`: institutions + accounts + batches +
+    /// transactions + cache entries + corrections. Atomicidade obrigatória —
+    /// se qualquer execute falha, nada é persistido. Garante que cancelar o
+    /// import deixe o banco intocado, e que aceitar deixe-o consistente:
+    /// transactions categorizadas + cache atualizado + corrections registradas.
+    ///
+    /// Ordem das writes:
+    /// 1. Institutions novas (FKs alvo das accounts)
+    /// 2. Accounts novas (FKs alvo das transactions)
+    /// 3. Batches (FKs alvo das transactions via `import_batch_id`)
+    /// 4. Transactions
+    /// 5. Cache entries (delete-then-insert por hash+model)
+    /// 6. Corrections
+    func commitImport(
         institutions: [Institution],
         accounts: [Account],
-        batchesWithTransactions: [(batch: ImportBatch, transactions: [Transaction])]
+        batchesWithTransactions: [(batch: ImportBatch, transactions: [Transaction])],
+        cacheEntries: [CategorizationCacheEntry],
+        corrections: [CategorizationCorrection]
     ) async throws {
         try await db.writeTransaction { tx in
             for institution in institutions {
@@ -209,16 +185,13 @@ final class TransactionRepository: Sendable {
                 try tx.execute(
                     sql: """
                         INSERT INTO import_batches
-                            (id, source_filename, source_kind, template_id,
-                             account_id, row_count, imported_at,
-                             created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            (id, source_filename, account_id, row_count,
+                             imported_at, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                         """,
                     parameters: [
                         batch.id.uuidString,
                         batch.sourceFilename,
-                        batch.sourceKind.rawValue,
-                        batch.templateId?.uuidString,
                         batch.accountId.uuidString,
                         Int64(batch.rowCount),
                         Converters.dateToString(batch.importedAt),
@@ -233,6 +206,138 @@ final class TransactionRepository: Sendable {
                     )
                 }
             }
+
+            // Cache entries: upsert por (hash, model). delete-then-insert.
+            for entry in cacheEntries {
+                try tx.execute(
+                    sql: "DELETE FROM categorization_cache WHERE description_hash = ? AND model = ?",
+                    parameters: [entry.descriptionHash, entry.model]
+                )
+                try tx.execute(
+                    sql: """
+                        INSERT INTO categorization_cache
+                            (id, description_hash, normalized_description, category_id,
+                             subcategory_id, confidence, model, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                    parameters: [
+                        entry.id.uuidString,
+                        entry.descriptionHash,
+                        entry.normalizedDescription,
+                        entry.categoryId.uuidString,
+                        entry.subcategoryId?.uuidString,
+                        entry.confidence,
+                        entry.model,
+                        Converters.dateToString(entry.createdAt),
+                        Converters.dateToString(entry.updatedAt),
+                    ]
+                )
+            }
+
+            for correction in corrections {
+                try tx.execute(
+                    sql: """
+                        INSERT INTO categorization_corrections
+                            (id, description_hash, normalized_description,
+                             original_category_id, original_subcategory_id,
+                             corrected_category_id, corrected_subcategory_id,
+                             transaction_id, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                    parameters: [
+                        correction.id.uuidString,
+                        correction.descriptionHash,
+                        correction.normalizedDescription,
+                        correction.originalCategoryId?.uuidString,
+                        correction.originalSubcategoryId?.uuidString,
+                        correction.correctedCategoryId.uuidString,
+                        correction.correctedSubcategoryId?.uuidString,
+                        correction.transactionId.uuidString,
+                        Converters.dateToString(correction.createdAt),
+                    ]
+                )
+            }
+        }
+    }
+
+    /// Commit atômico de uma correção de categorização pós-commit:
+    /// insere a `correction`, refresca a cache entry pra (hash, model)
+    /// (delete-then-insert pra garantir só uma linha) e atualiza a
+    /// `transactions.category_id`/`subcategory_id` da transação alvo.
+    ///
+    /// **Por que atômico:** sem `writeTransaction`, uma falha entre os passos
+    /// deixa a base inconsistente — correction registrada apontando pra uma
+    /// categoria que não está nem na transação nem no cache. Em pós-commit
+    /// essas correções viram few-shot do prompt; correção "fantasma" envenena
+    /// o aprendizado.
+    func applyPostCommitCorrection(
+        correction: CategorizationCorrection,
+        cacheEntry: CategorizationCacheEntry,
+        transactionId: UUID,
+        newCategoryId: UUID,
+        newSubcategoryId: UUID?,
+        updatedAt: Date
+    ) async throws {
+        try await db.writeTransaction { tx in
+            try tx.execute(
+                sql: """
+                    INSERT INTO categorization_corrections
+                        (id, description_hash, normalized_description,
+                         original_category_id, original_subcategory_id,
+                         corrected_category_id, corrected_subcategory_id,
+                         transaction_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                parameters: [
+                    correction.id.uuidString,
+                    correction.descriptionHash,
+                    correction.normalizedDescription,
+                    correction.originalCategoryId?.uuidString,
+                    correction.originalSubcategoryId?.uuidString,
+                    correction.correctedCategoryId.uuidString,
+                    correction.correctedSubcategoryId?.uuidString,
+                    correction.transactionId.uuidString,
+                    Converters.dateToString(correction.createdAt),
+                ]
+            )
+
+            try tx.execute(
+                sql: "DELETE FROM categorization_cache WHERE description_hash = ? AND model = ?",
+                parameters: [cacheEntry.descriptionHash, cacheEntry.model]
+            )
+            try tx.execute(
+                sql: """
+                    INSERT INTO categorization_cache
+                        (id, description_hash, normalized_description, category_id,
+                         subcategory_id, confidence, model, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                parameters: [
+                    cacheEntry.id.uuidString,
+                    cacheEntry.descriptionHash,
+                    cacheEntry.normalizedDescription,
+                    cacheEntry.categoryId.uuidString,
+                    cacheEntry.subcategoryId?.uuidString,
+                    cacheEntry.confidence,
+                    cacheEntry.model,
+                    Converters.dateToString(cacheEntry.createdAt),
+                    Converters.dateToString(cacheEntry.updatedAt),
+                ]
+            )
+
+            try tx.execute(
+                sql: """
+                    UPDATE transactions
+                    SET category_id = ?, subcategory_id = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                parameters: [
+                    newCategoryId.uuidString,
+                    newSubcategoryId?.uuidString,
+                    Converters.dateToString(updatedAt),
+                    transactionId.uuidString,
+                ]
+            )
         }
     }
 
@@ -499,10 +604,9 @@ final class TransactionRepository: Sendable {
 
     // MARK: - SQL + parameters compartilhados
 
-    /// SQL único reutilizado por `insert`, `insertBatch` e
-    /// `insertMultipleBatches`. Mudança de schema (coluna nova/removida)
-    /// passa a exigir alteração em UM lugar — antes eram 3 cópias e o risco
-    /// de divergir uma era real.
+    /// SQL único reutilizado por `insert` e `commitImport`. Mudança de schema
+    /// (coluna nova/removida) passa a exigir alteração em UM lugar — antes
+    /// eram cópias paralelas e o risco de divergir uma era real.
     private nonisolated static let insertTransactionSQL = """
         INSERT INTO transactions
             (id, account_id, category_id, subcategory_id,

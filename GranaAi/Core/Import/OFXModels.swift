@@ -78,3 +78,13 @@ struct OFXDocument: Hashable, Sendable {
     var charset: String?                // "1252" no formato 1.x
     var statements: [OFXStatement]
 }
+
+/// Forma "pré-Transaction" usada no preview: derivada da `OFXTransaction` mas
+/// já com os campos no formato que a `Transaction` definitiva vai usar.
+/// `id`, `accountId`, `categoryId` e `importBatchId` entram só no commit final.
+struct DerivedTransaction: Hashable, Sendable {
+    var occurredAt: Date
+    var amount: Decimal
+    var description: String
+    var notes: String?
+}

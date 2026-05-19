@@ -121,7 +121,7 @@ final class DashboardStore {
             self.lastError = nil
         } catch {
             self.lastError = error
-            log.database.error("DashboardStore.refresh falhou: \(String(describing: error))")
+            ErrorCenter.shared.report(error)
         }
     }
 

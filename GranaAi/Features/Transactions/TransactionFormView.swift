@@ -200,6 +200,7 @@ struct TransactionFormView: View {
             dismiss()
         } catch {
             saveError = error.localizedDescription
+            ErrorCenter.shared.report(error, title: "Falha ao salvar transação")
         }
     }
 }

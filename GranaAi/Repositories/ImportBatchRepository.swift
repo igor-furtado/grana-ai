@@ -15,16 +15,13 @@ final class ImportBatchRepository: Sendable {
         try await db.execute(
             sql: """
                 INSERT INTO import_batches
-                    (id, source_filename, source_kind, template_id,
-                     account_id, row_count, imported_at,
+                    (id, source_filename, account_id, row_count, imported_at,
                      created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
             parameters: [
                 batch.id.uuidString,
                 batch.sourceFilename,
-                batch.sourceKind.rawValue,
-                batch.templateId?.uuidString,
                 batch.accountId.uuidString,
                 Int64(batch.rowCount),
                 Converters.dateToString(batch.importedAt),
@@ -82,21 +79,6 @@ final class ImportBatchRepository: Sendable {
             throw DatabaseError.invalidUUID(column: "id", value: idString)
         }
 
-        let kindRaw = try cursor.getString(name: "source_kind")
-        guard let kind = ImportSourceKind(rawValue: kindRaw) else {
-            throw DatabaseError.invalidEnum(column: "source_kind", value: kindRaw)
-        }
-
-        let templateId: UUID?
-        if let s = try cursor.getStringOptional(name: "template_id") {
-            guard let uuid = UUID(uuidString: s) else {
-                throw DatabaseError.invalidUUID(column: "template_id", value: s)
-            }
-            templateId = uuid
-        } else {
-            templateId = nil
-        }
-
         let accountIdString = try cursor.getString(name: "account_id")
         guard let accountId = UUID(uuidString: accountIdString) else {
             throw DatabaseError.invalidUUID(column: "account_id", value: accountIdString)
@@ -120,8 +102,6 @@ final class ImportBatchRepository: Sendable {
         return ImportBatch(
             id: id,
             sourceFilename: try cursor.getString(name: "source_filename"),
-            sourceKind: kind,
-            templateId: templateId,
             accountId: accountId,
             rowCount: Int(try cursor.getInt64(name: "row_count")),
             importedAt: importedAt,

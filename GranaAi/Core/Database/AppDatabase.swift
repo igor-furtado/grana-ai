@@ -33,7 +33,27 @@ final class AppDatabase {
     lazy var categories: CategoryRepository = CategoryRepository(db: db)
     lazy var institutions: InstitutionRepository = InstitutionRepository(db: db)
     lazy var importBatches: ImportBatchRepository = ImportBatchRepository(db: db)
-    lazy var importTemplates: ImportTemplateRepository = ImportTemplateRepository(db: db)
+    lazy var categorizationCache: CategorizationCacheRepository = CategorizationCacheRepository(db: db)
+    lazy var categorizationCorrections: CategorizationCorrectionRepository = CategorizationCorrectionRepository(db: db)
+
+    /// Shell-out pro `claude` CLI usando a assinatura Claude do usuário.
+    /// Compartilhado pelo `CategorizationService` (Fase 4) e, futuramente,
+    /// pelo chat IA (Fase 7).
+    lazy var claudeCLIClient: ClaudeCLIClient = ClaudeCLIClient(
+        executablePath: Config.claudeCLIPath,
+        model: Config.claudeCLIModel
+    )
+
+    /// Pipeline de categorização automática (Fase 4). Usa cache + correções
+    /// + Claude CLI com `--json-schema` pra output estruturado. Disparado em
+    /// background pelos importadores após `writeTransaction`.
+    lazy var categorization: CategorizationService = CategorizationService(
+        client: claudeCLIClient,
+        transactions: transactions,
+        categories: categories,
+        cache: categorizationCache,
+        corrections: categorizationCorrections
+    )
 
     private init(db: any PowerSyncDatabaseProtocol) {
         self.db = db

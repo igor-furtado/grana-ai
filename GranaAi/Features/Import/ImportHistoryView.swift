@@ -78,10 +78,6 @@ struct ImportHistoryView: View {
             TableColumn("Conta") { batch in
                 Text(store.account(for: batch.accountId)?.name ?? "—")
             }
-            TableColumn("Formato") { batch in
-                Text(batch.sourceKind.displayName)
-            }
-            .width(80)
             TableColumn("Linhas") { batch in
                 Text("\(batch.rowCount)").monospacedDigit()
             }

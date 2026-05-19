@@ -14,7 +14,6 @@
 		28AC0A122FB3CA67008BAD35 /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 28AC0A112FB3CA67008BAD35 /* Realtime */; };
 		28AC0A142FB3CA67008BAD35 /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 28AC0A132FB3CA67008BAD35 /* Storage */; };
 		28AC0A162FB3CA67008BAD35 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 28AC0A152FB3CA67008BAD35 /* Supabase */; };
-		28AC0A192FB3CA88008BAD35 /* CoreXLSX in Frameworks */ = {isa = PBXBuildFile; productRef = 28AC0A182FB3CA88008BAD35 /* CoreXLSX */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -57,7 +56,6 @@
 				28AC0A142FB3CA67008BAD35 /* Storage in Frameworks */,
 				28AC0A162FB3CA67008BAD35 /* Supabase in Frameworks */,
 				28AC0A0C2FB3CA67008BAD35 /* Auth in Frameworks */,
-				28AC0A192FB3CA88008BAD35 /* CoreXLSX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,7 +114,6 @@
 				28AC0A112FB3CA67008BAD35 /* Realtime */,
 				28AC0A132FB3CA67008BAD35 /* Storage */,
 				28AC0A152FB3CA67008BAD35 /* Supabase */,
-				28AC0A182FB3CA88008BAD35 /* CoreXLSX */,
 			);
 			productName = GranaAi;
 			productReference = 2898A1B42FB3C58D0070C51B /* GranaAi.app */;
@@ -176,7 +173,6 @@
 			packageReferences = (
 				28AC0A032FB3C9F8008BAD35 /* XCRemoteSwiftPackageReference "powersync-swift" */,
 				28AC0A0A2FB3CA67008BAD35 /* XCRemoteSwiftPackageReference "supabase-swift" */,
-				28AC0A172FB3CA88008BAD35 /* XCRemoteSwiftPackageReference "CoreXLSX" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2898A1B52FB3C58D0070C51B /* Products */;
@@ -356,10 +352,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = T5XD7VVVN2;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -400,10 +395,9 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = T5XD7VVVN2;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -537,14 +531,6 @@
 				minimumVersion = 2.5.1;
 			};
 		};
-		28AC0A172FB3CA88008BAD35 /* XCRemoteSwiftPackageReference "CoreXLSX" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/CoreOffice/CoreXLSX";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.14.2;
-			};
-		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -582,11 +568,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 28AC0A0A2FB3CA67008BAD35 /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Supabase;
-		};
-		28AC0A182FB3CA88008BAD35 /* CoreXLSX */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 28AC0A172FB3CA88008BAD35 /* XCRemoteSwiftPackageReference "CoreXLSX" */;
-			productName = CoreXLSX;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

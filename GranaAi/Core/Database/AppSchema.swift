@@ -88,13 +88,12 @@ let appSchema = Schema(tables: [
         ]
     ),
 
-    // Fase 3: import_batches, import_templates
+    // Fase 3: import_batches (origem de cada transaction importada via OFX).
+    // Permite undo atômico de um import inteiro via DELETE em cascata.
     Table(
         name: "import_batches",
         columns: [
             .text("source_filename"),
-            .text("source_kind"),        // "xlsx" | "csv"
-            .text("template_id"),        // nullable — quando salvou template novo, vira FK
             .text("account_id"),
             .integer("row_count"),
             .text("imported_at"),        // ISO8601
@@ -103,20 +102,52 @@ let appSchema = Schema(tables: [
         ]
     ),
 
+    // Fase 4: cache de categorização e correções do usuário.
+    //
+    // `categorization_cache` é a porta lookup-by-description-hash que evita
+    // chamar a IA pra descrições idênticas — chave é SHA256 da descrição
+    // normalizada (lowercase + trim + sem acentos + sem sequências de dígitos
+    // longos como FITID/CPF). Cada hit economiza uma chamada à API.
+    //
+    // `model` é guardado pra invalidação ao trocar de modelo: se mudarmos pra
+    // Sonnet, a query do service filtra por `model = configAtual` e cache
+    // antigo vira inerte automaticamente — sem precisar de migration.
+    //
+    // PowerSync não tem NOT NULL no schema (CLAUDE.md invariante 5) — todas
+    // as colunas são nullable por baixo. A obrigatoriedade vive nas structs
+    // Swift e na lógica de insert dos Repositories.
     Table(
-        name: "import_templates",
+        name: "categorization_cache",
         columns: [
-            .text("name"),
-            .text("source_kind"),
-            .text("mapping_json"),       // ColumnMapping serializado
-            .text("date_format"),        // ex: "dd/MM/yyyy"
-            .text("decimal_separator"),  // "," ou "."
-            .text("default_account_id"), // nullable
+            .text("description_hash"),       // SHA256 hex da descrição normalizada
+            .text("normalized_description"), // pra debug + invalidação por correção
+            .text("category_id"),
+            .text("subcategory_id"),         // nullable
+            .real("confidence"),             // 0.0–1.0
+            .text("model"),                  // ex: "claude-haiku-4-5-20251001"
             .text("created_at"),
             .text("updated_at"),
         ]
     ),
 
+    // Correções explícitas do usuário viram exemplos few-shot do prompt das
+    // próximas categorizações. `ORDER BY created_at DESC LIMIT N` na seleção
+    // pega as N mais recentes — usuário corrige um padrão errado e o
+    // aprendizado é imediato. Mantém histórico completo (não-destrutivo).
+    Table(
+        name: "categorization_corrections",
+        columns: [
+            .text("description_hash"),
+            .text("normalized_description"),
+            .text("original_category_id"),     // nullable — o que a IA sugeriu
+            .text("original_subcategory_id"),  // nullable
+            .text("corrected_category_id"),
+            .text("corrected_subcategory_id"), // nullable
+            .text("transaction_id"),           // rastreabilidade pra auditoria
+            .text("created_at"),
+        ]
+    ),
+
     // Fase 6: assets, holdings, quotes
-    // Fase 7: chat_messages, categorization_cache
+    // Fase 7: chat_messages
 ])

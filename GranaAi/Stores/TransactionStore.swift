@@ -69,7 +69,7 @@ final class TransactionStore {
             // .task foi cancelado pela SwiftUI — comportamento esperado.
         } catch {
             self.lastError = error
-            log.database.error("watch(transactions) falhou: \(String(describing: error))")
+            ErrorCenter.shared.report(error)
         }
     }
 
@@ -82,7 +82,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             self.lastError = error
-            log.database.error("watch(accounts) falhou: \(String(describing: error))")
+            ErrorCenter.shared.report(error)
         }
     }
 
@@ -95,7 +95,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             self.lastError = error
-            log.database.error("watch(categories) falhou: \(String(describing: error))")
+            ErrorCenter.shared.report(error)
         }
     }
 

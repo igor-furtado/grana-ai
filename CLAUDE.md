@@ -8,14 +8,15 @@
 
 App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-first) + Supabase (entra na Fase 5).
 
-**Status:** Fases 0–3 ✅ (fundação, CRUD, dashboard, importação CSV/XLSX/OFX). Fases 4+ no [ROADMAP.md](./ROADMAP.md).
+**Status:** Fases 0–3 ✅ (fundação, CRUD, dashboard, importação OFX). Fases 4+ no [ROADMAP.md](./ROADMAP.md).
 
 ## Stack travada
 
 - Swift 5.9+ / SwiftUI / `@Observable` (NUNCA `ObservableObject`)
 - PowerSync Swift SDK `1.13.1` exact — produto `PowerSync` estático (não `PowerSyncDynamic` nem `PowerSyncGRDB`)
-- CoreXLSX, Swift Charts, URLSession
-- Anthropic via HTTP direto (sem SDK); Supabase via `supabase-swift` (auth) — ambos entram em fases futuras
+- Swift Charts, URLSession
+- **IA via shell-out** pro `claude` CLI (Claude Code) usando a assinatura do usuário — NÃO `api.anthropic.com` paga. Por isso `ENABLE_APP_SANDBOX = NO` no `project.pbxproj` (sandbox bloqueia `Process` de executar binários fora do bundle). Single-user, local-first, sem distribuição → trade-off aceito.
+- Supabase via `supabase-swift` (auth) — entra na Fase 5
 - Target: macOS 26.1+
 
 ## Arquitetura num parágrafo
@@ -51,16 +52,16 @@ App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-
 
 ## Importação (Fase 3 — entregue)
 
-- **CSV/XLSX**: parser → preview com status por linha → user mapeia colunas → salva template opcional → `writeTransaction` insere batch.
-- **OFX**: reader unificado SGML 1.x + XML 2.x, charset CP1252 ou UTF-8. Cada `<STMTRS>` vira um batch independente. Auto-detect de Institution (FEBRABAN code) e Account (tripla institution+branch+number). Multi-account num arquivo → todos os inserts (Institutions novas, Accounts novas, N batches, N×M transactions) numa única `writeTransaction`.
+- **Apenas OFX.** CSV/XLSX foram removidos — não tinham uso real e dobravam a superfície (templates, mapeamento manual, dedup heurística).
+- **OFX**: reader unificado SGML 1.x + XML 2.x, charset CP1252 ou UTF-8. Cada `<STMTRS>` vira um batch independente. Auto-detect de Institution (FEBRABAN code) e Account (tripla institution+branch+number). Multi-account num arquivo → todos os inserts (Institutions novas, Accounts novas, N batches, N×M transactions) numa única `writeTransaction` via `commitImport`.
 - **Dedup OFX**: exata por FITID (`external_id`), batched via `Set<String>` por conta.
-- **Dedup CSV/XLSX**: heurística (dia local + valor centavos + descrição lower).
-- **Categorização inicial**: `OFXCategoryHeuristic` por TRNTYPE/MEMO/NAME. Fase 4 (IA) vai refinar.
+- **Categorização inicial**: `OFXCategoryHeuristic` por TRNTYPE/MEMO/NAME. Fase 4 (IA) refina antes do commit.
 
 ## Onde mexer pra cada coisa
 
 | Pra... | Edite |
 |---|---|
+| Reportar erro pro toast global | `ErrorCenter.shared.report(error)` (MainActor) ou `ErrorCenter.capture(error)` (nonisolated) — ver seção "Tratamento de erros" |
 | Adicionar tabela nova | `GranaAi/Core/Database/AppSchema.swift` + novo Repository + model |
 | Adicionar categoria/subcategoria padrão | `GranaAi/Core/Database/CategorySeedData.swift` |
 | Adicionar ícone novo de categoria | `GranaAi/Models/Category.swift` (enum `CategoryIcon`) + `GranaAi/Shared/Components/CategoryIcon+Color.swift` |
@@ -69,6 +70,41 @@ App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-
 | Adicionar cor do tema | `GranaAi/Resources/Assets.xcassets/<Nome>.colorset/` (variante dark obrigatória) — Xcode gera o `Color.<nome>` automático |
 | Mudar filtros de período | `GranaAi/Models/PeriodFilter.swift` |
 | Mudar layout do dashboard | `GranaAi/Features/Dashboard/DashboardView.swift` + `Charts/` |
+
+## Tratamento de erros
+
+Sistema centralizado em `GranaAi/Core/ErrorHandling/`. **Toda falha visível pro usuário passa pelo `ErrorCenter`**, que mantém uma fila de toasts renderizada no canto superior-direito da janela via `.errorToastOverlay()` (plugado uma única vez em `ContentView`).
+
+**Como reportar:**
+
+```swift
+// MainActor (Stores, Views, callers que já estão no main):
+ErrorCenter.shared.report(error)                          // título derivado do tipo
+ErrorCenter.shared.report(error, title: "Falha ao X")     // título custom
+ErrorCenter.shared.report(title: "Aviso", message: "...") // sem Error tipado
+
+// Contexto não-MainActor (services Sendable, callbacks de SDK):
+ErrorCenter.capture(error, title: "Falha ao X")           // faz hop pro main internamente
+```
+
+**Regra de ouro por tipo de `catch`:**
+
+| Padrão do catch | O que fazer |
+|---|---|
+| Relança/transforma erro (`throw OutroError(...)`) | **Não** reporta. O pai cuida. |
+| Engole erro pra continuar fluxo (fallback) | **Reporta** antes de continuar. |
+| Reage a erro já reportado por outro lugar | `log.X.notice(...)` (não `.error`) pra evitar toast duplicado. |
+| `catch is CancellationError` | Silencioso. `.task` cancelado = comportamento esperado. |
+
+**O `ErrorCenter` já cuida sozinho de:**
+- Filtrar `CancellationError` (não vira toast).
+- Dedup de toasts iguais em janela <1s (evita spam quando stream falha em loop).
+- Auto-dismiss em 6s.
+- Logar tudo em `log.ui.error` automaticamente — **não duplicar `log.X.error` antes de reportar**.
+
+**O que NÃO dá pra capturar:** logs do CFNetwork/AppKit/sandbox que aparecem no Console (`networkd_settings`, `nw_resolver`, `Task <…> HTTP load failed`, `layoutSubtreeIfNeeded`). Não são `Error` Swift — são `os_log` direto do sistema. O `URLError` real correspondente chega como exceção e esse sim é reportado.
+
+**Criar um erro novo:** estenda os enums por domínio em `Core/{Database,Import,Networking}/<Domain>Error.swift`. Todos conformam a `LocalizedError` com mensagens em PT-BR. Opcionalmente conformar a `UserFacingError` se quiser controlar o título do toast (default: nome legível do tipo, ex: "Erro no banco", "Erro na importação").
 
 ## Antes de codar (checklist)
 

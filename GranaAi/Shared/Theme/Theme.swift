@@ -4,8 +4,8 @@ import SwiftUI
 ///
 /// **Tokens base** (auto-gerados pelo Xcode a partir de `Resources/Assets.xcassets/`):
 /// `Color.brandPrimary`, `Color.brandSecondary`, `Color.surface`,
-/// `Color.surfaceMuted`, `Color.income`, `Color.expense`, `Color.transfer`,
-/// `Color.warning`. Cada um tem variante light/dark no `.colorset`.
+/// `Color.income`, `Color.expense`, `Color.transfer`, `Color.warning`.
+/// Cada um tem variante light/dark no `.colorset`.
 ///
 /// **Como adicionar uma cor nova:** crie `<Nome>.colorset/Contents.json` em
 /// `Resources/Assets.xcassets/` (com variante dark) — Xcode gera o acessor

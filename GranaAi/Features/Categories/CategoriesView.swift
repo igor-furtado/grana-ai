@@ -178,7 +178,7 @@ struct CategoriesView: View {
             // .task cancelado pela SwiftUI — comportamento esperado.
         } catch {
             self.loadError = error
-            log.database.error("watch(categories) falhou: \(String(describing: error))")
+            ErrorCenter.shared.report(error)
         }
     }
 }

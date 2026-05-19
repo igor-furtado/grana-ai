@@ -15,6 +15,7 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
     case chat
     case categories
     case accounts
+    case categorization
     case theme
 
     var id: String { rawValue }
@@ -23,31 +24,33 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
     static let topItems: [AppSection] = [.dashboard, .transactions, .investments, .import, .chat]
 
     /// Itens sob a seção "Configurações" da sidebar.
-    static let settingsItems: [AppSection] = [.categories, .accounts, .theme]
+    static let settingsItems: [AppSection] = [.categories, .accounts, .categorization, .theme]
 
     var title: String {
         switch self {
-        case .dashboard:    "Dashboard"
-        case .transactions: "Transações"
-        case .investments:  "Investimentos"
-        case .import:       "Importações"
-        case .chat:         "Chat IA"
-        case .categories:   "Categorias"
-        case .accounts:     "Contas"
-        case .theme:        "Tema"
+        case .dashboard:      "Dashboard"
+        case .transactions:   "Transações"
+        case .investments:    "Investimentos"
+        case .import:         "Importações"
+        case .chat:           "Chat IA"
+        case .categories:     "Categorias"
+        case .accounts:       "Contas"
+        case .categorization: "Categorização"
+        case .theme:          "Tema"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .dashboard:    "chart.pie.fill"
-        case .transactions: "list.bullet.rectangle"
-        case .investments:  "chart.line.uptrend.xyaxis"
-        case .import:       "tray.and.arrow.down"
-        case .chat:         "bubble.left.and.bubble.right"
-        case .categories:   "tag.fill"
-        case .accounts:     "wallet.pass.fill"
-        case .theme:        "paintpalette.fill"
+        case .dashboard:      "chart.pie.fill"
+        case .transactions:   "list.bullet.rectangle"
+        case .investments:    "chart.line.uptrend.xyaxis"
+        case .import:         "tray.and.arrow.down"
+        case .chat:           "bubble.left.and.bubble.right"
+        case .categories:     "tag.fill"
+        case .accounts:       "wallet.pass.fill"
+        case .categorization: "sparkles"
+        case .theme:          "paintpalette.fill"
         }
     }
 }
@@ -93,9 +96,10 @@ struct ContentView: View {
                 case .investments:  placeholder(for: .investments)
                 case .import:       ImportHistoryView()
                 case .chat:         placeholder(for: .chat)
-                case .categories:   CategoriesView()
-                case .accounts:     AccountsView()
-                case .theme:        ThemeView()
+                case .categories:     CategoriesView()
+                case .accounts:       AccountsView()
+                case .categorization: CategorizationSettingsView()
+                case .theme:          ThemeView()
                 }
             }
             .tint(.brandSecondary)
@@ -106,6 +110,9 @@ struct ContentView: View {
         .tint(.brandPrimary)
         .navigationTitle("Grana AI")
         .preferredColorScheme(appColorScheme.colorScheme)
+        // Toasts globais de erro. Plugado aqui (raiz) pra cobrir qualquer
+        // tela. Stores e services reportam via `ErrorCenter.shared.report(_:)`.
+        .errorToastOverlay()
     }
 
     @ViewBuilder

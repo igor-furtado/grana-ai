@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Wizard de importação apresentado como **sheet modal** sobre a tela de
+/// Wizard de importação OFX apresentado como **sheet modal** sobre a tela de
 /// Transações (e a partir da tela de Histórico de Importações). Não vive
 /// na navegação principal — sempre é triggerado pelo usuário via botão
 /// "Importar OFX".
@@ -34,7 +34,7 @@ struct ImportView: View {
                 }
             }
         }
-        .frame(minWidth: 880, minHeight: 620)
+        .frame(minWidth: 700, minHeight: 620)
     }
 
     private func initialize() {
@@ -57,12 +57,21 @@ struct ImportView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .mapping:
-            MappingStepView(store: store)
-        case .preview:
-            PreviewStepView(store: store)
         case .ofxReview:
             OFXReviewStepView(store: store)
+        case .categorizing:
+            CategorizingStepView(store: store)
+        case .reviewingCategorization:
+            // Tela de revisão como step do wizard, com botões "Voltar" e
+            // "Importar". `onImport` chama `finalizeImport` que commita
+            // atomicamente; `onBack` volta pro preview sem mexer no banco.
+            CategorizationReviewView(
+                store: store.categorization,
+                mode: .wizard(
+                    onImport: { await store.finalizeImport() },
+                    onBack: { store.backToPreviewFromReview() }
+                )
+            )
         case .confirming:
             VStack(spacing: 12) {
                 ProgressView()
@@ -80,6 +89,37 @@ struct ImportView: View {
     }
 }
 
+/// Step intermediário: AI rodando antes do commit. Mostra o status detalhado
+/// do `CategorizationStore` (cache hits, chamada à IA, fallback).
+private struct CategorizingStepView: View {
+    @Bindable var store: ImportStore
+
+    var body: some View {
+        VStack(spacing: 16) {
+            ProgressView().controlSize(.large)
+            statusText
+            Button("Cancelar") { store.backToPreviewFromReview() }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Só renderiza os sub-estados que o usuário consegue ler antes de o
+    /// `awaitCategorizationCompletion` trocar a `phase` — `.ready` e `.failed`
+    /// transicionam direto pra `.reviewingCategorization`, então nunca aparecem
+    /// aqui.
+    @ViewBuilder
+    private var statusText: some View {
+        switch store.categorization.status {
+        case .idle:
+            Text("Preparando categorização…").foregroundStyle(.secondary)
+        case .classifying(_, _, let message):
+            Text(message).foregroundStyle(.secondary)
+        case .ready, .failed:
+            EmptyView()
+        }
+    }
+}
+
 // MARK: - Idle (file picker)
 
 private struct IdleStepView: View {
@@ -90,14 +130,14 @@ private struct IdleStepView: View {
         ContentUnavailableView {
             Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
         } description: {
-            Text("Selecione um arquivo **OFX** (preferido — auto-detecta a conta e o banco) ou um CSV/XLSX exportado do seu banco.")
+            Text("Selecione um arquivo **OFX**. A conta e o banco são detectados automaticamente; transações duplicadas (mesmo FITID) são marcadas no preview.")
         } actions: {
             Button("Escolher arquivo") { fileImporterShown = true }
                 .buttonStyle(.borderedProminent)
         }
         .fileImporter(
             isPresented: $fileImporterShown,
-            allowedContentTypes: Self.allowedTypes,
+            allowedContentTypes: [.data],
             allowsMultipleSelection: false
         ) { result in
             switch result {
@@ -109,383 +149,6 @@ private struct IdleStepView: View {
                 store.reportFileImportFailure(err)
             }
         }
-    }
-
-    private static var allowedTypes: [UTType] {
-        var types: [UTType] = [.commaSeparatedText, .data]
-        // XLSX UTI oficial. OFX não tem UTI declarado pela Apple, então
-        // `.data` no array libera qualquer extensão — o `loadFile` ramifica
-        // pela extensão real depois.
-        if let xlsx = UTType("org.openxmlformats.spreadsheetml.sheet") {
-            types.append(xlsx)
-        }
-        return types
-    }
-}
-
-// MARK: - Mapping
-
-private struct MappingStepView: View {
-    @Bindable var store: ImportStore
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(store.sourceURL?.lastPathComponent ?? "—")
-                    .font(.headline)
-                Spacer()
-                Button("Cancelar") { store.cancel() }
-            }
-
-            Form {
-                Section("Conta destino") {
-                    Picker("Conta", selection: $store.selectedAccountId) {
-                        Text("Selecione…").tag(UUID?.none)
-                        ForEach(store.accounts) { account in
-                            Text(account.name).tag(UUID?.some(account.id))
-                        }
-                    }
-                }
-
-                if !templatesForCurrentKind.isEmpty {
-                    Section("Template salvo") {
-                        Picker("Aplicar template", selection: Binding<UUID?>(
-                            get: { nil },
-                            set: { id in
-                                if let id, let t = templatesForCurrentKind.first(where: { $0.id == id }) {
-                                    store.applyTemplate(t)
-                                }
-                            }
-                        )) {
-                            Text("Novo mapeamento").tag(UUID?.none)
-                            ForEach(templatesForCurrentKind) { t in
-                                Text(t.name).tag(UUID?.some(t.id))
-                            }
-                        }
-                    }
-                }
-
-                Section("Formato") {
-                    Picker("Formato da data", selection: $store.dateFormat) {
-                        Text("dd/MM/yyyy").tag("dd/MM/yyyy")
-                        Text("yyyy-MM-dd").tag("yyyy-MM-dd")
-                        Text("dd-MM-yyyy").tag("dd-MM-yyyy")
-                        Text("MM/dd/yyyy").tag("MM/dd/yyyy")
-                    }
-                    Picker("Separador decimal", selection: $store.decimalSeparator) {
-                        Text("Vírgula (BR)").tag(",")
-                        Text("Ponto (US/ISO)").tag(".")
-                    }
-                    Stepper(
-                        value: $store.mapping.headerRowsToSkip,
-                        in: 0...10
-                    ) {
-                        Text("Pular \(store.mapping.headerRowsToSkip) linhas iniciais")
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .frame(maxHeight: 280)
-
-            Text("Mapeamento de colunas")
-                .font(.headline)
-
-            ScrollView(.horizontal) {
-                ColumnMappingTable(
-                    rawRows: Array(store.rawRows.prefix(10)),
-                    mapping: $store.mapping
-                )
-            }
-
-            HStack {
-                Spacer()
-                Button("Gerar preview") {
-                    Task { await store.generatePreview() }
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(!store.mapping.isComplete || store.selectedAccountId == nil)
-            }
-        }
-        .padding()
-    }
-
-    private var templatesForCurrentKind: [ImportTemplate] {
-        guard let kind = store.sourceKind else { return [] }
-        return store.availableTemplates.filter { $0.sourceKind == kind }
-    }
-}
-
-// MARK: - Mapping table
-
-private struct ColumnMappingTable: View {
-    let rawRows: [[String]]
-    @Binding var mapping: ColumnMapping
-
-    private var columnCount: Int {
-        rawRows.map(\.count).max() ?? 0
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 4) {
-                ForEach(0..<columnCount, id: \.self) { col in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Col \(col + 1)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        ColumnRolePicker(column: col, mapping: $mapping)
-                    }
-                    .frame(minWidth: 140, alignment: .leading)
-                }
-            }
-
-            Divider()
-
-            ForEach(Array(rawRows.enumerated()), id: \.offset) { rowOffset, row in
-                HStack(spacing: 4) {
-                    ForEach(0..<columnCount, id: \.self) { col in
-                        Text(col < row.count ? row[col] : "")
-                            .font(.callout)
-                            .lineLimit(1)
-                            .frame(minWidth: 140, alignment: .leading)
-                            .padding(.vertical, 2)
-                    }
-                }
-                .background(rowOffset % 2 == 0 ? Color.surfaceMuted.opacity(0.5) : Color.clear)
-            }
-        }
-    }
-}
-
-private struct ColumnRolePicker: View {
-    let column: Int
-    @Binding var mapping: ColumnMapping
-
-    enum Role: String, CaseIterable, Identifiable {
-        case ignore   = "Ignorar"
-        case date     = "Data"
-        case description = "Descrição"
-        case amount   = "Valor"
-        case debit    = "Débito"
-        case credit   = "Crédito"
-        case notes    = "Notas"
-        var id: String { rawValue }
-    }
-
-    var body: some View {
-        Picker("", selection: roleBinding) {
-            ForEach(Role.allCases) { role in
-                Text(role.rawValue).tag(role)
-            }
-        }
-        .labelsHidden()
-    }
-
-    private var roleBinding: Binding<Role> {
-        Binding(
-            get: { currentRole },
-            set: { assign($0) }
-        )
-    }
-
-    private var currentRole: Role {
-        if mapping.date == column { return .date }
-        if mapping.description == column { return .description }
-        if mapping.amount == column { return .amount }
-        if mapping.debit == column { return .debit }
-        if mapping.credit == column { return .credit }
-        if mapping.notes == column { return .notes }
-        return .ignore
-    }
-
-    /// Atribuir um papel a uma coluna **remove esse mesmo papel de qualquer
-    /// outra coluna** — não faz sentido ter duas colunas marcadas como "Data".
-    /// Também limpa o papel anterior dessa coluna.
-    private func assign(_ role: Role) {
-        // Limpar coluna anterior do papel-alvo.
-        switch role {
-        case .ignore: break
-        case .date: mapping.date = nil
-        case .description: mapping.description = nil
-        case .amount:
-            mapping.amount = nil
-            // Valor unificado é mutuamente exclusivo com débito/crédito.
-            mapping.debit = nil
-            mapping.credit = nil
-        case .debit:
-            mapping.debit = nil
-            mapping.amount = nil
-        case .credit:
-            mapping.credit = nil
-            mapping.amount = nil
-        case .notes: mapping.notes = nil
-        }
-
-        // Remover esta coluna de qualquer papel que tinha antes.
-        if mapping.date == column { mapping.date = nil }
-        if mapping.description == column { mapping.description = nil }
-        if mapping.amount == column { mapping.amount = nil }
-        if mapping.debit == column { mapping.debit = nil }
-        if mapping.credit == column { mapping.credit = nil }
-        if mapping.notes == column { mapping.notes = nil }
-
-        // Atribuir o papel novo.
-        switch role {
-        case .ignore: break
-        case .date: mapping.date = column
-        case .description: mapping.description = column
-        case .amount: mapping.amount = column
-        case .debit: mapping.debit = column
-        case .credit: mapping.credit = column
-        case .notes: mapping.notes = column
-        }
-    }
-}
-
-// MARK: - Preview
-
-private struct PreviewStepView: View {
-    @Bindable var store: ImportStore
-
-    private var summary: (valid: Int, duplicate: Int, invalid: Int) {
-        var v = 0, d = 0, i = 0
-        for row in store.previewRows {
-            switch row.status {
-            case .valid: v += 1
-            case .duplicate: d += 1
-            case .invalidDate, .invalidAmount, .missingFields: i += 1
-            }
-        }
-        return (v, d, i)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                StatusSummaryCard(title: "Válidas", count: summary.valid, color: .green, icon: .success)
-                StatusSummaryCard(title: "Duplicadas", count: summary.duplicate, color: .yellow, icon: .warning)
-                StatusSummaryCard(title: "Inválidas", count: summary.invalid, color: .red, icon: .error)
-            }
-
-            Toggle("Incluir duplicadas", isOn: $store.includeDuplicates)
-
-            Table(store.previewRows) {
-                TableColumn("Linha") { row in
-                    Text("\(row.rowIndex + 1)").monospacedDigit()
-                }
-                .width(50)
-
-                TableColumn("Status") { row in
-                    statusBadge(row.status)
-                }
-                .width(120)
-
-                TableColumn("Data") { row in
-                    Text(row.derived.map { Self.dateFormatter.string(from: $0.occurredAt) } ?? "—")
-                }
-                .width(110)
-
-                TableColumn("Descrição") { row in
-                    Text(row.derived?.description ?? row.rawCells.dropFirst().first ?? "—")
-                        .lineLimit(1)
-                }
-
-                TableColumn("Valor") { row in
-                    if let amount = row.derived?.amount {
-                        Text(Self.currencyFormatter.string(from: amount as NSDecimalNumber) ?? "—")
-                            .foregroundStyle(amount < 0 ? .red : .green)
-                            .monospacedDigit()
-                    } else {
-                        Text("—").foregroundStyle(.secondary)
-                    }
-                }
-                .width(120)
-            }
-            .frame(minHeight: 300)
-
-            Divider()
-
-            HStack {
-                TextField("Salvar como template (opcional)", text: $store.templateNameToSave)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 280)
-
-                Spacer()
-
-                Button("Voltar") { store.backToMapping() }
-                Button("Importar \(rowsToImportCount) transações") {
-                    Task { await store.confirmImport() }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(rowsToImportCount == 0)
-            }
-        }
-        .padding()
-    }
-
-    private var rowsToImportCount: Int {
-        store.previewRows.reduce(0) { count, row in
-            switch row.status {
-            case .valid: return count + 1
-            case .duplicate: return store.includeDuplicates ? count + 1 : count
-            default: return count
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func statusBadge(_ status: PreviewStatus) -> some View {
-        switch status {
-        case .valid:
-            Label("Válida", systemImage: AppIcon.success.systemImage).foregroundStyle(.success)
-        case .duplicate:
-            Label("Duplicada", systemImage: AppIcon.warning.systemImage).foregroundStyle(.warning)
-        case .invalidDate:
-            Label("Data inválida", systemImage: AppIcon.invalidDate.systemImage).foregroundStyle(.danger)
-        case .invalidAmount:
-            Label("Valor inválido", systemImage: AppIcon.invalidAmount.systemImage).foregroundStyle(.danger)
-        case .missingFields:
-            Label("Vazia", systemImage: AppIcon.unknown.systemImage).foregroundStyle(.secondary)
-        }
-    }
-
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "dd/MM/yyyy"
-        return f
-    }()
-
-    private static let currencyFormatter: NumberFormatter = {
-        let f = NumberFormatter()
-        f.numberStyle = .currency
-        f.locale = Locale(identifier: "pt_BR")
-        return f
-    }()
-}
-
-private struct StatusSummaryCard: View {
-    let title: String
-    let count: Int
-    let color: Color
-    let icon: AppIcon
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon.systemImage)
-                .font(.title3)
-                .foregroundStyle(color)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(count)")
-                    .font(.title2.weight(.semibold).monospacedDigit())
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(color.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 }
 
@@ -502,235 +165,241 @@ private struct OFXReviewStepView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Importar extrato")
-                        .font(.title3.weight(.semibold))
-                    Text(store.sourceURL?.lastPathComponent ?? "—")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-            }
-
-            ScrollView {
-                LazyVStack(spacing: 24) {
-                    ForEach(store.ofxResolutions.indices, id: \.self) { idx in
-                        StatementCard(
-                            resolution: $store.ofxResolutions[idx],
-                            store: store
-                        )
-                    }
+        VStack(spacing: 0) {
+            // Conta de destino: renderizada FORA do List como `Form { Section }`
+            // nativo, pra ter o visual exato das telas Nova conta / Nova
+            // transação. Pode ser uma ou múltiplas (multi-statement OFX);
+            // empilhadas verticalmente. Sem padding horizontal externo — o
+            // Form `.grouped` já entrega seu próprio recuo lateral.
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(store.ofxResolutions.indices, id: \.self) { idx in
+                    AccountInfoCard(resolution: $store.ofxResolutions[idx])
                 }
             }
 
-            HStack {
-                Spacer()
-                Button("Cancelar") { store.cancel() }
-                Button("Importar \(totalSelected) \(totalSelected == 1 ? "transação" : "transações") em \(statementsWithAnySelected) \(statementsWithAnySelected == 1 ? "lote" : "lotes")") {
+            TransactionsListCard(
+                resolutions: $store.ofxResolutions,
+                showsBankInHeader: store.ofxResolutions.count > 1
+            )
+
+            BottomActionBar(caption: selectionCaption) {
+                Button {
                     Task { await store.confirmOFXImport() }
+                } label: {
+                    Label(
+                        "Avançar com \(totalSelected) \(totalSelected == 1 ? "transação" : "transações")",
+                        systemImage: "chevron.right.circle.fill"
+                    )
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
                 .disabled(totalSelected == 0)
             }
         }
-        .padding()
+        .navigationSubtitle(store.sourceURL?.lastPathComponent ?? "")
+    }
+
+    private var selectionCaption: String {
+        "\(totalSelected) \(totalSelected == 1 ? "transação selecionada" : "transações selecionadas") em \(statementsWithAnySelected) \(statementsWithAnySelected == 1 ? "conta" : "contas")"
     }
 }
 
-/// Cartão por `STMTRS`. Estrutura visual em duas seções claras:
+/// Card de "Conta de destino" renderizado FORA do `List` — usa `Form { Section }`
+/// nativo do macOS pra ter o visual grouped exato das telas Nova conta / Nova
+/// transação. Conteúdo estático com poucas rows, então a falta de virtualização
+/// do Form não é problema aqui (diferente do `TransactionsSection`, que precisa
+/// do `List` virtualizado pela quantidade de transações).
 ///
-/// - **Conta de destino**: caixa cinza com os dados do banco lidos do
-///   próprio OFX (read-only). Quando a conta vai ser criada, um banner
-///   indica isso + permite editar o nome amigável.
-/// - **Transações encontradas**: master checkbox + lista. Linhas duplicadas
-///   ganham badge "JÁ IMPORTADA" e vêm desmarcadas.
-private struct StatementCard: View {
+/// Quando a conta vai ser criada (`isAccountNew`), o badge "Nova conta" aparece
+/// no header da Section e os campos Nome/Tipo viram editáveis.
+private struct AccountInfoCard: View {
     @Binding var resolution: OFXStatementResolution
-    let store: ImportStore
-
-    private var allSelected: Bool {
-        // Considera só as linhas "selecionáveis" (válidas + duplicadas) — as
-        // inválidas nem entram no toggle.
-        let selectable = resolution.rows.filter { isSelectable($0) }
-        return !selectable.isEmpty && selectable.allSatisfy(\.selected)
-    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            accountSection
-            transactionsSection
-        }
-    }
-
-    // MARK: Account section
-
-    @ViewBuilder
-    private var accountSection: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    Label("Informações do banco", systemImage: AppIcon.institution.systemImage)
-                        .labelStyle(.titleAndIcon)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if resolution.isAccountNew {
-                        Text("Nova conta")
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Color.success.opacity(0.15))
-                            .foregroundStyle(.success)
-                            .clipShape(Capsule())
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
+        Form {
+            Section {
+                LabeledContent("Banco") {
                     Text(institutionDisplayName)
-                        .font(.headline)
-                    Text("\(resolution.institution.code) · \(resolution.account.type.displayName)")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                    Text("Conta: \(resolution.account.accountNumber) · Agência: \(resolution.account.branchId ?? "—")")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
                 }
-
+                LabeledContent("Conta") {
+                    Text(accountSummary)
+                }
                 if resolution.isAccountNew {
-                    Divider()
-                    LabeledContent("Nome amigável") {
-                        TextField("", text: $resolution.account.name)
-                            .textFieldStyle(.roundedBorder)
-                    }
+                    TextField("Nome", text: $resolution.account.name)
                     Picker("Tipo", selection: $resolution.account.type) {
                         ForEach(AccountType.allCases, id: \.rawValue) { t in
                             Text(t.displayName).tag(t)
                         }
                     }
-                    .pickerStyle(.menu)
+                } else {
+                    LabeledContent("Tipo") {
+                        Text(resolution.account.type.displayName)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Conta de destino")
+                    Spacer()
+                    if resolution.isAccountNew {
+                        Text("Nova conta")
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.success.opacity(0.15))
+                            .foregroundStyle(.success)
+                            .clipShape(Capsule())
+                            .textCase(nil)
+                    }
                 }
             }
-            .padding(.vertical, 6)
-        } label: {
-            Text("Conta de destino")
-                .font(.subheadline.weight(.semibold))
         }
+        .formStyle(.grouped)
+        // Form grouped scrolla por dentro; aqui o conteúdo é fixo, então
+        // desabilita o scroll pra integrar com o `ScrollView`/layout pai.
+        .scrollDisabled(true)
+        // Altura do card é ditada pelo conteúdo (4–5 rows). `fixedSize` no
+        // eixo vertical evita o Form esticar pra preencher espaço sobrando.
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private var institutionDisplayName: String {
-        // Preferir o nome do <FI><ORG> do próprio OFX (representa o que veio
-        // no arquivo). Cai pro `Institution.name` do DB quando ausente.
         resolution.statement.institutionHeader.organization
             ?? resolution.institution.name
     }
 
-    // MARK: Transactions section
-
-    @ViewBuilder
-    private var transactionsSection: some View {
-        GroupBox {
-            // `LazyVStack` (em vez de `VStack`) é crítico aqui: extratos do
-            // Inter chegam com 500+ transações. `VStack` materializa todas as
-            // rows na construção da View — em testes com 557 rows o app
-            // chegou a 3+ GB de RAM. `LazyVStack` só renderiza o que entra
-            // no viewport do `ScrollView` externo (`OFXReviewStepView`), o
-            // que mantém o uso de memória estável independente do tamanho do
-            // extrato.
-            LazyVStack(spacing: 0) {
-                ForEach(resolution.rows.indices, id: \.self) { idx in
-                    OFXRowView(row: $resolution.rows[idx], store: store)
-                    if idx < resolution.rows.count - 1 {
-                        Divider()
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-        } label: {
-            HStack {
-                Text("Transações encontradas")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { allSelected },
-                    set: { toggleAll(to: $0) }
-                ))
-                .toggleStyle(.checkbox)
-                .labelsHidden()
-                .help(allSelected ? "Desmarcar todas" : "Marcar todas selecionáveis")
-            }
+    private var accountSummary: String {
+        var parts: [String] = [resolution.account.accountNumber]
+        if let branch = resolution.account.branchId, !branch.isEmpty {
+            parts.append("Ag \(branch)")
         }
+        parts.append("cód. \(resolution.institution.code)")
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// Section de transações dentro do `List` (virtualizado). Sem pickers de
+/// categoria — Fase 4 moveu categorização pro step seguinte.
+///
+/// `showsBankInHeader` adiciona o nome do banco no título quando há múltiplos
+/// statements no mesmo arquivo, pra usuário saber a qual conta o bloco pertence.
+/// Card de transações que usa `Form { Section }` com **uma única row**
+/// contendo um `ScrollView { LazyVStack }`. O Form entrega o visual nativo de
+/// card grouped (igual à `AccountInfoCard`); a LazyVStack interna mantém a
+/// virtualização real das transações (só renderiza o viewport).
+///
+/// Sutileza: Form normalmente não virtualiza rows de uma Section, mas como
+/// **temos uma única row** (o ScrollView), Form materializa só ela e a
+/// laziness fica por conta da LazyVStack dentro do ScrollView.
+private struct TransactionsListCard: View {
+    @Binding var resolutions: [OFXStatementResolution]
+    let showsBankInHeader: Bool
+
+    private var totalRows: Int {
+        resolutions.reduce(0) { $0 + $1.rows.count }
     }
 
-    private func isSelectable(_ row: OFXPreviewRow) -> Bool {
-        switch row.status {
-        case .valid, .duplicate: return true
-        default: return false
+    private var allSelected: Bool {
+        let rows = resolutions.flatMap(\.rows)
+        return !rows.isEmpty && rows.allSatisfy(\.selected)
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach($resolutions) { $resolution in
+                            if showsBankInHeader {
+                                bankSubheader(for: resolution)
+                            }
+                            ForEach($resolution.rows) { $row in
+                                OFXRowView(row: $row)
+                                    .padding(.vertical, 4)
+                                Divider()
+                            }
+                        }
+                    }
+                }
+                // Remove o padding default que o Form coloca em torno da row
+                // — assim a LazyVStack encosta nas bordas do card.
+                .listRowInsets(EdgeInsets())
+            } header: {
+                HStack(spacing: 8) {
+                    Text("Transações")
+                    Spacer()
+                    Text("\(totalRows)")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                    Toggle("", isOn: Binding(
+                        get: { allSelected },
+                        set: { toggleAll(to: $0) }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    .help(allSelected ? "Desmarcar todas" : "Marcar todas")
+                }
+            }
         }
+        .formStyle(.grouped)
+        .contentMargins(.horizontal, 0, for: .scrollContent)
+        .frame(maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func bankSubheader(for resolution: OFXStatementResolution) -> some View {
+        HStack {
+            Text(bankName(for: resolution))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.primary.opacity(0.04))
+    }
+
+    private func bankName(for resolution: OFXStatementResolution) -> String {
+        resolution.statement.institutionHeader.organization
+            ?? resolution.institution.name
     }
 
     private func toggleAll(to value: Bool) {
-        for idx in resolution.rows.indices where isSelectable(resolution.rows[idx]) {
-            resolution.rows[idx].selected = value
+        for resIdx in resolutions.indices {
+            for rowIdx in resolutions[resIdx].rows.indices {
+                resolutions[resIdx].rows[rowIdx].selected = value
+            }
         }
     }
 }
 
-/// Uma transação no preview. Layout:
-/// `[Data + Valor (col esquerda)]  [Descrição + Memo (col central)]  [Categoria | Subcategoria pickers]  [JÁ IMPORTADA badge]  [Checkbox]`
+/// Row enxuta de transação no preview OFX.
+///
+/// Layout: `descrição (primary) + data·valor (caption) | badge duplicada | checkbox`.
+/// Sem pickers de categoria (Fase 4 movido pro step `reviewingCategorization`).
+/// Sem memo (ruído — quem quiser detalhe abre a transação depois de importar).
 private struct OFXRowView: View {
     @Binding var row: OFXPreviewRow
-    let store: ImportStore
-
-    private var isDuplicate: Bool {
-        if case .duplicate = row.status { return true }
-        return false
-    }
-
-    private var isInvalid: Bool {
-        switch row.status {
-        case .invalidDate, .invalidAmount, .missingFields: return true
-        default: return false
-        }
-    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            // Data + valor (esquerda)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(Self.dateFormatter.string(from: row.derived.occurredAt))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Text(Self.currencyFormatter.string(from: row.derived.amount as NSDecimalNumber) ?? "")
-                    .font(.callout.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(row.derived.amount < 0 ? .red : .green)
-            }
-            .frame(width: 110, alignment: .leading)
-
-            // Descrição (centro)
+        HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(primaryDescription)
-                    .font(.callout.weight(.medium))
-                    .lineLimit(2)
-                if let secondary = secondaryDescription {
-                    Text(secondary)
-                        .font(.caption)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                HStack(spacing: 6) {
+                    Text(Self.dateFormatter.string(from: row.derived.occurredAt))
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(Self.currencyFormatter.string(from: row.derived.amount as NSDecimalNumber) ?? "")
+                        .monospacedDigit()
+                        .foregroundStyle(amountColor)
                 }
+                .font(.caption)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Pickers de categoria — só pra linhas válidas (não inválidas, não duplicadas).
-            if !isInvalid && !isDuplicate {
-                categoryPickers
-                    .frame(width: 320)
-            }
-
-            // Badge "Já importada" pra duplicatas.
-            if isDuplicate {
+            if row.isDuplicate {
                 Text("Já importada")
                     .font(.caption.weight(.medium))
                     .padding(.horizontal, 8)
@@ -740,94 +409,26 @@ private struct OFXRowView: View {
                     .clipShape(Capsule())
             }
 
-            // Checkbox final. Inválidas: bloqueada (nem como override).
             Toggle("", isOn: $row.selected)
                 .toggleStyle(.checkbox)
                 .labelsHidden()
-                .disabled(isInvalid)
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 4)
-        .opacity(rowOpacity)
+        .opacity(row.isDuplicate && !row.selected ? 0.55 : 1.0)
     }
 
-    /// **Por que `Menu` em vez de `Picker`:** `Picker` materializa todos os
-    /// `Text` filhos imediatamente — em extratos com 500+ linhas isso é 500
-    /// pickers × 15 categorias = 7500 views materializadas só pra essa coluna,
-    /// e mais N pickers de subcategoria. `Menu` constrói o conteúdo apenas
-    /// quando o usuário abre, reduzindo o custo de render por linha em ordem
-    /// de magnitude.
-    @ViewBuilder
-    private var categoryPickers: some View {
-        HStack(spacing: 8) {
-            Menu {
-                ForEach(store.rootCategories) { cat in
-                    Button(cat.name) {
-                        row.categoryId = cat.id
-                        row.subcategoryId = nil
-                    }
-                }
-            } label: {
-                menuLabel(text: store.category(for: row.categoryId)?.name ?? "Categoria")
-            }
-            .menuStyle(.borderlessButton)
-            .frame(width: 150)
-
-            Menu {
-                Button("Nenhuma") { row.subcategoryId = nil }
-                ForEach(store.subcategories(of: row.categoryId)) { sub in
-                    Button(sub.name) { row.subcategoryId = sub.id }
-                }
-            } label: {
-                menuLabel(text: subcategoryName ?? "Subcategoria")
-            }
-            .menuStyle(.borderlessButton)
-            .frame(width: 150)
-        }
-    }
-
-    private var subcategoryName: String? {
-        guard let id = row.subcategoryId, let cat = store.category(for: id) else { return nil }
-        return cat.name
-    }
-
-    private func menuLabel(text: String) -> some View {
-        HStack(spacing: 4) {
-            Text(text)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Image(systemName: AppIcon.sort.systemImage)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Color.surfaceMuted)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    private var amountColor: Color {
+        row.derived.amount < 0 ? .expense : .income
     }
 
     private var primaryDescription: String {
-        // NAME geralmente é a contraparte ("Igor Talisson..."), MEMO traz o
-        // detalhe ("Pix recebido: Cp :..."). Mostrar NAME como primário.
+        // NAME geralmente é a contraparte ("Igor Talisson..."); MEMO traz
+        // detalhe técnico ("Pix recebido: Cp :..."). Mostrar NAME — MEMO
+        // some pra minimizar ruído visual.
         if let name = row.raw.name?.trimmingCharacters(in: .whitespacesAndNewlines),
            !name.isEmpty {
             return name
         }
         return row.derived.description
-    }
-
-    private var secondaryDescription: String? {
-        let memo = row.raw.memo?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let memo, !memo.isEmpty, memo != primaryDescription {
-            return memo
-        }
-        return nil
-    }
-
-    private var rowOpacity: Double {
-        if isInvalid { return 0.55 }
-        if isDuplicate && !row.selected { return 0.55 }
-        return 1.0
     }
 
     private static let dateFormatter: DateFormatter = {
@@ -856,7 +457,7 @@ private struct DoneStepView: View {
         ContentUnavailableView {
             Label("Importação concluída", systemImage: AppIcon.completedSeal.systemImage)
         } description: {
-            Text("\(rowCount) \(rowCount == 1 ? "transação importada" : "transações importadas") em \(batchIds.count) \(batchIds.count == 1 ? "lote" : "lotes"). A categorização inicial é heurística — você pode ajustar manualmente ou esperar a IA refinar.")
+            Text("\(rowCount) \(rowCount == 1 ? "transação importada" : "transações importadas") em \(batchIds.count) \(batchIds.count == 1 ? "lote" : "lotes"). Categorias já aplicadas conforme sua revisão.")
         } actions: {
             Button("Desfazer \(batchIds.count == 1 ? "este lote" : "todos os lotes")", role: .destructive) {
                 Task {

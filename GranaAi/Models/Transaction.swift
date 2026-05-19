@@ -18,7 +18,7 @@ struct Transaction: Identifiable, Codable, Hashable {
     var occurredAt: Date
     var description: String
     var notes: String?
-    // Fase 3: NULL para entradas manuais; preenchido por `TransactionRepository.insertBatch`.
+    // Fase 3: NULL para entradas manuais; preenchido pelo commit de import.
     var importBatchId: UUID?
     /// ID externo (ex: FITID do OFX). Permite detecção exata de duplicata em
     /// re-imports do mesmo extrato — chave única do banco emissor por conta.

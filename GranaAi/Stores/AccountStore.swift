@@ -39,7 +39,7 @@ final class AccountStore {
         } catch is CancellationError {
         } catch {
             self.lastError = error
-            log.database.error("watch(accounts) falhou: \(String(describing: error))")
+            ErrorCenter.shared.report(error)
         }
     }
 
@@ -51,7 +51,7 @@ final class AccountStore {
         } catch is CancellationError {
         } catch {
             self.lastError = error
-            log.database.error("watch(institutions) falhou: \(String(describing: error))")
+            ErrorCenter.shared.report(error)
         }
     }
 
