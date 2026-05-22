@@ -37,7 +37,7 @@ final class ClaudeCLIClient: Sendable {
     init(
         executablePath: String? = nil,
         model: String,
-        timeoutSeconds: TimeInterval = 60
+        timeoutSeconds: TimeInterval = 120
     ) {
         self.configuredPath = executablePath
         self.model = model

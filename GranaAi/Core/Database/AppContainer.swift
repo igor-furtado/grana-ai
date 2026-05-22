@@ -61,6 +61,8 @@ final class AppContainer {
     client: claudeCLIClient,
     transactions: transactions,
     categories: categories,
+    accounts: accounts,
+    institutions: institutions,
     cache: categorizationCache,
     corrections: categorizationCorrections
   )

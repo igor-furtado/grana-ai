@@ -15,7 +15,7 @@ import OSLog
 /// **`nonisolated`:** chamado do service rodando off-main.
 nonisolated enum CategorizationPrompt {
 
-    /// Item de input pra IA — descrição + valor + data por linha.
+    /// Item de input pra IA — descrição + valor + data + conta por linha.
     struct Item: Sendable, Encodable {
         let index: Int
         let description: String
@@ -24,12 +24,23 @@ nonisolated enum CategorizationPrompt {
         /// expense quando a descrição é ambígua, ex: "PIX RECEBIDO" vs "PIX ENVIADO").
         let signedAmount: String
         let date: String   // "yyyy-MM-dd"
+        /// Conta onde a transação está sendo registrada (nome + tipo). Permite
+        /// à IA entender o contexto: ex. uma compra dentro de uma conta-cartão
+        /// nunca é transferência — é despesa direta no cartão.
+        let accountContext: String
+        /// Categoria sugerida pelo sistema de origem (ex: coluna "Categoria"
+        /// do CSV do Inter: SUPERMERCADO, BARES, TRANSPORTE). **Não é nossa
+        /// taxonomia**, mas reduz incerteza em descrições genéricas. `nil`
+        /// quando a fonte não fornece.
+        let sourceHint: String?
 
         enum CodingKeys: String, CodingKey {
             case index
             case description
             case signedAmount = "signed_amount"
             case date
+            case accountContext = "account_context"
+            case sourceHint = "source_hint"
         }
     }
 
@@ -49,6 +60,15 @@ nonisolated enum CategorizationPrompt {
         let subcategories: [String]
     }
 
+    /// Conta do usuário exposta pro modelo. Serve pra decidir se uma
+    /// transação é transferência entre contas próprias (raiz `transferencias`)
+    /// ou movimento com terceiro (categoriza pela natureza).
+    struct OwnAccountInfo: Sendable {
+        let name: String
+        let typeDisplay: String          // "Conta Corrente", "Poupança", etc
+        let institutionName: String?
+    }
+
     /// Empacota tudo que o `ClaudeCLIClient.runStructured(...)` precisa.
     struct CLIInvocation: Sendable {
         let systemPrompt: String
@@ -60,9 +80,10 @@ nonisolated enum CategorizationPrompt {
     static func buildInvocation(
         items: [Item],
         categories: [CategoryOption],
+        ownAccounts: [OwnAccountInfo],
         fewShots: [FewShotExample]
     ) throws -> CLIInvocation {
-        let systemPrompt = renderSystemPrompt(categories: categories)
+        let systemPrompt = renderSystemPrompt(categories: categories, ownAccounts: ownAccounts)
         let userPrompt = try renderUserPrompt(items: items, fewShots: fewShots)
         let schema = try jsonSchemaString()
 
@@ -75,28 +96,49 @@ nonisolated enum CategorizationPrompt {
 
     // MARK: - System prompt
 
-    private static func renderSystemPrompt(categories: [CategoryOption]) -> String {
+    private static func renderSystemPrompt(
+        categories: [CategoryOption],
+        ownAccounts: [OwnAccountInfo]
+    ) -> String {
         var lines: [String] = []
-        lines.append("Você é um classificador de transações financeiras pessoais em português brasileiro.")
+        lines.append("Você classifica transações financeiras pessoais em pt-BR.")
+        lines.append("SAÍDA: UM objeto JSON apenas, sem markdown, sem texto antes/depois. Chave `results` = array, um item por transação de entrada.")
         lines.append("")
-        lines.append("FORMATO DE SAÍDA OBRIGATÓRIO: sua resposta inteira deve ser UM ÚNICO objeto JSON, começando com `{` e terminando com `}`. NADA antes (sem \"Claro\", \"Aqui está\", \"Vou classificar\", etc), NADA depois, SEM markdown (sem ```json ... ```), SEM comentários. Se você escrever qualquer caractere antes da `{` inicial, o parser quebra e o usuário fica sem categorização.")
+        lines.append("CAMPOS DE SAÍDA:")
+        lines.append("- `category_slug`: slug exato da raiz (não o nome).")
+        lines.append("- `subcategory_name`: nome exato listado sob aquela raiz, ou null.")
+        lines.append("- `confidence` (0–1): estimativa real; ambíguo → baixe.")
+        lines.append("- Sem encaixe na taxonomia → slug `nao-classificado` + confidence 0.0.")
         lines.append("")
-        lines.append("Sua tarefa: para cada transação recebida, escolher uma categoria raiz e (quando aplicável) uma subcategoria da taxonomia abaixo. O objeto JSON deve ter a chave `results` com um array contendo um item por transação.")
+        lines.append("CAMPOS DE ENTRADA:")
+        lines.append("- `signed_amount`: positivo=entrada (income), negativo=saída (expense).")
+        lines.append("- `account_context` (nome · tipo da conta):")
+        lines.append("    · Cartão de Crédito → toda compra é despesa direta pela natureza. NUNCA `transferencias`. IOF/tarifas → `impostos-e-taxas`.")
+        lines.append("    · Demais contas → segue a regra de `transferencias` abaixo.")
+        lines.append("- `source_hint` (opcional, categoria do banco origem): dica forte pra desambiguar. Mapeie: SUPERMERCADO/RESTAURANTES/BARES→`alimentacao-e-supermercado` · TRANSPORTE→`transporte` · VIAGEM→`viagem` · DROGARIA/SAUDE→`saude-e-medicina` · ENTRETENIMENTO/CULTURA→`entretenimento-e-lazer` · VESTUARIO/COMPRAS/CONSTRUCAO→`compras-pessoais` · SERVICOS→`contas-e-servicos` ou `compras-pessoais` pelo contexto · PAGAMENTOS→avalie · OUTROS→ignore. Se a descrição contradiz o hint claramente, siga a descrição.")
         lines.append("")
-        lines.append("Regras:")
-        lines.append("- Use SEMPRE o `slug` da categoria raiz no campo `category_slug` (não o nome).")
-        lines.append("- `subcategory_name` deve ser exatamente um dos nomes listados sob aquela categoria raiz. Se nenhum encaixa, omita ou deixe nulo.")
-        lines.append("- `confidence` é um número entre 0.0 e 1.0 — sua estimativa real de acerto. Quando a descrição for ambígua, abaixe a confidence.")
-        lines.append("- Se a transação não se encaixar em nenhuma categoria, use o slug `nao-classificado` com confidence 0.0.")
-        lines.append("- O sinal do valor (`signed_amount`) ajuda a desambiguar: positivo costuma ser entrada (income/transfer), negativo costuma ser saída (expense).")
-        lines.append("- Lançamentos como PIX, TED, DOC e transferências entre contas próprias usam a raiz `transferencias`.")
+        lines.append("REGRA CRÍTICA — `transferencias` (sai do dashboard, USE COM CUIDADO):")
+        lines.append("- USE apenas quando a descrição indica movimentação entre contas DO USUÁRIO listadas abaixo: contraparte bate com nome/instituição de uma conta listada; OU termos \"transferência entre contas\", \"TED própria\"; OU \"aplicação/resgate <produto>\" com conta listada pra esse produto.")
+        lines.append("- NÃO USE quando: contraparte é terceiro (pessoa, empresa, comércio, empregador, governo) → classifique pela natureza · pagamento de fatura de cartão → `creditos-e-emprestimos`/\"Cartão de Crédito\" · investimento sem conta listada pro produto → saída vira `investimentos-e-poupanca`, entrada vira `renda-e-pagamentos`/\"Juros de Investimentos\" ou \"Dividendos\" · descrição genérica \"PIX RECEBIDO/ENVIADO\" sem contraparte → `nao-classificado` confidence baixa.")
+        lines.append("- Em dúvida, NÃO use `transferencias` — errar pela natureza é melhor que sumir do dashboard.")
         lines.append("")
-        lines.append("Taxonomia disponível:")
-        for cat in categories {
-            lines.append("- \(cat.slug) (\(cat.name)) [\(cat.kind)]:")
-            for sub in cat.subcategories {
-                lines.append("    - \(sub)")
+
+        if ownAccounts.isEmpty {
+            lines.append("Contas do usuário: nenhuma cadastrada — nunca use `transferencias`.")
+        } else {
+            lines.append("Contas do usuário:")
+            for account in ownAccounts {
+                var line = "- \(account.name) [\(account.typeDisplay)]"
+                if let institution = account.institutionName, !institution.isEmpty {
+                    line += " — \(institution)"
+                }
+                lines.append(line)
             }
+        }
+        lines.append("")
+        lines.append("Taxonomia:")
+        for cat in categories {
+            lines.append("- \(cat.slug) [\(cat.kind)]: \(cat.subcategories.joined(separator: ", "))")
         }
         return lines.joined(separator: "\n")
     }
@@ -174,10 +216,6 @@ nonisolated enum CategorizationPrompt {
                                 "minimum": 0.0,
                                 "maximum": 1.0,
                                 "description": "Confiança da classificação entre 0 e 1."
-                            ],
-                            "reasoning": [
-                                "type": ["string", "null"],
-                                "description": "Justificativa curta, opcional. Não inclua dados sensíveis."
                             ]
                         ],
                         "required": ["index", "category_slug", "confidence"]
@@ -202,7 +240,6 @@ nonisolated enum CategorizationPrompt {
         let categorySlug: String
         let subcategoryName: String?
         let confidence: Double
-        let reasoning: String?
     }
 
     /// Wrapper externo que o modelo devolve (depois de unwrap do `result` do CLI).
@@ -214,14 +251,12 @@ nonisolated enum CategorizationPrompt {
             let categorySlug: String
             let subcategoryName: String?
             let confidence: Double
-            let reasoning: String?
 
             enum CodingKeys: String, CodingKey {
                 case index
                 case categorySlug = "category_slug"
                 case subcategoryName = "subcategory_name"
                 case confidence
-                case reasoning
             }
         }
     }
@@ -261,8 +296,7 @@ nonisolated enum CategorizationPrompt {
             index: item.index,
             categorySlug: item.categorySlug,
             subcategoryName: item.subcategoryName.flatMap { $0.isEmpty ? nil : $0 },
-            confidence: max(0.0, min(1.0, item.confidence)),
-            reasoning: item.reasoning.flatMap { $0.isEmpty ? nil : $0 }
+            confidence: max(0.0, min(1.0, item.confidence))
         )
     }
 

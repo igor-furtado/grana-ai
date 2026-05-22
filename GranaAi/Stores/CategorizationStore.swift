@@ -308,13 +308,34 @@ final class CategorizationStore {
         case .started(let total):
             status = .classifying(processed: 0, total: total, message: "Verificando cache…")
         case .cacheChecked(let hits, let misses):
-            status = .classifying(
-                processed: hits,
-                total: hits + misses,
-                message: misses > 0 ? "\(hits) via cache · enviando \(misses) pra IA…" : "Tudo via cache."
-            )
+            let total = hits + misses
+            let message: String
+            if misses == 0 {
+                message = "Tudo via cache."
+            } else {
+                message = "\(hits) via cache · \(misses) na IA…"
+            }
+            status = .classifying(processed: hits, total: total, message: message)
         case .aiCallStarted(let misses):
-            status = .classifying(processed: 0, total: misses, message: "Categorizando \(misses) com IA…")
+            // O `aiChunkFinished` posterior vai trazer a contagem cumulativa
+            // correta. Aqui só atualiza a mensagem pro usuário entender que
+            // saiu do cache pra IA — `processed` e `total` ficam de fora pra
+            // não zerar o que veio do `cacheChecked`.
+            if case let .classifying(processed, total, _) = status {
+                status = .classifying(
+                    processed: processed,
+                    total: total,
+                    message: "Categorizando \(misses) com IA…"
+                )
+            } else {
+                status = .classifying(processed: 0, total: misses, message: "Categorizando \(misses) com IA…")
+            }
+        case .aiChunkFinished(let processed, let total):
+            let remaining = max(0, total - processed)
+            let message = remaining > 0
+                ? "\(processed) de \(total) prontas · \(remaining) restantes…"
+                : "Finalizando…"
+            status = .classifying(processed: processed, total: total, message: message)
         case .aiCallFinished:
             break
         case .finished(let total, let fromCache, let fromAI, let fallback):

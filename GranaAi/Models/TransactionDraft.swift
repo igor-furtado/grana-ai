@@ -24,4 +24,31 @@ struct TransactionDraft: Sendable, Identifiable, Hashable {
     let notes: String?
     /// FITID do OFX, quando existir. CSV/XLSX = nil.
     let externalId: String?
+    /// Categoria fornecida pelo sistema de origem (ex: coluna "Categoria"
+    /// do CSV do Inter: SUPERMERCADO, TRANSPORTE, BARES…). **Não é nossa
+    /// taxonomia** — vai pra IA só como hint adicional pra reduzir incerteza.
+    /// `nil` quando a fonte não fornece (OFX, planilhas genéricas).
+    let sourceCategoryHint: String?
+
+    init(
+        id: UUID,
+        accountId: UUID,
+        importBatchId: UUID,
+        signedAmount: Decimal,
+        occurredAt: Date,
+        description: String,
+        notes: String?,
+        externalId: String?,
+        sourceCategoryHint: String? = nil
+    ) {
+        self.id = id
+        self.accountId = accountId
+        self.importBatchId = importBatchId
+        self.signedAmount = signedAmount
+        self.occurredAt = occurredAt
+        self.description = description
+        self.notes = notes
+        self.externalId = externalId
+        self.sourceCategoryHint = sourceCategoryHint
+    }
 }

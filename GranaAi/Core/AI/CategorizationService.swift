@@ -22,6 +22,14 @@ import OSLog
 ///
 /// **Off-main.** Marca `Sendable`; chamada de Tasks em background.
 final class CategorizationService: Sendable {
+    /// Tamanho máximo do batch enviado por chamada ao Claude CLI. Imports
+    /// grandes (fatura de cartão com 100+ linhas, OFX anual) estouravam o
+    /// timeout de 120s. 30 itens por chunk: rápido o suficiente e reduz a
+    /// taxa de "modelo preguiçoso" (em batches maiores ele tende a pular
+    /// índices, gerando fallback). Chunks rodam em paralelo — N chunks
+    /// pequenos preferíveis a 1 chunk grande.
+    private static let maxAIBatchSize = 30
+
     /// Thresholds usados pelo UI pra agrupar sugestões em alta/média/baixa.
     /// `absoluteMinimum` ainda é usado: AI retornando confidence abaixo dele
     /// cai como fallback (não pode poluir cache nem virar sugestão "real").
@@ -48,6 +56,8 @@ final class CategorizationService: Sendable {
     private let client: ClaudeCLIClient
     private let transactions: TransactionRepository
     private let categories: CategoryRepository
+    private let accounts: AccountRepository
+    private let institutions: InstitutionRepository
     private let cache: CategorizationCacheRepository
     private let corrections: CategorizationCorrectionRepository
     /// Nome do modelo usado pra lookup/escrita no cache. Exposto pra que o
@@ -60,6 +70,8 @@ final class CategorizationService: Sendable {
         client: ClaudeCLIClient,
         transactions: TransactionRepository,
         categories: CategoryRepository,
+        accounts: AccountRepository,
+        institutions: InstitutionRepository,
         cache: CategorizationCacheRepository,
         corrections: CategorizationCorrectionRepository,
         model: String = Config.claudeCLIModel,
@@ -68,6 +80,8 @@ final class CategorizationService: Sendable {
         self.client = client
         self.transactions = transactions
         self.categories = categories
+        self.accounts = accounts
+        self.institutions = institutions
         self.cache = cache
         self.corrections = corrections
         self.model = model
@@ -80,6 +94,11 @@ final class CategorizationService: Sendable {
         case started(total: Int)
         case cacheChecked(hits: Int, misses: Int)
         case aiCallStarted(misses: Int)
+        /// Emitido depois de cada chunk paralelo da IA completar (sucesso
+        /// OU fallback). `processed` é cumulativo: hits do cache + itens já
+        /// resolvidos pela IA até agora. `total` é `drafts.count` (todos
+        /// os itens do import).
+        case aiChunkFinished(processed: Int, total: Int)
         case aiCallFinished
         case finished(total: Int, fromCache: Int, fromAI: Int, fallback: Int)
         case failed(error: Error)
@@ -103,8 +122,34 @@ final class CategorizationService: Sendable {
         }
 
         async let allCategoriesTask = categories.getAll()
+        async let allAccountsTask = accounts.getAll()
+        async let allInstitutionsTask = institutions.getAll()
         async let recentCorrectionsTask = corrections.recent(limit: fewShotLimit)
-        let (allCategories, fewShotCorrections) = try await (allCategoriesTask, recentCorrectionsTask)
+        let (allCategories, allAccounts, allInstitutions, fewShotCorrections) =
+            try await (allCategoriesTask, allAccountsTask, allInstitutionsTask, recentCorrectionsTask)
+
+        let institutionNamesById: [UUID: String] = Dictionary(
+            uniqueKeysWithValues: allInstitutions.map { ($0.id, $0.name) }
+        )
+        let ownAccounts: [CategorizationPrompt.OwnAccountInfo] = allAccounts
+            .filter { !$0.archived }
+            .map { account in
+                CategorizationPrompt.OwnAccountInfo(
+                    name: account.name,
+                    typeDisplay: account.type.displayName,
+                    institutionName: account.institutionId.flatMap { institutionNamesById[$0] }
+                )
+            }
+
+        // Map por id pra popular `account_context` em cada item. Inclui contas
+        // arquivadas — drafts em voo podem (teoricamente) apontar pra uma
+        // conta recém-arquivada; melhor mostrar o contexto certo do que
+        // "Desconhecida".
+        let accountContextById: [UUID: String] = Dictionary(
+            uniqueKeysWithValues: allAccounts.map { acc in
+                (acc.id, "\(acc.name) · \(acc.type.displayName)")
+            }
+        )
 
         let taxonomy = Taxonomy(categories: allCategories)
         guard let fallbackId = taxonomy.fallbackCategoryId else {
@@ -149,48 +194,120 @@ final class CategorizationService: Sendable {
         if !pendingForAI.isEmpty {
             progress?(.aiCallStarted(misses: pendingForAI.count))
 
-            do {
-                let (aiSuggestions, aiCacheEntries) = try await runSingleAICall(
-                    drafts: pendingForAI,
-                    hashByDraftId: hashByDraftId,
-                    taxonomy: taxonomy,
-                    fallbackId: fallbackId,
-                    fewShots: buildFewShots(corrections: fewShotCorrections, taxonomy: taxonomy),
-                    thresholds: thresholds
-                )
-                progress?(.aiCallFinished)
+            // **Chunking + paralelismo pra reduzir latência total.** Batches
+            // grandes estouravam o timeout do CLI; chunks menores rodam em
+            // paralelo via `withTaskGroup`. Pra 114 tx em 4 chunks de ~30:
+            // sequencial ≈ 4×30s = 120s; paralelo ≈ max(30s) ≈ 30s.
+            //
+            // Fallback per-chunk: cada Task captura sua própria falha e
+            // devolve `.failure(chunk)` — não derruba os outros chunks.
+            let chunks = pendingForAI.chunked(into: Self.maxAIBatchSize)
+            let fewShots = buildFewShots(corrections: fewShotCorrections, taxonomy: taxonomy)
 
-                for s in aiSuggestions {
-                    switch s.source {
-                    case .ai:       fromAI += 1
-                    case .fallback: fromFallback += 1
-                    case .cache:    break
+            // Estrutura local pro retorno de cada Task — `Result` aqui não dá
+            // porque a "falha" precisa carregar o chunk original pro fallback.
+            // `chunkSize` é sempre o tamanho do chunk original — pra progresso
+            // não travar se a IA devolver menos itens que o esperado.
+            enum ChunkOutcome {
+                case success(chunkSize: Int, suggestions: [CategorizationSuggestion], cacheEntries: [CategorizationCacheEntry])
+                case failure(drafts: [TransactionDraft], error: Error)
+
+                var chunkSize: Int {
+                    switch self {
+                    case .success(let size, _, _): size
+                    case .failure(let drafts, _):  drafts.count
                     }
                 }
-                suggestions.append(contentsOf: aiSuggestions)
+            }
 
-                for entry in aiCacheEntries {
-                    pendingCacheEntries[entry.descriptionHash] = entry
+            let totalItems = drafts.count
+            // `fromCache` aqui já é a contagem final de hits — base inicial
+            // da barra de progresso. Cada chunk soma seus `chunk.count`
+            // itens em cima disso.
+            let baseProcessed = fromCache
+
+            let outcomes: [ChunkOutcome] = await withTaskGroup(of: ChunkOutcome.self) { group in
+                for chunk in chunks {
+                    let chunkSize = chunk.count
+                    group.addTask { [self] in
+                        do {
+                            let (aiSuggestions, aiCacheEntries) = try await self.runSingleAICall(
+                                drafts: chunk,
+                                hashByDraftId: hashByDraftId,
+                                taxonomy: taxonomy,
+                                fallbackId: fallbackId,
+                                ownAccounts: ownAccounts,
+                                accountContextById: accountContextById,
+                                fewShots: fewShots,
+                                thresholds: thresholds
+                            )
+                            return .success(chunkSize: chunkSize, suggestions: aiSuggestions, cacheEntries: aiCacheEntries)
+                        } catch {
+                            return .failure(drafts: chunk, error: error)
+                        }
+                    }
                 }
-            } catch {
-                // Reporta no centro global *antes* do fallback — o usuário vê
-                // que a IA caiu, mesmo que o import siga via fallback.
-                ErrorCenter.capture(error, title: "IA indisponível — usando fallback")
-                // Fallback total: todas as misses viram .fallback. Import segue;
-                // usuário pode revisar manualmente.
-                for draft in pendingForAI {
-                    let hash = hashByDraftId[draft.id] ?? DescriptionNormalizer.hash(draft.description)
-                    suggestions.append(buildSuggestion(
-                        draft: draft,
-                        hash: hash,
-                        categoryId: fallbackId,
-                        subcategoryId: nil,
-                        confidence: 0.0,
-                        source: .fallback
-                    ))
-                    fromFallback += 1
+
+                var collected: [ChunkOutcome] = []
+                var processedSoFar = baseProcessed
+                for await outcome in group {
+                    processedSoFar += outcome.chunkSize
+                    progress?(.aiChunkFinished(processed: processedSoFar, total: totalItems))
+                    collected.append(outcome)
+                }
+                return collected
+            }
+
+            // Agrega resultados de todos os chunks. Erros viram um único toast
+            // (em vez de N toasts pra N chunks falhos) — `ErrorCenter` faz
+            // dedup mas mesmo assim queremos ser explícitos.
+            var failedCount = 0
+            for outcome in outcomes {
+                switch outcome {
+                case .success(_, let aiSuggestions, let aiCacheEntries):
+                    for s in aiSuggestions {
+                        switch s.source {
+                        case .ai:       fromAI += 1
+                        case .fallback: fromFallback += 1
+                        case .cache:    break
+                        }
+                    }
+                    suggestions.append(contentsOf: aiSuggestions)
+                    for entry in aiCacheEntries {
+                        pendingCacheEntries[entry.descriptionHash] = entry
+                    }
+                case .failure(let chunk, let error):
+                    failedCount += 1
+                    // Loga o erro raw pra diagnóstico (não vira toast aqui;
+                    // o toast resumido vem depois do laço).
+                    log.ai.error("Chunk de categorização falhou (\(chunk.count) drafts): \(error.localizedDescription, privacy: .public)")
+                    for draft in chunk {
+                        let hash = hashByDraftId[draft.id] ?? DescriptionNormalizer.hash(draft.description)
+                        suggestions.append(buildSuggestion(
+                            draft: draft,
+                            hash: hash,
+                            categoryId: fallbackId,
+                            subcategoryId: nil,
+                            confidence: 0.0,
+                            source: .fallback
+                        ))
+                        fromFallback += 1
+                    }
                 }
             }
+            if failedCount > 0 {
+                let title = failedCount == 1
+                    ? "IA indisponível em 1 lote — usando fallback"
+                    : "IA indisponível em \(failedCount) lotes — usando fallback"
+                // Toast sem `Error` tipado — a causa real (timeout, parse,
+                // rede) já está em `log.ai.error` por chunk acima. Usar um
+                // `AIError` específico aqui mentiria sobre a categoria do erro.
+                let message = "\(failedCount) lote(s) caíram pro fallback. Veja o console pra detalhes."
+                Task { @MainActor in
+                    ErrorCenter.shared.report(title: title, message: message)
+                }
+            }
+            progress?(.aiCallFinished)
         }
 
         progress?(.finished(
@@ -329,6 +446,8 @@ final class CategorizationService: Sendable {
         hashByDraftId: [UUID: String],
         taxonomy: Taxonomy,
         fallbackId: UUID,
+        ownAccounts: [CategorizationPrompt.OwnAccountInfo],
+        accountContextById: [UUID: String],
         fewShots: [CategorizationPrompt.FewShotExample],
         thresholds: ConfidenceThresholds
     ) async throws -> ([CategorizationSuggestion], [CategorizationCacheEntry]) {
@@ -338,17 +457,24 @@ final class CategorizationService: Sendable {
         dateFormatter.locale = Locale(identifier: "en_US_POSIX")
 
         let items: [CategorizationPrompt.Item] = drafts.enumerated().map { idx, draft in
-            CategorizationPrompt.Item(
+            // Trim do hint pra não passar string vazia ou só whitespace.
+            // Vazio vira `nil` (= `null` no JSON), evitando ruído no prompt.
+            let trimmed = draft.sourceCategoryHint?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hint: String? = (trimmed?.isEmpty == false) ? trimmed : nil
+            return CategorizationPrompt.Item(
                 index: idx,
                 description: DescriptionNormalizer.normalize(draft.description),
                 signedAmount: NSDecimalNumber(decimal: draft.signedAmount).stringValue,
-                date: dateFormatter.string(from: draft.occurredAt)
+                date: dateFormatter.string(from: draft.occurredAt),
+                accountContext: accountContextById[draft.accountId] ?? "Desconhecida",
+                sourceHint: hint
             )
         }
 
         let invocation = try CategorizationPrompt.buildInvocation(
             items: items,
             categories: taxonomy.promptOptions(),
+            ownAccounts: ownAccounts,
             fewShots: fewShots
         )
         let responseData = try await client.runStructured(
@@ -532,6 +658,20 @@ final class CategorizationService: Sendable {
                 correctedCategorySlug: slug,
                 correctedSubcategoryName: subName
             )
+        }
+    }
+}
+
+// MARK: - Array chunking helper
+
+private extension Array {
+    /// Divide o array em sub-arrays de tamanho máximo `size`. O último chunk
+    /// pode ser menor. Usado pra fatiar batches grandes da IA em pedaços que
+    /// caibam no timeout do CLI.
+    func chunked(into size: Int) -> [[Element]] {
+        guard size > 0 else { return [self] }
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
         }
     }
 }
