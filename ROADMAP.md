@@ -16,21 +16,7 @@
 ## Fase 3 — Importação de planilhas (XLSX e CSV) e extratos OFX ✅
 
 
-## Fase 4 — Integração Claude API: categorização automática
-
-**Objetivo:** transações importadas são categorizadas automaticamente pela IA.
-
-**Entregáveis:**
-- `AnthropicClient` (HTTP wrapper com URLSession)
-- Pipeline: após import, transações sem categoria vão pra fila de classificação
-- Prompt engineering: enviar descrição + valor + categorias disponíveis, receber categoria + confiança
-- Tela de revisão: mostrar sugestões da IA, usuário confirma ou corrige
-- Aprendizado: correções do usuário viram exemplos few-shot no prompt das próximas
-- Cache: mesma descrição não consulta IA duas vezes (tabela `categorization_cache`)
-
-**Sem isto, não avança:** importar planilha → IA categoriza 80%+ corretamente → você revisa rápido.
-
----
+## Fase 4 — Integração Claude API: categorização automática ✅
 
 ## Fase 4.5 — Cartões de Crédito
 
