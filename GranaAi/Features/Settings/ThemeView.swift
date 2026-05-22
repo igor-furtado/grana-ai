@@ -52,6 +52,7 @@ struct ThemeView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Tema")
+        .navigationSubtitle("Aparência do app (claro, escuro ou sistema)")
     }
 }
 

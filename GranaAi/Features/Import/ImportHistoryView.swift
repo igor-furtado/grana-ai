@@ -23,6 +23,7 @@ struct ImportHistoryView: View {
             }
         }
         .navigationTitle("Importações")
+        .navigationSubtitle(importsSubtitle)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -36,6 +37,13 @@ struct ImportHistoryView: View {
             ImportView()
                 .environment(environment)
         }
+    }
+
+    private var importsSubtitle: String {
+        guard let store, !store.batches.isEmpty else { return "" }
+        let count = store.batches.count
+        if count == 1 { return "1 importação registrada" }
+        return "\(count) importações registradas"
     }
 
     @ViewBuilder

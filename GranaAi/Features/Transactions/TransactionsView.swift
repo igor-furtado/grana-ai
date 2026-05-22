@@ -48,6 +48,7 @@ struct TransactionsView: View {
             }
             .searchable(text: $searchText, prompt: "Buscar")
             .navigationTitle("Transações")
+            .navigationSubtitle(subtitle(store: store))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -167,6 +168,13 @@ struct TransactionsView: View {
             }
             .width(60)
         }
+    }
+
+    private func subtitle(store: TransactionStore) -> String {
+        let count = filtered(store: store).count
+        if count == 0 { return "Nenhuma transação" }
+        if count == 1 { return "1 transação" }
+        return "\(count) transações"
     }
 
     private func amountColor(for transaction: Transaction, store: TransactionStore) -> Color {

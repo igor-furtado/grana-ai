@@ -37,24 +37,33 @@ enum Seed {
         log.database.info("Seed: conta padrão 'Carteira' inserida")
     }
 
-    /// Pré-cadastra as instituições "ricamente suportadas" (com auto-detect
-    /// via FID do OFX e ícone próprio). Hoje só Inter — adicionar Itaú,
-    /// Bradesco etc. = uma linha aqui + um caso no enum `InstitutionKind`.
+    /// Pré-cadastra todas as instituições "ricamente suportadas" — qualquer
+    /// `InstitutionKind` com `defaultCode` não-nulo. Idempotente por código
+    /// FEBRABAN: insere só os kinds ausentes, então adicionar um novo caso no
+    /// enum entra automaticamente na próxima execução sem migration.
     private static func seedInstitutionsIfEmpty(container: AppContainer) async throws {
         let existing = try await container.institutions.getAll()
-        guard existing.isEmpty else { return }
+        let existingCodes = Set(existing.map { $0.code })
 
         let now = Date()
-        let inter = Institution(
-            id: UUID(),
-            code: InstitutionKind.inter.defaultCode ?? "077",
-            name: InstitutionKind.inter.displayName,
-            kind: .inter,
-            createdAt: now,
-            updatedAt: now
-        )
-        try await container.institutions.insert(inter)
-        log.database.info("Seed: instituições padrão inseridas (Inter)")
+        var inserted: [String] = []
+        for kind in InstitutionKind.supported {
+            guard let code = kind.defaultCode, !existingCodes.contains(code) else { continue }
+            let institution = Institution(
+                id: UUID(),
+                code: code,
+                name: kind.displayName,
+                kind: kind,
+                createdAt: now,
+                updatedAt: now
+            )
+            try await container.institutions.insert(institution)
+            inserted.append(kind.displayName)
+        }
+
+        if !inserted.isEmpty {
+            log.database.info("Seed: instituições inseridas (\(inserted.joined(separator: ", ")))")
+        }
     }
 
     private static func seedCategoriesIfEmpty(container: AppContainer) async throws {

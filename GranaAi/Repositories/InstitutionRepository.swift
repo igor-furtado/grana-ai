@@ -81,9 +81,11 @@ final class InstitutionRepository: Sendable {
             throw DatabaseError.invalidUUID(column: "id", value: idString)
         }
         let kindRaw = try cursor.getString(name: "kind")
-        guard let kind = InstitutionKind(rawValue: kindRaw) else {
-            throw DatabaseError.invalidEnum(column: "kind", value: kindRaw)
-        }
+        // Kinds antigos podem persistir no banco depois que o enum é reduzido
+        // (ex: removemos `.nubank` do app mas a row segue lá). Cair em `.other`
+        // mantém a Institution visível com identidade genérica em vez de
+        // explodir o stream. O usuário pode apagar pela UI quando quiser.
+        let kind = InstitutionKind(rawValue: kindRaw) ?? .other
         let createdAtString = try cursor.getString(name: "created_at")
         guard let createdAt = Converters.stringToDate(createdAtString) else {
             throw DatabaseError.invalidDate(column: "created_at", value: createdAtString)

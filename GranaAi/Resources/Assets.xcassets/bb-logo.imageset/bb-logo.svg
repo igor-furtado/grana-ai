@@ -1,0 +1,23 @@
+<svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 146.66667 146.66667" height="146.66667" width="146.66667" xml:space="preserve" id="svg2" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink">
+ <metadata id="metadata8">
+  <rdf:RDF>
+   <cc:Work rdf:about="">
+    <dc:format>
+     image/svg+xml
+    </dc:format>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage">
+    </dc:type>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs id="defs6">
+ </defs>
+ <g transform="matrix(1.3333333,0,0,-1.3333333,0,146.66667)" id="g10">
+  <g transform="scale(0.1)" id="g12">
+   <path id="path14" style="fill:#feed08;fill-opacity:1;fill-rule:nonzero;stroke:none" d="M 1.375,1098.76 H 1098.62 V 1.23828 H 1.375 V 1098.76">
+   </path>
+   <path id="path16" style="fill:#0061aa;fill-opacity:1;fill-rule:nonzero;stroke:none" d="M 465.324,346.727 375.613,407.094 801.824,695.547 538.535,873.285 414.734,789.477 510.855,725.773 289.074,577.164 103.543,700.246 550.246,999.125 993.684,701.047 Z m 167.91,409.168 89.692,-60.348 -426.27,-288.383 263.399,-177.828 123.711,83.801 -96.114,63.707 221.813,148.621 185.437,-123.11 -448.187,-298.871 -442.36,296.801 z m -347.621,-533.891 -91.566,62.41 -92.563,-62.527 0.903,-121 z m 531.102,654.101 91.808,-62.91 89.891,60.071 0.129,123.41 -181.828,-120.571">
+   </path>
+  </g>
+ </g>
+</svg>

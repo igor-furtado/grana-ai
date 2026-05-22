@@ -77,6 +77,7 @@ struct CategorizationSettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Categorização")
+        .navigationSubtitle("Pipeline de categorização automática via IA")
         .task {
             if store == nil {
                 let newStore = CategorizationStore(container: environment.container)

@@ -29,23 +29,11 @@ struct DashboardView: View {
             }
         }
         .navigationTitle("Dashboard")
-    }
-
-    @ViewBuilder
-    private func content(store: DashboardStore) -> some View {
-        // `@Bindable` é o equivalente moderno do `@ObservedObject` legado pra
-        // tipos `@Observable`. Permite criar `$bindable.filter` (Binding) sem
-        // mexer no tipo do parâmetro.
-        @Bindable var bindable = store
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 16) {
-                    Text(store.filter.displayName)
-                        .font(.title2.weight(.semibold))
-
-                    Spacer()
-
+        .navigationSubtitle(store?.filter.displayName ?? "")
+        .toolbar {
+            if let store {
+                @Bindable var bindable = store
+                ToolbarItem(placement: .primaryAction) {
                     // 4 presets cobrem os dois "modos" do dashboard: análise
                     // de mês fechado (atual/anterior) vs. tendência longitudinal
                     // (6/12 meses). `custom` segue no enum pro futuro
@@ -56,10 +44,16 @@ struct DashboardView: View {
                         Text("6 meses").tag(PeriodFilter.last6Months)
                         Text("12 meses").tag(PeriodFilter.last12Months)
                     }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
+                    .pickerStyle(.menu)
                 }
+            }
+        }
+    }
 
+    @ViewBuilder
+    private func content(store: DashboardStore) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
                 if let error = store.lastError {
                     errorBanner(error)
                 }

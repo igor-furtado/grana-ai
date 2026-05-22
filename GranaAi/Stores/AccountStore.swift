@@ -13,6 +13,10 @@ final class AccountStore {
 
     private(set) var accounts: [Account] = []
     private(set) var institutions: [Institution] = []
+    /// Saldo atual (inicial + Σ transações com sinal) por id de conta. Vazio
+    /// até a primeira emissão do stream — a UI cai pro `initialBalance` nesse
+    /// instante.
+    private(set) var balances: [UUID: Decimal] = [:]
     private(set) var isLoading = false
     var lastError: Error?
 
@@ -20,7 +24,7 @@ final class AccountStore {
         self.container = container
     }
 
-    /// Roda os dois watch streams em paralelo. Pattern idêntico ao
+    /// Roda os watch streams em paralelo. Pattern idêntico ao
     /// `TransactionStore.start()` — `.task` na View garante cancelamento.
     func start() async {
         isLoading = true
@@ -28,7 +32,8 @@ final class AccountStore {
 
         async let a: Void = streamAccounts()
         async let i: Void = streamInstitutions()
-        _ = await (a, i)
+        async let b: Void = streamBalances()
+        _ = await (a, i, b)
     }
 
     private func streamAccounts() async {
@@ -55,6 +60,18 @@ final class AccountStore {
         }
     }
 
+    private func streamBalances() async {
+        do {
+            for try await dict in try container.accounts.watchBalances() {
+                self.balances = dict
+            }
+        } catch is CancellationError {
+        } catch {
+            self.lastError = error
+            ErrorCenter.shared.report(error)
+        }
+    }
+
     // MARK: - Lookups
 
     func institution(for id: UUID) -> Institution? {
@@ -64,6 +81,13 @@ final class AccountStore {
     func institution(forAccount account: Account) -> Institution? {
         guard let id = account.institutionId else { return nil }
         return institution(for: id)
+    }
+
+    /// Saldo atual da conta. Cai pro `initialBalance` enquanto o stream de
+    /// balances ainda não emitiu (primeira renderização) — evita um "R$ 0,00"
+    /// piscando antes do valor real.
+    func currentBalance(for account: Account) -> Decimal {
+        balances[account.id] ?? account.initialBalance
     }
 
     // MARK: - Mutations

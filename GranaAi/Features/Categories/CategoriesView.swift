@@ -35,7 +35,14 @@ struct CategoriesView: View {
             }
         }
         .navigationTitle("Categorias")
+        .navigationSubtitle(categoriesSubtitle)
         .task { await watch() }
+    }
+
+    private var categoriesSubtitle: String {
+        if categories.isEmpty { return "" }
+        let roots = categories.filter { $0.parentId == nil }.count
+        return "\(roots) categorias raiz · \(categories.count) totais"
     }
 
     @ViewBuilder

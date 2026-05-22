@@ -127,6 +127,62 @@ final class AccountRepository: Sendable {
         )
     }
 
+    /// Saldo atual por conta = `initial_balance_cents + Σ(amount com sinal)`,
+    /// onde o sinal vem do `categories.kind`: `income` soma, `expense`
+    /// subtrai, `transfer` (e qualquer outro) é neutro.
+    ///
+    /// `LEFT JOIN` garante que contas sem transação ainda apareçam (saldo =
+    /// inicial). `LEFT JOIN categories` cobre o caso degenerado em que a
+    /// `category_id` da transaction aponta pra uma categoria removida — não
+    /// derruba o saldo, só ignora a transação órfã.
+    ///
+    /// Watch re-emite a cada mudança em `accounts`, `transactions` ou
+    /// `categories` — fechando o ciclo reativo: criar/editar/apagar
+    /// transação reflete no saldo dos cards em tempo real.
+    func watchBalances() throws -> AsyncThrowingStream<[UUID: Decimal], Error> {
+        let stream = try db.watch(
+            sql: """
+                SELECT a.id AS account_id,
+                       a.initial_balance_cents + COALESCE(SUM(
+                           CASE c.kind
+                               WHEN 'income'  THEN  t.amount_cents
+                               WHEN 'expense' THEN -t.amount_cents
+                               ELSE 0
+                           END
+                       ), 0) AS balance_cents
+                FROM accounts a
+                LEFT JOIN transactions t ON t.account_id = a.id
+                LEFT JOIN categories c ON c.id = t.category_id
+                GROUP BY a.id, a.initial_balance_cents
+                """,
+            parameters: [],
+            mapper: Self.mapBalanceRow
+        )
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    for try await rows in stream {
+                        let dict = Dictionary(uniqueKeysWithValues: rows)
+                        continuation.yield(dict)
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private nonisolated static func mapBalanceRow(_ cursor: SqlCursor) throws -> (UUID, Decimal) {
+        let idString = try cursor.getString(name: "account_id")
+        guard let id = UUID(uuidString: idString) else {
+            throw DatabaseError.invalidUUID(column: "account_id", value: idString)
+        }
+        let cents = try cursor.getInt64(name: "balance_cents")
+        return (id, Converters.centsToDecimal(cents))
+    }
+
     private nonisolated static func mapAccount(_ cursor: SqlCursor) throws -> Account {
         let idString = try cursor.getString(name: "id")
         guard let id = UUID(uuidString: idString) else {
