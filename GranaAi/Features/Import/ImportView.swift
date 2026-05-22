@@ -14,6 +14,13 @@ struct ImportView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var store: ImportStore?
     @State private var fileImporterShown = false
+    /// Escopo: ciclo de vida desta instância da sheet. Garante que o file
+    /// picker abre automaticamente só uma vez por abertura da modal — se o
+    /// usuário cancelar o picker, o idle state fica disponível pra reabrir
+    /// manualmente. Ao fechar e reabrir a modal, o `ImportView` é remontado e
+    /// o flag reseta naturalmente, fazendo o picker abrir de novo na próxima
+    /// sessão (comportamento desejado).
+    @State private var pickerAutoTriggeredThisSession = false
 
     var body: some View {
         NavigationStack {
@@ -48,6 +55,11 @@ struct ImportView: View {
         switch store.phase {
         case .idle:
             IdleStepView(fileImporterShown: $fileImporterShown, store: store)
+                .task {
+                    guard !pickerAutoTriggeredThisSession else { return }
+                    pickerAutoTriggeredThisSession = true
+                    fileImporterShown = true
+                }
         case .loading(let progress):
             VStack(spacing: 12) {
                 ProgressView()

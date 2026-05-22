@@ -1,10 +1,10 @@
 import Foundation
 import SwiftUI
 
-/// Tela "Importações" do menu lateral: lista de `ImportBatch` ordenada por
-/// data de importação, com ação de desfazer (apaga o batch + cascade nas
-/// transactions). Também tem botão pra iniciar uma nova importação na
-/// própria toolbar.
+/// Tela "Importações" do menu lateral: lista visual de `ImportBatch` agrupada
+/// por período (Hoje / Ontem / Esta semana / Este mês / Mais antigos), com
+/// logo da instituição em cada card e botão de desfazer. Toolbar primária
+/// abre a `ImportView` em sheet modal.
 struct ImportHistoryView: View {
     @Environment(AppEnvironment.self) private var environment
     @State private var store: ImportStore?
@@ -25,11 +25,16 @@ struct ImportHistoryView: View {
         .navigationTitle("Importações")
         .navigationSubtitle(importsSubtitle)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingImportSheet = true
-                } label: {
-                    Label("Importar OFX", systemImage: AppIcon.importFile.systemImage)
+            // Só renderiza o botão da toolbar quando já existe histórico — no
+            // empty state o CTA principal vive no centro da tela, então repetir
+            // o ícone aqui é redundante.
+            if let store, !store.batches.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        showingImportSheet = true
+                    } label: {
+                        Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
+                    }
                 }
             }
         }
@@ -41,19 +46,29 @@ struct ImportHistoryView: View {
 
     private var importsSubtitle: String {
         guard let store, !store.batches.isEmpty else { return "" }
-        let count = store.batches.count
-        if count == 1 { return "1 importação registrada" }
-        return "\(count) importações registradas"
+        let totalRows = store.batches.reduce(0) { $0 + $1.rowCount }
+        let lots = store.batches.count
+        let txWord = totalRows == 1 ? "transação" : "transações"
+        let lotWord = lots == 1 ? "importação" : "importações"
+        return "\(totalRows) \(txWord) em \(lots) \(lotWord)"
     }
 
     @ViewBuilder
     private func content(store: ImportStore) -> some View {
         if store.batches.isEmpty {
-            ContentUnavailableView(
-                "Sem importações",
-                systemImage: AppIcon.inbox.systemImage,
-                description: Text("Toque no ícone de importação na barra superior para importar um extrato bancário.")
-            )
+            ContentUnavailableView {
+                Label("Sem importações", systemImage: AppIcon.inbox.systemImage)
+            } description: {
+                Text("Importe um extrato bancário (OFX) ou fatura de cartão Inter (CSV) para começar.")
+            } actions: {
+                Button {
+                    showingImportSheet = true
+                } label: {
+                    Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+            }
         } else {
             list(store: store)
                 .confirmationDialog(
@@ -79,34 +94,206 @@ struct ImportHistoryView: View {
 
     @ViewBuilder
     private func list(store: ImportStore) -> some View {
-        Table(store.batches) {
-            TableColumn("Arquivo") { batch in
-                Text(batch.sourceFilename)
-            }
-            TableColumn("Conta") { batch in
-                Text(store.account(for: batch.accountId)?.name ?? "—")
-            }
-            TableColumn("Linhas") { batch in
-                Text("\(batch.rowCount)").monospacedDigit()
-            }
-            .width(60)
-            TableColumn("Importado em") { batch in
-                Text(batch.importedAt, style: .date)
-            }
-            .width(120)
-            TableColumn("") { batch in
-                Button(role: .destructive) {
-                    pendingDeleteBatch = batch
-                } label: {
-                    Label("Desfazer", systemImage: AppIcon.undo.systemImage)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                ForEach(groupedBatches(store.batches), id: \.bucket) { group in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(group.bucket.title)
+                            .font(.caption.weight(.semibold))
+                            .tracking(0.6)
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 4)
+
+                        VStack(spacing: 8) {
+                            ForEach(group.batches) { batch in
+                                ImportBatchRow(
+                                    batch: batch,
+                                    account: store.account(for: batch.accountId),
+                                    institution: institution(for: batch, store: store),
+                                    onUndo: { pendingDeleteBatch = batch }
+                                )
+                            }
+                        }
+                    }
                 }
             }
-            .width(110)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func institution(for batch: ImportBatch, store: ImportStore) -> Institution? {
+        guard let account = store.account(for: batch.accountId),
+              let id = account.institutionId else { return nil }
+        return store.institutions.first { $0.id == id }
+    }
+
+    /// Bucketing por janela de tempo relativa, ordenado do mais recente pro
+    /// mais antigo dentro de cada bucket. Calendar.current = fuso local
+    /// (datas comparadas por dia local, igual ao resto do app).
+    private func groupedBatches(_ batches: [ImportBatch]) -> [(bucket: PeriodBucket, batches: [ImportBatch])] {
+        let calendar = Calendar.current
+        let now = Date()
+        let sorted = batches.sorted { $0.importedAt > $1.importedAt }
+
+        var groups: [PeriodBucket: [ImportBatch]] = [:]
+        for batch in sorted {
+            let bucket = PeriodBucket.bucket(for: batch.importedAt, now: now, calendar: calendar)
+            groups[bucket, default: []].append(batch)
+        }
+
+        return PeriodBucket.allCases
+            .compactMap { bucket in
+                guard let batches = groups[bucket], !batches.isEmpty else { return nil }
+                return (bucket, batches)
+            }
+    }
+}
+
+// MARK: - Period bucket
+
+private enum PeriodBucket: CaseIterable {
+    case today
+    case yesterday
+    case thisWeek
+    case thisMonth
+    case older
+
+    var title: String {
+        switch self {
+        case .today:     "HOJE"
+        case .yesterday: "ONTEM"
+        case .thisWeek:  "ESTA SEMANA"
+        case .thisMonth: "ESTE MÊS"
+        case .older:     "MAIS ANTIGOS"
         }
     }
+
+    static func bucket(for date: Date, now: Date, calendar: Calendar) -> PeriodBucket {
+        if calendar.isDateInToday(date) { return .today }
+        if calendar.isDateInYesterday(date) { return .yesterday }
+        if calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear) { return .thisWeek }
+        if calendar.isDate(date, equalTo: now, toGranularity: .month) { return .thisMonth }
+        return .older
+    }
+}
+
+// MARK: - Row
+
+private struct ImportBatchRow: View {
+    let batch: ImportBatch
+    let account: Account?
+    let institution: Institution?
+    let onUndo: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            iconView
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.headline)
+                    Text("·").foregroundStyle(.tertiary)
+                    Text("\(batch.rowCount) \(batch.rowCount == 1 ? "transação" : "transações")")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help(batch.sourceFilename)
+
+            Button(role: .destructive, action: onUndo) {
+                Label("Desfazer", systemImage: AppIcon.undo.systemImage)
+                    .labelStyle(.titleAndIcon)
+                    .font(.caption.weight(.medium))
+            }
+            .buttonStyle(.bordered)
+            .tint(.danger)
+            .opacity(isHovered ? 1 : 0.7)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 1)
+        )
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) { isHovered = hovering }
+        }
+        .contextMenu {
+            Button("Desfazer importação", role: .destructive, action: onUndo)
+        }
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(iconBackground)
+                .frame(width: 40, height: 40)
+
+            if let institution {
+                InstitutionLogoImage(kind: institution.kind)
+                    .frame(width: 24, height: 24)
+            } else {
+                Image(systemName: "doc.text")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var iconBackground: Color {
+        if let institution {
+            return institution.kind.brandColor.opacity(0.12)
+        }
+        return Color.secondary.opacity(0.12)
+    }
+
+    /// Título derivado do filename — quando óbvio (`fatura`/`extrato`),
+    /// nomeia o tipo de import. Caso contrário, usa o filename sem extensão.
+    private var title: String {
+        let lower = batch.sourceFilename.lowercased()
+        if lower.contains("fatura") { return "Fatura" }
+        if lower.contains("extrato") { return "Extrato" }
+        return (batch.sourceFilename as NSString).deletingPathExtension
+    }
+
+    /// Filename não entra aqui — já está no `.help(...)` do card (tooltip),
+    /// evitando duplicar com o título quando ele cai no fallback "filename
+    /// sem extensão".
+    private var subtitle: String {
+        var parts: [String] = []
+        if let account {
+            parts.append(account.name)
+        }
+        parts.append(Self.dateFormatter.string(from: batch.importedAt))
+        return parts.joined(separator: " · ")
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "pt_BR")
+        f.setLocalizedDateFormatFromTemplate("dMMM")
+        return f
+    }()
 }
 
 #Preview {
     NavigationStack { ImportHistoryView() }
         .environment(AppEnvironment())
+        .frame(width: 900, height: 600)
 }

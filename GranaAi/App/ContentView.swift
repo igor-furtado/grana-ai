@@ -130,9 +130,21 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollContentBackground(.hidden)
-        .background(Color.brandPrimary)
+        // `sidebarBackground` é um asset SEM variante dark — fica grafite
+        // sempre. `brandPrimary` flipa pra creme no tema dark (intencional pro
+        // resto do app, mas a sidebar precisa permanecer escura).
+        .background(Color.sidebarBackground)
         .frame(minWidth: 200)
+        // Força colorScheme dark aqui pra que o toggle nativo de sidebar (e
+        // qualquer outro control herdado do sistema) renderize com ícones
+        // claros, visíveis contra o fundo escuro fixo.
+        .environment(\.colorScheme, .dark)
         .focusable()
+        // Sem o `.focusEffectDisabled`, o focus ring nativo (cor = AccentColor,
+        // gold) desenha um retângulo dourado ao redor da sidebar inteira sempre
+        // que ela recebe foco. `.focusable` continua ativo pra capturar
+        // `onMoveCommand` (setas), só removemos o highlight visual.
+        .focusEffectDisabled()
         .onMoveCommand { direction in
             moveSelection(direction)
         }
@@ -151,7 +163,10 @@ struct ContentView: View {
                     .font(.body)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(isSelected ? Color.brandPrimary : Color.white)
+            // `sidebarBackground` (grafite fixo) é o oposto do fundo branco do
+            // item selecionado — `brandPrimary` flipa pra creme no env dark e
+            // sumiria contra o highlight.
+            .foregroundStyle(isSelected ? Color.sidebarBackground : Color.white)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
