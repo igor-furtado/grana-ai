@@ -16,76 +16,84 @@ import SwiftUI
 /// `checkmarkCircle` — se amanhã trocarmos pro `checkmark.seal.fill`, o nome
 /// do caso continua certo. Mesmo princípio do `CategoryIcon`.
 enum AppIcon {
-    // MARK: - Ações
-    case add
-    case edit
-    case delete
-    case undo
-    case importFile
-    case archive
-    case unarchive
-    case sort
+  // MARK: - Ações
+  case add
+  case edit
+  case delete
+  case undo
+  case importFile
+  case archive
+  case unarchive
+  case sort
 
-    // MARK: - Métricas / dashboard
-    case balance
-    case expenseFlow
-    case incomeFlow
-    case netResult
+  // MARK: - Métricas / dashboard
+  case balance
+  case expenseFlow
+  case incomeFlow
+  case netResult
 
-    // MARK: - Feedback de status
-    case success
-    case warning
-    case error
-    case unknown
-    case completedSeal
-    case invalidDate
-    case invalidAmount
+  // MARK: - Feedback de status
+  case success
+  case warning
+  case error
+  case unknown
+  case completedSeal
+  case invalidDate
+  case invalidAmount
 
-    // MARK: - Empty states / conteúdo
-    case walletEmpty
-    case transactionsList
-    case inbox
-    case chart
-    case categoryRankingEmpty
-    case calendar
-    case institution
+  // MARK: - Empty states / conteúdo
+  case walletEmpty
+  case transactionsList
+  case inbox
+  case chart
+  case categoryRankingEmpty
+  case calendar
+  case institution
 
-    /// Nome do SF Symbol, pra `Image(systemName:)` ou `Label(_:systemImage:)`.
-    var systemImage: String {
-        switch self {
-        // Ações
-        case .add:              "plus"
-        case .edit:             "pencil"
-        case .delete:           "trash"
-        case .undo:             "arrow.uturn.backward"
-        case .importFile:       "square.and.arrow.down"
-        case .archive:          "archivebox"
-        case .unarchive:        "tray.and.arrow.up"
-        case .sort:             "chevron.up.chevron.down"
+  // MARK: - Tema
+  case themeLight
+  case themeDark
 
-        // Métricas
-        case .balance:          "wallet.pass.fill"
-        case .expenseFlow:      "arrow.down.right.circle.fill"
-        case .incomeFlow:       "arrow.up.right.circle.fill"
-        case .netResult:        "chart.line.uptrend.xyaxis"
+  /// Nome do SF Symbol, pra `Image(systemName:)` ou `Label(_:systemImage:)`.
+  var systemImage: String {
+    switch self {
+    // Ações
+    case .add: "plus"
+    case .edit: "pencil"
+    case .delete: "trash"
+    case .undo: "arrow.uturn.backward"
+    case .importFile: "square.and.arrow.down"
+    case .archive: "archivebox"
+    case .unarchive: "tray.and.arrow.up"
+    case .sort: "chevron.up.chevron.down"
 
-        // Status
-        case .success:          "checkmark.circle.fill"
-        case .warning:          "exclamationmark.triangle.fill"
-        case .error:            "xmark.circle.fill"
-        case .unknown:          "questionmark.circle"
-        case .completedSeal:    "checkmark.seal.fill"
-        case .invalidDate:      "calendar.badge.exclamationmark"
-        case .invalidAmount:    "dollarsign.circle.trianglebadge.exclamationmark"
+    // Métricas
+    case .balance: "wallet.pass.fill"
+    case .expenseFlow: "arrow.down.right.circle.fill"
+    case .incomeFlow: "arrow.up.right.circle.fill"
+    case .netResult: "chart.line.uptrend.xyaxis"
 
-        // Conteúdo / empty
-        case .walletEmpty:          "wallet.pass"
-        case .transactionsList:     "list.bullet.rectangle"
-        case .inbox:                "tray"
-        case .chart:                "chart.bar"
-        case .categoryRankingEmpty: "chart.bar.fill"
-        case .calendar:             "calendar"
-        case .institution:          "building.columns"
-        }
+    // Status
+    case .success: "checkmark.circle.fill"
+    case .warning: "exclamationmark.triangle.fill"
+    case .error: "xmark.circle.fill"
+    case .unknown: "questionmark.circle"
+    case .completedSeal: "checkmark.seal.fill"
+    case .invalidDate: "calendar.badge.exclamationmark"
+    case .invalidAmount: "dollarsign.circle.trianglebadge.exclamationmark"
+
+    // Conteúdo / empty
+    case .walletEmpty: "wallet.pass"
+    case .transactionsList: "list.bullet.rectangle"
+    case .inbox: "tray"
+    case .chart: "chart.bar"
+    case .categoryRankingEmpty: "chart.bar.fill"
+    case .calendar: "calendar"
+    case .institution: "building.columns"
+
+    // Tema
+    case .themeLight: "sun.max"
+    case .themeDark: "moon"
     }
+  }
 }

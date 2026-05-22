@@ -12,6 +12,12 @@ struct GranaAiApp: App {
         let env = AppEnvironment()
         _environment = State(initialValue: env)
         log.database.info("AppEnvironment inicializado com sucesso")
+
+        // Limpeza one-shot: versões anteriores persistiam o tema em
+        // `appColorScheme` via `@AppStorage`. O override hoje é por sessão
+        // (não persistido), então a chave fica órfã pra quem atualizou.
+        // Remoção é idempotente — se não existir, é no-op.
+        UserDefaults.standard.removeObject(forKey: "appColorScheme")
     }
 
     var body: some Scene {
