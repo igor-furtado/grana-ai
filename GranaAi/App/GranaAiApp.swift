@@ -23,7 +23,7 @@ struct GranaAiApp: App {
                     // tabelas estão vazias antes de inserir). `.task` cancela
                     // automaticamente se a janela sumir antes de terminar.
                     do {
-                        try await Seed.runIfNeeded(database: environment.database)
+                        try await Seed.runIfNeeded(container: environment.container)
                     } catch {
                         ErrorCenter.shared.report(error, title: "Falha no seed inicial")
                     }

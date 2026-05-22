@@ -31,7 +31,7 @@ final class ImportStore {
         case failed(message: String)
     }
 
-    private let database: AppDatabase
+    private let container: AppContainer
 
     private(set) var phase: Phase = .idle
 
@@ -68,9 +68,9 @@ final class ImportStore {
     /// no meio do `.categorizing` deixa um loop rodando indefinidamente.
     private var categorizationWaitTask: Task<Void, Never>?
 
-    init(database: AppDatabase) {
-        self.database = database
-        self.categorization = CategorizationStore(database: database)
+    init(container: AppContainer) {
+        self.container = container
+        self.categorization = CategorizationStore(container: container)
     }
 
     // MARK: - Categorização pré-commit (Fase 4)
@@ -134,10 +134,10 @@ final class ImportStore {
 
     func loadInitialData() async {
         do {
-            accounts = try await database.accounts.getAll()
-            institutions = try await database.institutions.getAll()
-            categories = try await database.categories.getAll()
-            batches = try await database.importBatches.getAll()
+            accounts = try await container.accounts.getAll()
+            institutions = try await container.institutions.getAll()
+            categories = try await container.categories.getAll()
+            batches = try await container.importBatches.getAll()
         } catch {
             ErrorCenter.shared.report(error)
         }
@@ -158,7 +158,7 @@ final class ImportStore {
     }
 
     func refreshBatches() async {
-        do { batches = try await database.importBatches.getAll() }
+        do { batches = try await container.importBatches.getAll() }
         catch { ErrorCenter.shared.report(error) }
     }
 
@@ -243,7 +243,7 @@ final class ImportStore {
         // transações isso é a diferença entre <1s e 30+s.
         let existingExternalIds: Set<String>
         if let existingId = acc.existingId {
-            existingExternalIds = (try? await database.transactions.externalIds(forAccount: existingId)) ?? []
+            existingExternalIds = (try? await container.transactions.externalIds(forAccount: existingId)) ?? []
         } else {
             existingExternalIds = []
         }
@@ -280,7 +280,7 @@ final class ImportStore {
 
     private func resolveInstitution(for statement: OFXStatement) async throws -> InstitutionResolution {
         let code = statement.account.bankId
-        if let existing = try await database.institutions.findByCode(code) {
+        if let existing = try await container.institutions.findByCode(code) {
             return InstitutionResolution(
                 existingId: existing.id,
                 code: existing.code,
@@ -301,7 +301,7 @@ final class ImportStore {
     ) async throws -> AccountResolution {
         let bankAccount = statement.account
         if let institutionId = institution.existingId,
-           let existing = try await database.accounts.findByBankIdentity(
+           let existing = try await container.accounts.findByBankIdentity(
                institutionId: institutionId,
                branchId: bankAccount.branchId,
                accountNumber: bankAccount.accountId
@@ -339,11 +339,11 @@ final class ImportStore {
     /// "Renda e Pagamentos" pra alimentar a heurística. As duas últimas são
     /// opcionais (a heurística cai pra unclassified se faltarem).
     private func buildHeuristic() async throws -> OFXCategoryHeuristic {
-        guard let unclassified = try await database.categories.findRootByName("Não Classificado") else {
+        guard let unclassified = try await container.categories.findRootByName("Não Classificado") else {
             throw ImportError.unclassifiedCategoryMissing
         }
-        let transfers = try await database.categories.findRootByName("Transferências")
-        let income = try await database.categories.findRootByName("Renda e Pagamentos")
+        let transfers = try await container.categories.findRootByName("Transferências")
+        let income = try await container.categories.findRootByName("Renda e Pagamentos")
         return OFXCategoryHeuristic(roots: .init(
             unclassified: unclassified.id,
             transfers: transfers?.id,
@@ -499,7 +499,7 @@ final class ImportStore {
 
             // Resolve `fallbackId` pra drafts cuja categoria suggerida não foi
             // encontrada (paranoia — não deve acontecer).
-            let fallback = try await database.categories.findRootByName("Não Classificado")
+            let fallback = try await container.categories.findRootByName("Não Classificado")
             guard let fallbackId = fallback?.id else {
                 throw ImportError.unclassifiedCategoryMissing
             }
@@ -532,7 +532,7 @@ final class ImportStore {
             let cacheEntries = categorization.pendingCacheEntries
 
             do {
-                try await database.transactions.commitImport(
+                try await container.transactions.commitImport(
                     institutions: pendingInstitutionsToInsert,
                     accounts: pendingAccountsToInsert,
                     batchesWithTransactions: batchesWithTransactions,
@@ -544,8 +544,8 @@ final class ImportStore {
             }
 
             // Atualiza caches locais pós-commit.
-            accounts = try await database.accounts.getAll()
-            institutions = try await database.institutions.getAll()
+            accounts = try await container.accounts.getAll()
+            institutions = try await container.institutions.getAll()
             await refreshBatches()
 
             let totalRows = batchesWithTransactions.reduce(0) { $0 + $1.transactions.count }
@@ -587,7 +587,7 @@ final class ImportStore {
 
     func undo(batchId: UUID) async {
         do {
-            try await database.importBatches.delete(id: batchId)
+            try await container.importBatches.delete(id: batchId)
             await refreshBatches()
         } catch {
             ErrorCenter.shared.report(error, title: "Falha ao desfazer importação")
@@ -643,7 +643,7 @@ struct OFXPreviewRow: Identifiable, Hashable {
     /// transformar em transação.
     var isDuplicate: Bool
     /// ID da categoria raiz vindo da heurística. Resolvido no `ImportStore`,
-    /// não na View, pra evitar passar `database` adiante. Pode ser editado
+    /// não na View, pra evitar passar `container` adiante. Pode ser editado
     /// pelo usuário no preview.
     var categoryId: UUID
     /// Subcategoria opcional. NULL no momento da geração; usuário pode

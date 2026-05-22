@@ -79,7 +79,7 @@ struct CategorizationSettingsView: View {
         .navigationTitle("Categorização")
         .task {
             if store == nil {
-                let newStore = CategorizationStore(database: environment.database)
+                let newStore = CategorizationStore(container: environment.container)
                 await newStore.loadCategories()
                 store = newStore
             }

@@ -25,7 +25,7 @@ struct DashboardView: View {
         }
         .onAppear {
             if store == nil {
-                store = DashboardStore(database: environment.database)
+                store = DashboardStore(container: environment.container)
             }
         }
         .navigationTitle("Dashboard")

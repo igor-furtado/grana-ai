@@ -19,7 +19,7 @@ struct ImportHistoryView: View {
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .task { store = ImportStore(database: environment.database) }
+                    .task { store = ImportStore(container: environment.container) }
             }
         }
         .navigationTitle("Importações")

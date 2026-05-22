@@ -20,7 +20,7 @@ import PowerSync
 @MainActor
 @Observable
 final class TransactionStore {
-    private let database: AppDatabase
+    private let container: AppContainer
 
     private(set) var transactions: [Transaction] = []
     private(set) var accounts: [Account] = []
@@ -28,8 +28,8 @@ final class TransactionStore {
     private(set) var isLoading = false
     var lastError: Error?
 
-    init(database: AppDatabase) {
-        self.database = database
+    init(container: AppContainer) {
+        self.container = container
     }
 
     // MARK: - Streams
@@ -61,7 +61,7 @@ final class TransactionStore {
 
     private func streamTransactions() async {
         do {
-            let stream = try database.transactions.watchAll()
+            let stream = try container.transactions.watchAll()
             for try await rows in stream {
                 self.transactions = rows
             }
@@ -75,7 +75,7 @@ final class TransactionStore {
 
     private func streamAccounts() async {
         do {
-            let stream = try database.accounts.watchAll()
+            let stream = try container.accounts.watchAll()
             for try await rows in stream {
                 self.accounts = rows
             }
@@ -88,7 +88,7 @@ final class TransactionStore {
 
     private func streamCategories() async {
         do {
-            let stream = try database.categories.watchAll()
+            let stream = try container.categories.watchAll()
             for try await rows in stream {
                 self.categories = rows
             }
@@ -125,7 +125,7 @@ final class TransactionStore {
             createdAt: now,
             updatedAt: now
         )
-        try await database.transactions.insert(transaction)
+        try await container.transactions.insert(transaction)
         // Não precisamos atualizar `self.transactions` manualmente — o watch
         // stream emite o novo estado automaticamente.
     }
@@ -133,11 +133,11 @@ final class TransactionStore {
     func update(_ transaction: Transaction) async throws {
         var copy = transaction
         copy.updatedAt = Date()
-        try await database.transactions.update(copy)
+        try await container.transactions.update(copy)
     }
 
     func delete(id: UUID) async throws {
-        try await database.transactions.delete(id: id)
+        try await container.transactions.delete(id: id)
     }
 
     // MARK: - Helpers para a UI

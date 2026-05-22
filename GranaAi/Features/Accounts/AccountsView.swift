@@ -27,7 +27,7 @@ struct AccountsView: View {
                     .task { await store.start() }
             } else {
                 ProgressView()
-                    .task { store = AccountStore(database: environment.database) }
+                    .task { store = AccountStore(container: environment.container) }
             }
         }
         .navigationTitle("Contas")

@@ -135,7 +135,7 @@ struct SeedTests {
             logger: DefaultLogger()
         )
 
-        // AppDatabase é `final class` com init privado — pra teste, usamos
+        // AppContainer é `final class` com init privado — pra teste, usamos
         // o `placeholder()`? Não, ele usa outro filename. Aqui montamos os
         // repositories manualmente já que Seed só usa eles + db.writeTransaction.
         let accounts = AccountRepository(db: powerSyncDb)
@@ -146,7 +146,7 @@ struct SeedTests {
         #expect(try await categories.getAll().isEmpty)
 
         // Reimplementação enxuta do Seed pra contornar o init privado do
-        // AppDatabase em testes (refatorar pra injeção de deps quando crescer).
+        // AppContainer em testes (refatorar pra injeção de deps quando crescer).
         let now = Date()
         try await accounts.insert(
             Account(id: UUID(), name: "Carteira",

@@ -9,15 +9,15 @@ import OSLog
 @MainActor
 @Observable
 final class AccountStore {
-    private let database: AppDatabase
+    private let container: AppContainer
 
     private(set) var accounts: [Account] = []
     private(set) var institutions: [Institution] = []
     private(set) var isLoading = false
     var lastError: Error?
 
-    init(database: AppDatabase) {
-        self.database = database
+    init(container: AppContainer) {
+        self.container = container
     }
 
     /// Roda os dois watch streams em paralelo. Pattern idêntico ao
@@ -33,7 +33,7 @@ final class AccountStore {
 
     private func streamAccounts() async {
         do {
-            for try await rows in try database.accounts.watchAll() {
+            for try await rows in try container.accounts.watchAll() {
                 self.accounts = rows
             }
         } catch is CancellationError {
@@ -45,7 +45,7 @@ final class AccountStore {
 
     private func streamInstitutions() async {
         do {
-            for try await rows in try database.institutions.watchAll() {
+            for try await rows in try container.institutions.watchAll() {
                 self.institutions = rows
             }
         } catch is CancellationError {
@@ -91,17 +91,17 @@ final class AccountStore {
             createdAt: now,
             updatedAt: now
         )
-        try await database.accounts.insert(account)
+        try await container.accounts.insert(account)
     }
 
     func update(_ account: Account) async throws {
         var copy = account
         copy.updatedAt = Date()
-        try await database.accounts.update(copy)
+        try await container.accounts.update(copy)
     }
 
     func delete(id: UUID) async throws {
-        try await database.accounts.delete(id: id)
+        try await container.accounts.delete(id: id)
     }
 
     /// Toggle de arquivamento. Conta arquivada some dos pickers do form de
@@ -110,6 +110,6 @@ final class AccountStore {
         var copy = account
         copy.archived = archived
         copy.updatedAt = Date()
-        try await database.accounts.update(copy)
+        try await container.accounts.update(copy)
     }
 }

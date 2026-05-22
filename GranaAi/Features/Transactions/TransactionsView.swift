@@ -29,7 +29,7 @@ struct TransactionsView: View {
         }
         .onAppear {
             if store == nil {
-                store = TransactionStore(database: environment.database)
+                store = TransactionStore(container: environment.container)
             }
         }
     }

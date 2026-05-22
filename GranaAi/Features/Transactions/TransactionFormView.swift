@@ -207,14 +207,14 @@ struct TransactionFormView: View {
 
 #Preview("Nova") {
     let env = AppEnvironment()
-    let store = TransactionStore(database: env.database)
+    let store = TransactionStore(container: env.container)
     return TransactionFormView()
         .environment(store)
 }
 
 #Preview("Edição") {
     let env = AppEnvironment()
-    let store = TransactionStore(database: env.database)
+    let store = TransactionStore(container: env.container)
     let sample = Transaction(
         id: UUID(),
         accountId: UUID(),

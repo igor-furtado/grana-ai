@@ -133,14 +133,14 @@ struct AccountFormView: View {
 
 #Preview("Nova") {
     let env = AppEnvironment()
-    let store = AccountStore(database: env.database)
+    let store = AccountStore(container: env.container)
     return AccountFormView()
         .environment(store)
 }
 
 #Preview("Edição") {
     let env = AppEnvironment()
-    let store = AccountStore(database: env.database)
+    let store = AccountStore(container: env.container)
     let sample = Account(
         id: UUID(),
         name: "Inter principal",

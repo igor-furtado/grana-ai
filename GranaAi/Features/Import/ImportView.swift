@@ -38,7 +38,7 @@ struct ImportView: View {
     }
 
     private func initialize() {
-        let s = ImportStore(database: environment.database)
+        let s = ImportStore(container: environment.container)
         store = s
         Task { await s.loadInitialData() }
     }

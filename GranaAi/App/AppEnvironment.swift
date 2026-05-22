@@ -15,24 +15,24 @@ import Foundation
 ///   global escondido.
 @Observable
 final class AppEnvironment {
-    let database: AppDatabase
+    let container: AppContainer
     /// Quando o setup do banco falha, mantemos o app vivo pra mostrar diagnóstico.
     let setupError: Error?
 
     init() {
-        self.database = AppDatabase.setup()
+        self.container = AppContainer.setup()
         self.setupError = nil
     }
 
-    private init(database: AppDatabase?, error: Error?) {
+    private init(container: AppContainer?, error: Error?) {
         // Construtor de fallback. `setup()` hoje não lança (PowerSyncDatabase
         // é factory síncrona não-throwing), mas mantemos o caminho pronto pra
         // Fase 5, quando `connect(connector:)` vai entrar e poderá falhar.
-        self.database = database ?? AppDatabase.placeholder()
+        self.container = container ?? AppContainer.placeholder()
         self.setupError = error
     }
 
     static func failed(error: Error) -> AppEnvironment {
-        AppEnvironment(database: nil, error: error)
+        AppEnvironment(container: nil, error: error)
     }
 }

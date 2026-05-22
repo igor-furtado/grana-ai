@@ -9,14 +9,14 @@ import PowerSync
 /// barato, e robusto a casos de banco apagado/recriado (ex: trocar de máquina,
 /// reset durante desenvolvimento). Idempotente por design.
 enum Seed {
-    static func runIfNeeded(database: AppDatabase) async throws {
-        try await seedAccountsIfEmpty(database: database)
-        try await seedInstitutionsIfEmpty(database: database)
-        try await seedCategoriesIfEmpty(database: database)
+    static func runIfNeeded(container: AppContainer) async throws {
+        try await seedAccountsIfEmpty(container: container)
+        try await seedInstitutionsIfEmpty(container: container)
+        try await seedCategoriesIfEmpty(container: container)
     }
 
-    private static func seedAccountsIfEmpty(database: AppDatabase) async throws {
-        let existing = try await database.accounts.getAll()
+    private static func seedAccountsIfEmpty(container: AppContainer) async throws {
+        let existing = try await container.accounts.getAll()
         guard existing.isEmpty else { return }
 
         // Apenas "Carteira" como padrão na Fase 3 em diante. Contas bancárias
@@ -33,15 +33,15 @@ enum Seed {
             createdAt: now,
             updatedAt: now
         )
-        try await database.accounts.insert(wallet)
+        try await container.accounts.insert(wallet)
         log.database.info("Seed: conta padrão 'Carteira' inserida")
     }
 
     /// Pré-cadastra as instituições "ricamente suportadas" (com auto-detect
     /// via FID do OFX e ícone próprio). Hoje só Inter — adicionar Itaú,
     /// Bradesco etc. = uma linha aqui + um caso no enum `InstitutionKind`.
-    private static func seedInstitutionsIfEmpty(database: AppDatabase) async throws {
-        let existing = try await database.institutions.getAll()
+    private static func seedInstitutionsIfEmpty(container: AppContainer) async throws {
+        let existing = try await container.institutions.getAll()
         guard existing.isEmpty else { return }
 
         let now = Date()
@@ -53,12 +53,12 @@ enum Seed {
             createdAt: now,
             updatedAt: now
         )
-        try await database.institutions.insert(inter)
+        try await container.institutions.insert(inter)
         log.database.info("Seed: instituições padrão inseridas (Inter)")
     }
 
-    private static func seedCategoriesIfEmpty(database: AppDatabase) async throws {
-        let existing = try await database.categories.getAll()
+    private static func seedCategoriesIfEmpty(container: AppContainer) async throws {
+        let existing = try await container.categories.getAll()
         guard existing.isEmpty else { return }
 
         // Toda a inserção em UMA transação atômica: se qualquer execute falhar,
@@ -67,7 +67,7 @@ enum Seed {
         // ou nenhuma" — não podemos ficar com taxonomia pela metade.
         //
         // Fonte da verdade: `CategorySeedData.categories`.
-        try await database.db.writeTransaction { tx in
+        try await container.db.writeTransaction { tx in
             let nowString = Converters.dateToString(Date())
 
             let insertSQL = """

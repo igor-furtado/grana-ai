@@ -21,7 +21,7 @@ App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-
 
 ## Arquitetura num parágrafo
 
-`SwiftUI View → @Observable Store (MainActor) → Repository (any PowerSyncDatabaseProtocol) → PowerSyncDatabase`. Reatividade via `watch()` que devolve `AsyncThrowingStream`. Operações multi-passo críticas (import batch, seed, OFX multi-account) via `writeTransaction` pra atomicidade. Repositories vivem dentro do `AppDatabase` (`database.transactions`, `database.accounts`, ...) — refatorar pra container separado só quando Fase 6 entrar.
+`SwiftUI View → @Observable Store (MainActor) → Repository (any PowerSyncDatabaseProtocol) → PowerSyncDatabase`. Reatividade via `watch()` que devolve `AsyncThrowingStream`. Operações multi-passo críticas (import batch, seed, OFX multi-account) via `writeTransaction` pra atomicidade. Os Repositories ficam expostos em `AppContainer` (Composition Root da camada de dados) — `container.transactions`, `container.accounts`, etc. Stores recebem o `AppContainer` no init. Visão completa das camadas em [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ## Invariantes que NÃO podem quebrar
 

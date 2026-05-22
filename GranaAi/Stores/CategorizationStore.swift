@@ -35,7 +35,7 @@ final class CategorizationStore {
         case postCommit
     }
 
-    private let database: AppDatabase
+    private let container: AppContainer
 
     private(set) var status: Status = .idle
     private(set) var suggestions: [CategorizationSuggestion] = []
@@ -50,13 +50,13 @@ final class CategorizationStore {
 
     private var currentTask: Task<Void, Never>?
 
-    init(database: AppDatabase) {
-        self.database = database
+    init(container: AppContainer) {
+        self.container = container
     }
 
     func loadCategories() async {
         do {
-            categories = try await database.categories.getAll()
+            categories = try await container.categories.getAll()
         } catch {
             ErrorCenter.shared.report(error)
         }
@@ -85,7 +85,7 @@ final class CategorizationStore {
         suggestions = []
         pendingCacheEntries = []
 
-        let service = database.categorization
+        let service = container.categorization
         let thresholds = self.thresholds
         currentTask = Task { [weak self] in
             do {
@@ -121,7 +121,7 @@ final class CategorizationStore {
         suggestions = []
         pendingCacheEntries = []
 
-        let service = database.categorization
+        let service = container.categorization
         let thresholds = self.thresholds
         currentTask = Task { [weak self] in
             do {
@@ -167,7 +167,7 @@ final class CategorizationStore {
         case .postCommit:
             let suggestion = suggestions[index]
             do {
-                try await database.categorization.confirmExistingSuggestion(suggestion)
+                try await container.categorization.confirmExistingSuggestion(suggestion)
                 suggestions[index].isReviewed = true
             } catch {
                 ErrorCenter.shared.report(error, title: "Falha ao confirmar sugestão")
@@ -212,7 +212,7 @@ final class CategorizationStore {
         case .postCommit:
             let suggestion = suggestions[index]
             do {
-                try await database.categorization.applyCorrectionPostCommit(
+                try await container.categorization.applyCorrectionPostCommit(
                     suggestion: suggestion,
                     correctedCategoryId: correctedCategoryId,
                     correctedSubcategoryId: correctedSubcategoryId
@@ -250,7 +250,7 @@ final class CategorizationStore {
         let now = Date()
         // Usa o mesmo model name do service pra que o cache lookup futuro
         // bata (chave composta é hash+model).
-        let model = database.categorization.model
+        let model = container.categorization.model
 
         // Remove entry da IA pra esse hash (se existir).
         pendingCacheEntries.removeAll { $0.descriptionHash == hash }

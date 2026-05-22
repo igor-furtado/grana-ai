@@ -171,7 +171,7 @@ struct CategoriesView: View {
     /// imediatamente quando a Fase futura abrir edição de categoria.
     private func watch() async {
         do {
-            for try await rows in try environment.database.categories.watchAll() {
+            for try await rows in try environment.container.categories.watchAll() {
                 self.categories = rows
             }
         } catch is CancellationError {

@@ -17,7 +17,7 @@ import OSLog
 @MainActor
 @Observable
 final class DashboardStore {
-    private let database: AppDatabase
+    private let container: AppContainer
 
     /// Filtro de período corrente. `didSet` dispara `refresh()` em background
     /// — padrão SwiftUI-friendly: a View binda `$store.filter` no Picker e
@@ -58,8 +58,8 @@ final class DashboardStore {
     private(set) var isLoading = false
     var lastError: Error?
 
-    init(database: AppDatabase) {
-        self.database = database
+    init(container: AppContainer) {
+        self.container = container
     }
 
     /// Recalcula as agregações. Bifurca pelo `scope` do filtro — em mês único
@@ -78,8 +78,8 @@ final class DashboardStore {
         do {
             // Cards do topo: rodam em qualquer escopo de filtro.
             async let balanceTask = computeTotalBalance()
-            async let expensesTask = database.transactions.sum(kind: .expense, from: from, to: to)
-            async let incomeTask   = database.transactions.sum(kind: .income,  from: from, to: to)
+            async let expensesTask = container.transactions.sum(kind: .expense, from: from, to: to)
+            async let incomeTask   = container.transactions.sum(kind: .income,  from: from, to: to)
 
             let (balance, expenses, income) =
                 try await (balanceTask, expensesTask, incomeTask)
@@ -90,10 +90,10 @@ final class DashboardStore {
 
             switch filter.scope {
             case .singleMonth:
-                async let byCategoryTask = database.transactions.totalsByCategory(
+                async let byCategoryTask = container.transactions.totalsByCategory(
                     kind: .expense, from: from, to: to
                 )
-                async let byWeekdayTask = database.transactions.weekdayTotals(
+                async let byWeekdayTask = container.transactions.weekdayTotals(
                     kind: .expense, from: from, to: to
                 )
                 let (byCategory, byWeekday) = try await (byCategoryTask, byWeekdayTask)
@@ -105,10 +105,10 @@ final class DashboardStore {
                 // `totalsByCategory` na janela 6/12m dá o acumulado por
                 // categoria — mesmo formato consumido pelo `CategoryBarChart`
                 // do singleMonth, só com `from/to` mais largos.
-                async let byCategoryTask = database.transactions.totalsByCategory(
+                async let byCategoryTask = container.transactions.totalsByCategory(
                     kind: .expense, from: from, to: to
                 )
-                async let monthlyByKindTask = database.transactions.monthlyTotalsByKind(
+                async let monthlyByKindTask = container.transactions.monthlyTotalsByKind(
                     from: from, to: to
                 )
                 let (byCategory, monthlyKind) =
@@ -136,9 +136,9 @@ final class DashboardStore {
         let lifetimeFrom = Date.distantPast
         let lifetimeTo = Date.distantFuture
 
-        async let initialTask = database.accounts.sumInitialBalance()
-        async let incomeTask = database.transactions.sum(kind: .income,  from: lifetimeFrom, to: lifetimeTo)
-        async let expenseTask = database.transactions.sum(kind: .expense, from: lifetimeFrom, to: lifetimeTo)
+        async let initialTask = container.accounts.sumInitialBalance()
+        async let incomeTask = container.transactions.sum(kind: .income,  from: lifetimeFrom, to: lifetimeTo)
+        async let expenseTask = container.transactions.sum(kind: .expense, from: lifetimeFrom, to: lifetimeTo)
 
         let (initial, income, expense) = try await (initialTask, incomeTask, expenseTask)
         return initial + income - expense
