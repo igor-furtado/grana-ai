@@ -24,7 +24,8 @@ extension CategoryIcon {
 
         // Despesas
         "compras-pessoais":            .shoppingBag,
-        "transporte-e-viagem":         .car,
+        "transporte":                  .car,
+        "viagem":                      .airplane,
         "entretenimento-e-lazer":      .monitor,
         "alimentacao-e-supermercado":  .utensils,
         "contas-e-servicos":           .zap,

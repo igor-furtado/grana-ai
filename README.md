@@ -30,6 +30,7 @@ Primeira build demora alguns minutos porque o PowerSync usa Kotlin Multiplatform
 ## Documentação
 
 - **[PROJECT.md](./PROJECT.md)** — constituição do projeto: stack, arquitetura, modelo de domínio, convenções.
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — visão técnica das camadas (View → Store → Repository → PowerSync), papel do `AppContainer` e fluxo de dados.
 - **[ROADMAP.md](./ROADMAP.md)** — fases de desenvolvimento. Cada fase entrega algo funcional.
 
 ## Aviso

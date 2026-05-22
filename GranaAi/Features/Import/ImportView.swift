@@ -59,6 +59,8 @@ struct ImportView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ofxReview:
             OFXReviewStepView(store: store)
+        case .csvReview:
+            CSVReviewStepView(store: store)
         case .categorizing:
             CategorizingStepView(store: store)
         case .reviewingCategorization:
@@ -89,18 +91,37 @@ struct ImportView: View {
     }
 }
 
-/// Step intermediário: AI rodando antes do commit. Mostra o status detalhado
-/// do `CategorizationStore` (cache hits, chamada à IA, fallback).
+/// Step intermediário: AI rodando antes do commit.
+///
+/// **Barra determinada quando `total > 0`** (caso comum: já passou pela
+/// checagem de cache e sabemos quantos itens vão ser classificados).
+/// Fallback pra spinner indeterminado nos primeiros frames antes do
+/// `.started` chegar do service.
 private struct CategorizingStepView: View {
     @Bindable var store: ImportStore
 
     var body: some View {
         VStack(spacing: 16) {
-            ProgressView().controlSize(.large)
+            progressIndicator
+                .frame(maxWidth: 320)
             statusText
             Button("Cancelar") { store.backToPreviewFromReview() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 40)
+    }
+
+    @ViewBuilder
+    private var progressIndicator: some View {
+        switch store.categorization.status {
+        case .classifying(let processed, let total, _) where total > 0:
+            ProgressView(value: Double(processed), total: Double(total))
+                .progressViewStyle(.linear)
+                .animation(.easeOut(duration: 0.25), value: processed)
+        default:
+            ProgressView()
+                .progressViewStyle(.linear)
+        }
     }
 
     /// Só renderiza os sub-estados que o usuário consegue ler antes de o
@@ -130,7 +151,7 @@ private struct IdleStepView: View {
         ContentUnavailableView {
             Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
         } description: {
-            Text("Selecione um arquivo **OFX**. A conta e o banco são detectados automaticamente; transações duplicadas (mesmo FITID) são marcadas no preview.")
+            Text("Selecione um arquivo **OFX** (extrato bancário) ou **CSV** (fatura de cartão Inter). Para OFX, conta e banco são detectados automaticamente. Para CSV de cartão, escolha a conta-cartão de destino no preview.")
         } actions: {
             Button("Escolher arquivo") { fileImporterShown = true }
                 .buttonStyle(.borderedProminent)
@@ -429,6 +450,300 @@ private struct OFXRowView: View {
             return name
         }
         return row.derived.description
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "dd/MM/yyyy"
+        return f
+    }()
+
+    private static let currencyFormatter: NumberFormatter = {
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        f.locale = Locale(identifier: "pt_BR")
+        return f
+    }()
+}
+
+// MARK: - CSV review (fatura de cartão — Fase 4.5)
+
+/// Tela de preview da fatura CSV importada. Diferença principal pro OFX:
+/// uma única conta, picker manual (só contas-cartão), e info de quantas
+/// linhas com valor negativo foram puladas (pagamentos + estornos).
+private struct CSVReviewStepView: View {
+    @Bindable var store: ImportStore
+
+    private var resolution: CSVStatementResolution? {
+        store.csvResolution
+    }
+
+    private var creditCardAccounts: [Account] {
+        store.accounts.filter { $0.type == .creditCard && !$0.archived }
+    }
+
+    private var totalSelected: Int {
+        resolution?.selectedCount ?? 0
+    }
+
+    private var canConfirm: Bool {
+        guard let resolution else { return false }
+        guard totalSelected > 0 else { return false }
+        // Conta existente OU draft com nome não-vazio.
+        if resolution.accountId != nil { return true }
+        if let draft = resolution.draftAccount,
+           !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+        return false
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Card "Conta de destino" + skipped negatives info.
+            VStack(alignment: .leading, spacing: 0) {
+                CSVAccountInfoCard(
+                    store: store,
+                    accounts: creditCardAccounts
+                )
+                if let skipped = resolution?.skippedNegativeCount, skipped > 0 {
+                    skippedBanner(count: skipped)
+                }
+            }
+
+            if let resolution {
+                CSVTransactionsListCard(
+                    resolution: Binding(
+                        get: { resolution },
+                        set: { store.csvResolution = $0 }
+                    )
+                )
+            }
+
+            BottomActionBar(caption: selectionCaption) {
+                Button {
+                    Task { await store.confirmCSVImport() }
+                } label: {
+                    Label(
+                        "Avançar com \(totalSelected) \(totalSelected == 1 ? "transação" : "transações")",
+                        systemImage: "chevron.right.circle.fill"
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!canConfirm)
+            }
+        }
+        .navigationSubtitle(resolution?.sourceFilename ?? "")
+    }
+
+    private var selectionCaption: String {
+        guard let resolution else { return "" }
+        if !resolution.isAccountNew && resolution.accountId == nil {
+            return "Escolha a conta-cartão de destino"
+        }
+        var parts = ["\(totalSelected) \(totalSelected == 1 ? "transação selecionada" : "transações selecionadas")"]
+        if resolution.isAccountNew {
+            parts.append("conta-cartão será criada")
+        }
+        if resolution.duplicateCount > 0 {
+            parts.append("\(resolution.duplicateCount) já \(resolution.duplicateCount == 1 ? "importada" : "importadas")")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func skippedBanner(count: Int) -> some View {
+        Form {
+            Section {
+                Label {
+                    Text("\(count) \(count == 1 ? "linha ignorada" : "linhas ignoradas") (valores negativos: pagamentos da fatura anterior + estornos). Pagamentos serão registrados como transferência no extrato bancário.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollDisabled(true)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Card "Conta de destino" do fluxo CSV. Dois modos:
+/// - **Existente**: nenhuma conta-cartão? Não cai aqui. Há ≥1 → picker.
+/// - **Nova**: nenhuma conta-cartão cadastrada → exibe nome editável,
+///   instituição (Inter por default, do seed), badge "Nova conta". Salva
+///   junto com as transações no commit atômico.
+private struct CSVAccountInfoCard: View {
+    @Bindable var store: ImportStore
+    let accounts: [Account]
+
+    private var resolution: CSVStatementResolution? {
+        store.csvResolution
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                if let draft = resolution?.draftAccount {
+                    // Modo "nova conta" — mesmo padrão do OFX quando a conta
+                    // não existe. Tipo fica fixo em "Cartão de Crédito".
+                    TextField(
+                        "Nome",
+                        text: Binding(
+                            get: { draft.name },
+                            set: { newValue in
+                                store.csvResolution?.draftAccount?.name = newValue
+                            }
+                        ),
+                        prompt: Text("Ex: Cartão Inter")
+                    )
+                    LabeledContent("Tipo") {
+                        Text(AccountType.creditCard.displayName)
+                    }
+                    Picker("Emissor", selection: Binding(
+                        get: { draft.institutionId },
+                        set: { newValue in
+                            store.csvResolution?.draftAccount?.institutionId = newValue
+                        }
+                    )) {
+                        Text("Nenhum").tag(UUID?.none)
+                        ForEach(store.institutions) { inst in
+                            Label(inst.name, systemImage: inst.kind.systemImage)
+                                .tag(UUID?.some(inst.id))
+                        }
+                    }
+                } else {
+                    Picker("Conta-cartão", selection: Binding(
+                        get: { store.csvResolution?.accountId },
+                        set: { newValue in
+                            Task { await store.setCSVAccount(newValue) }
+                        }
+                    )) {
+                        Text("Selecione…").tag(UUID?.none)
+                        ForEach(accounts) { account in
+                            Text(account.name).tag(UUID?.some(account.id))
+                        }
+                    }
+                }
+            } header: {
+                HStack {
+                    Text("Conta de destino")
+                    Spacer()
+                    if resolution?.isAccountNew == true {
+                        Text("Nova conta")
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.success.opacity(0.15))
+                            .foregroundStyle(.success)
+                            .clipShape(Capsule())
+                            .textCase(nil)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .scrollDisabled(true)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// Lista de transações do preview CSV — virtualizada via LazyVStack dentro
+/// de uma Section. Mesma estrutura usada pelo OFX (`TransactionsListCard`),
+/// mas com row própria.
+private struct CSVTransactionsListCard: View {
+    @Binding var resolution: CSVStatementResolution
+
+    private var allSelected: Bool {
+        !resolution.rows.isEmpty && resolution.rows.allSatisfy(\.selected)
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach($resolution.rows) { $row in
+                            CSVRowView(row: $row)
+                                .padding(.vertical, 4)
+                            Divider()
+                        }
+                    }
+                }
+                .listRowInsets(EdgeInsets())
+            } header: {
+                HStack(spacing: 8) {
+                    Text("Transações")
+                    Spacer()
+                    Text("\(resolution.rows.count)")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                    Toggle("", isOn: Binding(
+                        get: { allSelected },
+                        set: { value in
+                            for idx in resolution.rows.indices {
+                                resolution.rows[idx].selected = value
+                            }
+                        }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                    .help(allSelected ? "Desmarcar todas" : "Marcar todas")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .contentMargins(.horizontal, 0, for: .scrollContent)
+        .frame(maxHeight: .infinity)
+    }
+}
+
+private struct CSVRowView: View {
+    @Binding var row: CSVPreviewRow
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.raw.description)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                HStack(spacing: 6) {
+                    Text(Self.dateFormatter.string(from: row.raw.date))
+                        .foregroundStyle(.secondary)
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(Self.currencyFormatter.string(from: row.raw.amount as NSDecimalNumber) ?? "")
+                        .monospacedDigit()
+                        .foregroundStyle(.expense)
+                    if !row.raw.tipo.isEmpty, row.raw.tipo != "Compra à vista" {
+                        Text("·").foregroundStyle(.tertiary)
+                        Text(row.raw.tipo)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .font(.caption)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if row.isDuplicate {
+                Text("Já importada")
+                    .font(.caption.weight(.medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.warning.opacity(0.18))
+                    .foregroundStyle(.secondary)
+                    .clipShape(Capsule())
+            }
+
+            Toggle("", isOn: $row.selected)
+                .toggleStyle(.checkbox)
+                .labelsHidden()
+        }
+        .opacity(row.isDuplicate && !row.selected ? 0.55 : 1.0)
     }
 
     private static let dateFormatter: DateFormatter = {

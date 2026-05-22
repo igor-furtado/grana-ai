@@ -20,6 +20,10 @@ final class ImportStore {
         /// sem esse estado a UI parece travada.
         case loading(progress: String)
         case ofxReview
+        /// Fase 4.5: preview de fatura de cartão importada via CSV (Inter).
+        /// Diferente do OFX, não tem auto-detect — usuário escolhe a conta-cartão
+        /// no próprio preview.
+        case csvReview
         /// Fase 4: rodando categorização da IA pré-commit. Drafts já montados,
         /// transações ainda NÃO foram inseridas no banco.
         case categorizing
@@ -55,6 +59,10 @@ final class ImportStore {
     /// Fluxo OFX.
     private(set) var ofxDocument: OFXDocument?
     var ofxResolutions: [OFXStatementResolution] = []
+
+    /// Fluxo CSV de fatura de cartão (Inter). Diferente do OFX, é uma única
+    /// resolução (uma fatura = uma conta-cartão).
+    var csvResolution: CSVStatementResolution?
 
     private(set) var batches: [ImportBatch] = []
     private(set) var accounts: [Account] = []
@@ -174,7 +182,12 @@ final class ImportStore {
 
         do {
             sourceURL = url
-            try await loadOFX(url: url)
+            let ext = url.pathExtension.lowercased()
+            if ext == "csv" {
+                try await loadCSV(url: url)
+            } else {
+                try await loadOFX(url: url)
+            }
         } catch let error as ImportError {
             phase = .failed(message: error.localizedDescription)
             ErrorCenter.shared.report(error)
@@ -351,6 +364,198 @@ final class ImportStore {
         ))
     }
 
+    // MARK: - CSV de fatura de cartão (Fase 4.5)
+
+    /// Lê CSV de fatura de cartão (Inter) → monta uma única `CSVStatementResolution`
+    /// com as linhas válidas. **Não auto-detecta conta** — o usuário escolhe
+    /// no preview. Sem conta selecionada, o `existing_external_ids` fica vazio
+    /// e o dedup só roda quando o picker é tocado.
+    private func loadCSV(url: URL) async throws {
+        phase = .loading(progress: "Lendo fatura…")
+        let reader = InterCreditCardCSVReader()
+        let statement = try reader.read(from: url)
+
+        // **Resolução de conta destino** — três cenários:
+        // - Nenhuma conta-cartão cadastrada → monta um draft "Cartão Inter"
+        //   (institution = Inter da seed) que será criado no commit atômico.
+        //   Usuário pode renomear no preview antes de confirmar.
+        // - Única conta-cartão cadastrada → pré-seleciona (reduz cliques no
+        //   caso comum).
+        // - Múltiplas → picker manual (nenhuma seleção inicial).
+        let creditCardAccounts = accounts.filter { $0.type == .creditCard && !$0.archived }
+        let initialAccountId: UUID?
+        let draftAccount: CSVDraftAccount?
+        if creditCardAccounts.isEmpty {
+            let interInstitutionId = institutions.first(where: { $0.kind == .inter })?.id
+            draftAccount = CSVDraftAccount(name: "Cartão Inter", institutionId: interInstitutionId)
+            initialAccountId = nil
+        } else {
+            draftAccount = nil
+            initialAccountId = creditCardAccounts.count == 1 ? creditCardAccounts.first?.id : nil
+        }
+
+        let rows: [CSVPreviewRow] = statement.rows.map { raw in
+            let externalId = InterCreditCardCSVReader.makeExternalId(
+                date: raw.date,
+                description: raw.description,
+                amount: raw.amount,
+                tipo: raw.tipo
+            )
+            return CSVPreviewRow(
+                raw: raw,
+                derived: DerivedTransaction(
+                    occurredAt: raw.date,
+                    amount: raw.amount,
+                    description: raw.description,
+                    notes: "\(raw.tipo) · \(raw.interCategory)"
+                ),
+                externalId: externalId,
+                isDuplicate: false,
+                selected: true
+            )
+        }
+
+        var resolution = CSVStatementResolution(
+            sourceFilename: url.lastPathComponent,
+            accountId: initialAccountId,
+            draftAccount: draftAccount,
+            rows: rows,
+            skippedNegativeCount: statement.skippedNegativeCount
+        )
+
+        // Se já existe conta selecionada (single creditCard), roda dedup
+        // imediatamente antes de mostrar o preview. Draft account não tem
+        // transações pra deduplicar contra — pula.
+        if let accId = initialAccountId {
+            resolution = await applyCSVDedup(resolution, accountId: accId)
+        }
+
+        csvResolution = resolution
+        phase = .csvReview
+    }
+
+    /// Re-aplica dedup quando o usuário muda a conta-cartão no picker.
+    /// Sem isso, o preview mostra "Já importada" baseado na conta anterior.
+    func setCSVAccount(_ accountId: UUID?) async {
+        guard var resolution = csvResolution else { return }
+        resolution.accountId = accountId
+
+        if let accId = accountId {
+            resolution = await applyCSVDedup(resolution, accountId: accId)
+        } else {
+            // Sem conta selecionada → limpa flags de duplicata e deixa tudo
+            // selecionado por default.
+            for idx in resolution.rows.indices {
+                resolution.rows[idx].isDuplicate = false
+                resolution.rows[idx].selected = true
+            }
+        }
+        csvResolution = resolution
+    }
+
+    private func applyCSVDedup(
+        _ resolution: CSVStatementResolution,
+        accountId: UUID
+    ) async -> CSVStatementResolution {
+        let existing: Set<String> = (try? await container.transactions.externalIds(forAccount: accountId)) ?? []
+        var updated = resolution
+        for idx in updated.rows.indices {
+            let isDup = existing.contains(updated.rows[idx].externalId)
+            updated.rows[idx].isDuplicate = isDup
+            // Mesma regra do OFX: duplicada começa desligada (usuário re-marca
+            // se quiser forçar re-import).
+            updated.rows[idx].selected = !isDup
+        }
+        return updated
+    }
+
+    /// Confirma o preview CSV. Mesmo padrão do OFX: monta drafts em voo +
+    /// dispara categorização pré-commit. Commit acontece em `finalizeImport()`.
+    /// Se a conta é nova (draft), entra em `pendingAccountsToInsert` pro
+    /// commit atômico criar conta + transações juntas.
+    func confirmCSVImport() async {
+        guard phase == .csvReview else { return }
+        guard let resolution = csvResolution else { return }
+
+        let now = Date()
+
+        // Resolve `accountId` final: existente (escolhido no picker) ou novo
+        // (a partir do draft, criado no commit atômico).
+        let accountId: UUID
+        var accountsToInsert: [Account] = []
+        if let existingId = resolution.accountId {
+            accountId = existingId
+        } else if let draft = resolution.draftAccount {
+            let trimmedName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                phase = .failed(message: ImportError.creditCardAccountUnnamed.localizedDescription)
+                return
+            }
+            let newAccount = Account(
+                id: UUID(),
+                name: trimmedName,
+                type: .creditCard,
+                initialBalance: 0,
+                archived: false,
+                institutionId: draft.institutionId,
+                branchId: nil,
+                accountNumber: nil,
+                currency: "BRL",
+                createdAt: now,
+                updatedAt: now
+            )
+            accountsToInsert.append(newAccount)
+            accountId = newAccount.id
+        } else {
+            phase = .failed(message: ImportError.creditCardAccountNotSelected.localizedDescription)
+            return
+        }
+
+        let toImport = resolution.rows.filter { $0.selected }
+        guard !toImport.isEmpty else {
+            phase = .failed(message: ImportError.noValidRows.localizedDescription)
+            return
+        }
+
+        let batchId = UUID()
+        let batch = ImportBatch(
+            id: batchId,
+            sourceFilename: resolution.sourceFilename,
+            accountId: accountId,
+            rowCount: toImport.count,
+            importedAt: now,
+            createdAt: now,
+            updatedAt: now
+        )
+
+        let drafts: [TransactionDraft] = toImport.map { row in
+            TransactionDraft(
+                id: UUID(),
+                accountId: accountId,
+                importBatchId: batchId,
+                // Compra na fatura é despesa (positivo no CSV após nosso filtro
+                // de negativos). Passamos `signedAmount` positivo — a IA decide
+                // pela descrição/contexto se é expense/income (deve ser expense
+                // em ~100% dos casos pois estornos foram filtrados).
+                signedAmount: row.raw.amount,
+                occurredAt: row.derived.occurredAt,
+                description: row.derived.description,
+                notes: row.derived.notes,
+                externalId: row.externalId,
+                // Categoria do próprio Inter (SUPERMERCADO, TRANSPORTE, BARES…)
+                // como hint pra IA. Não é nossa taxonomia, só contexto.
+                sourceCategoryHint: row.raw.interCategory
+            )
+        }
+
+        pendingDrafts = drafts
+        pendingInstitutionsToInsert = []
+        pendingAccountsToInsert = accountsToInsert
+        pendingBatchesWithDrafts = [(batch, drafts.map(\.id))]
+
+        startCategorization()
+    }
+
     func cancel() {
         categorizationWaitTask?.cancel()
         categorizationWaitTask = nil
@@ -360,6 +565,7 @@ final class ImportStore {
         sourceURL = nil
         ofxDocument = nil
         ofxResolutions = []
+        csvResolution = nil
     }
 
     // MARK: - Confirm OFX (multi-account) → drafts → categorização
@@ -564,16 +770,18 @@ final class ImportStore {
         }
     }
 
-    /// Volta da revisão pra OFX review — usado pelo botão "Voltar" da
-    /// tela de revisão pra ajustar o que vai ser importado antes de finalizar.
-    /// Descarta sugestões em memória (próximo confirm refaz a categorização).
+    /// Volta da revisão pro preview de origem (OFX ou CSV) — usado pelo botão
+    /// "Voltar" da tela de revisão pra ajustar o que vai ser importado antes
+    /// de finalizar. Descarta sugestões em memória (próximo confirm refaz a
+    /// categorização). Detecta a origem pelo que está populado: csvResolution
+    /// presente → CSV; senão → OFX.
     func backToPreviewFromReview() {
         guard phase == .reviewingCategorization || phase == .categorizing else { return }
         categorizationWaitTask?.cancel()
         categorizationWaitTask = nil
         categorization.cancel()
         clearPendingState()
-        phase = .ofxReview
+        phase = csvResolution != nil ? .csvReview : .ofxReview
     }
 
     private func clearPendingState() {
@@ -633,6 +841,54 @@ struct AccountResolution: Equatable {
     var currency: String
 }
 
+// MARK: - CSV resolution data structures (Fase 4.5)
+
+/// Estado do preview de fatura CSV (cartão de crédito). Diferente do OFX,
+/// é um único batch por arquivo (uma fatura = uma conta).
+///
+/// **Modo conta:** `accountId != nil` → usuário escolheu uma conta-cartão
+/// existente; `draftAccount != nil` → nenhuma conta-cartão existia ainda e
+/// vamos criar uma no commit atômico junto com as transações (mesmo padrão
+/// do OFX). Os dois nunca são populados ao mesmo tempo.
+struct CSVStatementResolution: Equatable {
+    let sourceFilename: String
+    /// Conta-cartão existente escolhida pelo usuário. Mutuamente exclusivo
+    /// com `draftAccount`.
+    var accountId: UUID?
+    /// Conta-cartão NOVA a ser criada junto com o import. Populada quando
+    /// nenhuma conta-cartão existia no momento de abrir o arquivo. Nome
+    /// editável no preview; tipo fixo em `.creditCard`.
+    var draftAccount: CSVDraftAccount?
+    var rows: [CSVPreviewRow]
+    /// Quantas linhas com valor negativo (pagamentos da fatura anterior +
+    /// estornos) foram puladas no parse. Reportado na UI pra o usuário
+    /// saber que houve filtro.
+    let skippedNegativeCount: Int
+
+    var selectedCount: Int { rows.filter(\.selected).count }
+    var duplicateCount: Int { rows.filter(\.isDuplicate).count }
+    var isAccountNew: Bool { draftAccount != nil }
+}
+
+/// Esboço da conta-cartão a ser criada junto com o import. Espelha
+/// `AccountResolution` do OFX, mas só com os campos relevantes pra cartão
+/// (sem agência/número — cartão não tem).
+struct CSVDraftAccount: Equatable {
+    var name: String
+    var institutionId: UUID?
+}
+
+struct CSVPreviewRow: Identifiable, Hashable {
+    let id = UUID()
+    let raw: InterCreditCardCSVReader.Row
+    var derived: DerivedTransaction
+    /// External ID sintético construído por `InterCreditCardCSVReader.makeExternalId`.
+    /// Usado pra dedup contra `transactions.external_id` da conta selecionada.
+    let externalId: String
+    var isDuplicate: Bool
+    var selected: Bool
+}
+
 struct OFXPreviewRow: Identifiable, Hashable {
     let id = UUID()
     let raw: OFXTransaction
@@ -643,7 +899,7 @@ struct OFXPreviewRow: Identifiable, Hashable {
     /// transformar em transação.
     var isDuplicate: Bool
     /// ID da categoria raiz vindo da heurística. Resolvido no `ImportStore`,
-    /// não na View, pra evitar passar `container` adiante. Pode ser editado
+    /// não na View, pra evitar passar `database` adiante. Pode ser editado
     /// pelo usuário no preview.
     var categoryId: UUID
     /// Subcategoria opcional. NULL no momento da geração; usuário pode

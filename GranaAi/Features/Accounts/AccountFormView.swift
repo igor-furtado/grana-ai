@@ -4,9 +4,12 @@ import SwiftUI
 /// Form de criação/edição de conta. Modo "novo" se `existing == nil`,
 /// "edição" caso contrário — padrão idêntico ao `TransactionFormView`.
 ///
-/// Quando `type != .wallet` os campos bancários (instituição, agência, número)
-/// aparecem. Carteira não tem banco, então a seção bancária some — evita o
-/// usuário preencher dados que não fazem sentido pra essa categoria.
+/// **Visibilidade da seção "Banco":**
+/// - Carteira: nada (não tem banco).
+/// - Cartão de crédito: só instituição (cartão tem emissor, mas não tem
+///   agência e o número do cartão a gente não pede — sensível e não usado
+///   pra match automático).
+/// - Resto (corrente, poupança, corretora): instituição + agência + número.
 struct AccountFormView: View {
     @Environment(AccountStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -42,7 +45,7 @@ struct AccountFormView: View {
                 }
 
                 if type != .wallet {
-                    Section("Banco") {
+                    Section(type == .creditCard ? "Emissor" : "Banco") {
                         Picker("Instituição", selection: $institutionId) {
                             Text("Nenhuma").tag(UUID?.none)
                             ForEach(store.institutions) { inst in
@@ -50,8 +53,10 @@ struct AccountFormView: View {
                                     .tag(UUID?.some(inst.id))
                             }
                         }
-                        TextField("Agência", text: $branchId, prompt: Text("Ex: 0001-9"))
-                        TextField("Número da conta", text: $accountNumber, prompt: Text("Ex: 310013887"))
+                        if type != .creditCard {
+                            TextField("Agência", text: $branchId, prompt: Text("Ex: 0001-9"))
+                            TextField("Número da conta", text: $accountNumber, prompt: Text("Ex: 310013887"))
+                        }
                         Picker("Moeda", selection: $currency) {
                             Text("BRL").tag("BRL")
                         }
@@ -97,8 +102,12 @@ struct AccountFormView: View {
     private func save() async {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let amount = Decimal(initialBalanceCents) / 100
-        let branch = branchId.trimmingCharacters(in: .whitespaces).isEmpty ? nil : branchId
-        let number = accountNumber.trimmingCharacters(in: .whitespaces).isEmpty ? nil : accountNumber
+        // Cartão de crédito e carteira não usam agência/número — descarta o que
+        // o usuário possa ter digitado antes de trocar o tipo. Evita gravar
+        // dados zumbis que confundem outras buscas (ex: findByBankIdentity).
+        let usesBankIdentity = (type != .wallet && type != .creditCard)
+        let branch = usesBankIdentity && !branchId.trimmingCharacters(in: .whitespaces).isEmpty ? branchId : nil
+        let number = usesBankIdentity && !accountNumber.trimmingCharacters(in: .whitespaces).isEmpty ? accountNumber : nil
         let effectiveInstitution = (type == .wallet) ? nil : institutionId
 
         do {

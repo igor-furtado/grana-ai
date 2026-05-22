@@ -69,6 +69,7 @@ enum CategoryIcon: String, Codable, CaseIterable {
     case helpCircle
     case dice
     case arrowRightLeft
+    case airplane
 
     /// Nome do SF Symbol correspondente, pra usar em `Image(systemName:)`.
     var systemImage: String {
@@ -88,6 +89,7 @@ enum CategoryIcon: String, Codable, CaseIterable {
         case .helpCircle:     "questionmark.circle.fill"
         case .dice:           "dice.fill"
         case .arrowRightLeft: "arrow.left.arrow.right"
+        case .airplane:       "airplane"
         }
     }
 }

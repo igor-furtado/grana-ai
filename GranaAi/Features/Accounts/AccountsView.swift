@@ -137,10 +137,11 @@ private struct AccountRow: View {
         }
         // Sem instituição → ícone por tipo de conta (carteira física, etc.).
         switch account.type {
-        case .wallet:    return "wallet.pass.fill"
-        case .checking:  return "building.columns"
-        case .savings:   return "banknote"
-        case .brokerage: return "chart.line.uptrend.xyaxis"
+        case .wallet:     return "wallet.pass.fill"
+        case .checking:   return "building.columns"
+        case .savings:    return "banknote"
+        case .brokerage:  return "chart.line.uptrend.xyaxis"
+        case .creditCard: return "creditcard.fill"
         }
     }
 

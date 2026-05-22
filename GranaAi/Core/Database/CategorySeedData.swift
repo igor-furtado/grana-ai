@@ -44,6 +44,7 @@ nonisolated enum CategorySeedData {
             "Vendas",
             "Restituição de IR",
             "Cashback",
+            "Reembolso",
         ]),
 
         // MARK: - Despesas
@@ -51,47 +52,39 @@ nonisolated enum CategorySeedData {
             "Roupas e Calçados",
             "Acessórios e Joias",
             "Eletrônicos",
-            "Smartphones e Gadgets",
-            "Cosméticos e Perfumes",
-            "Produtos de Higiene",
+            "Cosméticos e Higiene",
             "Móveis",
             "Decoração",
             "Utensílios Domésticos",
             "Ferramentas",
             "Livros",
-            "Material Escolar",
             "Presentes",
             "Artigos Esportivos",
             "Hobbies e Coleções",
         ]),
 
-        CategorySeedDefinition(slug: "transporte-e-viagem", name: "Transporte e Viagem", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "transporte", name: "Transporte", kind: .expense, subcategories: [
             "Uber e 99",
             "Táxi",
             "Combustível",
-            "Passagens Aéreas",
-            "Passagens de Ônibus",
-            "Passagens de Trem",
-            "Hospedagem",
-            "Hotéis",
-            "Pousadas",
             "Transporte Público",
-            "Metrô e Trem",
             "Manutenção Veículos",
-            "Seguro Veicular",
-            "IPVA",
             "Estacionamento",
             "Pedágio",
+        ]),
+
+        CategorySeedDefinition(slug: "viagem", name: "Viagem", kind: .expense, subcategories: [
+            "Passagens Aéreas",
+            "Passagens de Ônibus",
+            "Hospedagem",
             "Aluguel de Carros",
+            "Pacotes de Viagem",
+            "Bagagem",
         ]),
 
         CategorySeedDefinition(slug: "entretenimento-e-lazer", name: "Entretenimento e Lazer", kind: .expense, subcategories: [
-            "Netflix",
-            "Amazon Prime",
-            "Disney Plus",
-            "Spotify",
-            "Apple Music",
-            "YouTube Premium",
+            "Streaming de Vídeo",
+            "Streaming de Música",
             "Academia",
             "Personal Trainer",
             "Jogos e Aplicativos",
@@ -105,20 +98,14 @@ nonisolated enum CategorySeedData {
 
         CategorySeedDefinition(slug: "alimentacao-e-supermercado", name: "Alimentação e Supermercado", kind: .expense, subcategories: [
             "Supermercados",
-            "Hipermercados",
             "Mercearias",
             "Açougues",
             "Padarias",
-            "Confeitarias",
             "Restaurantes",
             "Lanchonetes",
-            "iFood",
-            "Uber Eats",
-            "Rappi",
-            "Fast Food",
+            "Delivery de Comida",
             "Cafeterias",
             "Bares",
-            "Bebidas Alcoólicas",
             "Hortifrúti",
         ]),
 
@@ -126,13 +113,11 @@ nonisolated enum CategorySeedData {
             "Energia Elétrica",
             "Água e Esgoto",
             "Internet Banda Larga",
-            "Telefone Fixo",
             "Celular",
             "Gás Encanado",
             "Gás de Cozinha",
             "TV por Assinatura",
             "Condomínio",
-            "Administração Predial",
             "Limpeza Doméstica",
             "Jardinagem",
             "Segurança Residencial",
@@ -147,7 +132,6 @@ nonisolated enum CategorySeedData {
             "Financiamento Veicular",
             "Consórcio Imóvel",
             "Consórcio Veículo",
-            "Antecipação Saque Aniversário",
             "Empréstimo Consignado",
             "Cheque Especial",
             "Juros e Multas",
@@ -159,10 +143,8 @@ nonisolated enum CategorySeedData {
             "Consultas Dentárias",
             "Psicoterapia",
             "Fisioterapia",
-            "Medicamentos",
-            "Farmácias",
-            "Exames Laboratoriais",
-            "Exames de Imagem",
+            "Farmácias e Medicamentos",
+            "Exames",
             "Cirurgias",
             "Emergências Médicas",
             "Óculos e Lentes",
@@ -172,13 +154,11 @@ nonisolated enum CategorySeedData {
 
         CategorySeedDefinition(slug: "seguros", name: "Seguros", kind: .expense, subcategories: [
             "Seguro de Vida",
-            "Seguro de Automóvel",
+            "Seguro Veicular",
             "Seguro Residencial",
-            "Seguro Saúde",
             "Seguro Viagem",
             "Seguro Celular",
-            "Seguro Prestamista",
-            "Seguro Acidentes Pessoais",
+            "Outros Seguros",
         ]),
 
         CategorySeedDefinition(slug: "investimentos-e-poupanca", name: "Investimentos e Poupança", kind: .expense, subcategories: [
@@ -192,8 +172,6 @@ nonisolated enum CategorySeedData {
             "ETFs",
             "Previdência Privada",
             "Criptomoedas",
-            "Corretoras",
-            "Bancos de Investimento",
         ]),
 
         CategorySeedDefinition(slug: "impostos-e-taxas", name: "Impostos e Taxas", kind: .expense, subcategories: [
@@ -208,7 +186,6 @@ nonisolated enum CategorySeedData {
             "IOF",
             "INSS Autônomo",
             "ISS",
-            "Certidões",
         ]),
 
         CategorySeedDefinition(slug: "saques-e-atm", name: "Saques e ATM", kind: .expense, subcategories: [
@@ -221,19 +198,12 @@ nonisolated enum CategorySeedData {
         ]),
 
         CategorySeedDefinition(slug: "nao-classificado", name: "Não Classificado", kind: .expense, subcategories: [
-            "Transação Desconhecida",
-            "Requer Análise Manual",
-            "Transação Suspeita",
-            "Categoria Indefinida",
+            "Pendente de Revisão",
         ]),
 
         CategorySeedDefinition(slug: "jogos-e-apostas", name: "Jogos e Apostas", kind: .expense, subcategories: [
-            "Steam",
-            "Epic Games",
-            "Battle.net",
-            "Jogos Online",
-            "Mega Sena",
-            "Lotofácil",
+            "Lojas de Jogos",
+            "Loterias",
         ]),
 
         // MARK: - Transferências
@@ -242,11 +212,8 @@ nonisolated enum CategorySeedData {
             "PIX Recebido",
             "TED Enviada",
             "TED Recebida",
-            "DOC Enviado",
-            "DOC Recebido",
             "Transferência entre Contas",
             "Transferência Internacional",
-            "Remessa Familiar",
             "Depósito em Conta",
         ]),
     ]

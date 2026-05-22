@@ -27,6 +27,7 @@ extension CategoryIcon {
         case .helpCircle:     Color(red: 0.561, green: 0.522, blue: 0.494)  // warm gray
         case .dice:           Color(red: 0.396, green: 0.580, blue: 0.620)  // dusty cyan
         case .arrowRightLeft: .transfer
+        case .airplane:       Color(red: 0.486, green: 0.561, blue: 0.741)  // dusty blue
         }
     }
 }

@@ -32,6 +32,30 @@
 
 ---
 
+## Fase 4.5 — Cartões de Crédito
+
+**Objetivo:** modelar cartão de crédito como **conta de passivo separada**, com cada compra detalhada e categorizada individualmente — pagamento de fatura vira transferência entre contas próprias. Hoje a fatura inteira cai como uma única despesa "Cartão de Crédito" na corrente, escondendo o detalhamento e contabilizando o gasto no mês do pagamento em vez do mês da compra.
+
+**Entregáveis:**
+- Novo `AccountType.creditCard` (display "Cartão de Crédito"). `AccountFormView` aceita o tipo.
+- Saldo do cartão é negativo quando há fatura aberta = dívida. Somatório de saldos das contas reflete patrimônio líquido real.
+- `InterCreditCardCSVReader`: parser dedicado ao CSV de fatura do Inter (esquema fixo conhecido, **não** reintroduz o framework genérico de CSV removido na Fase 3). Cada linha vira `TransactionDraft` na conta-cartão.
+- Pipeline de import reaproveitado (preview, dedup, categorização IA, commit transacional via `writeTransaction`).
+- IA recebe contexto da conta-cartão pra categorizar cada compra como despesa real (não como transferência) — `ownAccounts` já passado no prompt na Fase 4 facilita a regra.
+- Pagamento da fatura: usuário marca **manualmente** a transação "PAGAMENTO CARTAO X" do extrato bancário como `transferencias / Transferência entre Contas` apontando pra conta-cartão de destino. Zera no dashboard, abate dívida do cartão.
+- Faturas antigas (pré-feature): permanecem como despesa única na corrente (Opção A — sem migração retroativa).
+
+**Sem isto, não avança:** importar fatura do Inter → ver as compras detalhadas, categorizadas, no mês correto do dashboard; ver saldo do cartão refletindo a dívida atual.
+
+**TODOs / melhorias futuras (não bloqueiam a fase):**
+- Auto-detect do pagamento da fatura: regra que casa "pagamento cartão + banco + valor próximo ao saldo do cartão" → sugere transferência automaticamente em vez do usuário marcar manual.
+- Campos extras do cartão na `Account`: `creditLimit`, `statementClosingDay`, `paymentDueDay`. Habilita UI específica (próxima fatura, dias até vencimento, % de limite usado).
+- Parsers de CSV/OFX de cartão pra outros bancos (Nubank, Bradesco, etc.) — só quando houver demanda real.
+- UI dedicada de cartão (visão "próxima fatura" agregando despesas do ciclo atual antes do fechamento).
+- Migração retroativa opcional de faturas antigas (Opção B): wizard que ajuda a importar histórico e remarcar pagamentos passados como transferência.
+
+---
+
 ## Fase 5 — Sync via PowerSync + Supabase
 
 **Objetivo:** dados ficam num backend remoto (Postgres via Supabase) com sync bidirecional, garantindo backup off-machine e abrindo caminho pra outros clientes no futuro se o roadmap mudar.

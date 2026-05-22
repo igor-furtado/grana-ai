@@ -129,7 +129,7 @@ O target tem essa build setting ativa (vem do template do Xcode 26). Consequênc
 - App lê e escreve sempre no PowerSync local. Nunca toca o Supabase diretamente pra dados sincronizados.
 - Operações Supabase diretas (via `supabase-swift`) só pra: login/auth, e operações que ficam fora do escopo de sync (futuro).
 - UI reativa via `watch()` queries — quando dados mudam (local ou via sync), a stream emite e a View re-renderiza.
-- **Repositories vivem dentro do `AppDatabase`** (`database.transactions`, `database.accounts`, etc.) enquanto a superfície é pequena. Quando crescer (provavelmente Fase 6 com holdings/quotes/assets), refatorar pra `RepositoryContainer` separado.
+- **Repositories ficam expostos em `AppContainer`** (`container.transactions`, `container.accounts`, etc.) — Composition Root da camada de dados. Stores recebem o `AppContainer` no init. Quando crescer (provavelmente Fase 6 com holdings/quotes/assets) ou se precisarmos trocar a implementação por mocks em testes, refatorar pra protocols + implementações separadas por feature. Detalhes em [ARCHITECTURE.md](./ARCHITECTURE.md).
 
 ### Estados do app por conexão
 - **Online + autenticado:** sync rodando, mudanças propagam em tempo real.
@@ -145,7 +145,7 @@ GranaAi/
 │   ├── ContentView.swift
 │   └── AppEnvironment.swift
 ├── Core/                   # Infra que não muda com features
-│   ├── Database/           # PowerSync setup, schema, AppDatabase, Converters, Seed
+│   ├── Database/           # PowerSync setup, schema, AppContainer (Composition Root), Converters, Seed
 │   ├── Import/             # CSVReader, XLSXReader, OFXReader, ImportParser, OFXCategoryHeuristic
 │   ├── Sync/               # SupabaseConnector (stub até Fase 5)
 │   ├── Auth/               # AuthService (entra na Fase 5)

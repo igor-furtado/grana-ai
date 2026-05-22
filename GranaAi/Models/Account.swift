@@ -54,13 +54,15 @@ enum AccountType: String, Codable, CaseIterable {
     case savings
     case wallet
     case brokerage
+    case creditCard
 
     var displayName: String {
         switch self {
-        case .checking:  "Conta Corrente"
-        case .savings:   "Poupança"
-        case .wallet:    "Carteira"
-        case .brokerage: "Conta Corretora"
+        case .checking:   "Conta Corrente"
+        case .savings:    "Poupança"
+        case .wallet:     "Carteira"
+        case .brokerage:  "Conta Corretora"
+        case .creditCard: "Cartão de Crédito"
         }
     }
 }
