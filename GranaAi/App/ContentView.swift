@@ -34,7 +34,7 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
         switch self {
         case .dashboard: "Dashboard"
         case .summary: "Resumo"
-        case .transactions: "Extrato"
+        case .transactions: "Transações"
         case .creditCards: "Cartões de crédito"
         case .accounts: "Contas"
         case .planning: "Planejamento"
@@ -66,7 +66,7 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
 }
 
 /// Grupo de itens da sidebar. `title` nulo significa "sem header" — usado
-/// no primeiro bloco (Dashboard, Resumo, Extrato, etc.) que fica solto no
+/// no primeiro bloco (Dashboard, Resumo, Transações, etc.) que fica solto no
 /// topo sem rótulo.
 struct SidebarGroup: Identifiable {
     let title: String?
@@ -80,7 +80,7 @@ struct ContentView: View {
     @Environment(AppEnvironment.self) private var environment
 
     /// Override de tema válido só pra sessão atual (não persistido). Toda
-    /// abertura do app começa em `nil` (segue o sistema); o botão do topo
+    /// abertura do app começa em `nil` (segue o sistema); o botão no rodapé
     /// da sidebar flipa pra `.light`/`.dark` e o estado se perde ao fechar.
     @State private var themeOverride: ColorScheme?
 
@@ -211,8 +211,6 @@ struct ContentView: View {
         }
     }
 
-    /// Lista flat ordenada na sequência visual da sidebar. Usada só pra
-    /// resolver "próximo / anterior" no `onMoveCommand`.
     private var orderedSections: [AppSection] {
         AppSection.groups.flatMap(\.items)
     }

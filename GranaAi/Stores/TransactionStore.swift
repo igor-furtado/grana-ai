@@ -184,6 +184,10 @@ final class TransactionStore {
         accounts.first { $0.id == id }
     }
 
+    func institution(for id: UUID) -> Institution? {
+        institutions.first { $0.id == id }
+    }
+
     /// Nome derivado da conta — espelha `AccountStore.displayName(for:)`. Cada
     /// store tem sua cópia porque carrega institutions sob demanda da feature.
     func displayName(for account: Account) -> String {
