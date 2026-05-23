@@ -74,7 +74,7 @@ struct OFXReaderTests {
 
     @Test("Header é parseado (versão, encoding, charset)")
     func parsesHeader() throws {
-        let doc = try reader.read(data: sampleOFX.data(using: .ascii)!)
+        let doc = try reader.read(data: #require(sampleOFX.data(using: .ascii)))
         #expect(doc.version == "102")
         #expect(doc.encoding == "USASCII")
         #expect(doc.charset == "1252")
@@ -82,7 +82,7 @@ struct OFXReaderTests {
 
     @Test("Lê um STMTRS com identidade bancária correta")
     func parsesStatement() throws {
-        let doc = try reader.read(data: sampleOFX.data(using: .ascii)!)
+        let doc = try reader.read(data: #require(sampleOFX.data(using: .ascii)))
         try #require(doc.statements.count == 1)
 
         let stmt = doc.statements[0]
@@ -99,7 +99,7 @@ struct OFXReaderTests {
 
     @Test("Lê transações com sinal, descrição e FITID")
     func parsesTransactions() throws {
-        let doc = try reader.read(data: sampleOFX.data(using: .ascii)!)
+        let doc = try reader.read(data: #require(sampleOFX.data(using: .ascii)))
         let stmt = doc.statements[0]
         try #require(stmt.transactions.count == 2)
 
@@ -118,7 +118,7 @@ struct OFXReaderTests {
 
     @Test("Saldo final é extraído")
     func parsesBalance() throws {
-        let doc = try reader.read(data: sampleOFX.data(using: .ascii)!)
+        let doc = try reader.read(data: #require(sampleOFX.data(using: .ascii)))
         let stmt = doc.statements[0]
         let bal = try #require(stmt.balance)
         #expect(bal.amount == Decimal(string: "783.59"))
@@ -156,7 +156,7 @@ struct OFXReaderTests {
         </BANKMSGSRSV1>
         </OFX>
         """
-        let doc = try reader.read(data: ofx.data(using: .ascii)!)
+        let doc = try reader.read(data: #require(ofx.data(using: .ascii)))
         #expect(doc.statements.count == 2)
         #expect(doc.statements[0].account.accountId == "111")
         #expect(doc.statements[1].account.accountId == "222")
@@ -202,7 +202,6 @@ struct OFXReaderTests {
 
 @Suite("OFXCategoryHeuristic")
 struct OFXCategoryHeuristicTests {
-
     private func makeHeuristic(
         unclassified: UUID = UUID(),
         transfers: UUID? = UUID(),

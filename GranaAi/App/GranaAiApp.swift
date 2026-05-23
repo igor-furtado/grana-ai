@@ -3,9 +3,9 @@ import SwiftUI
 
 @main
 struct GranaAiApp: App {
-    // Inicializamos o environment uma única vez aqui. Se a inicialização do banco
-    // falhar, registramos o erro e seguimos com um environment "vazio" — mais à frente
-    // (Fase 5) o app exigirá auth e teremos uma tela de erro dedicada.
+    /// Inicializamos o environment uma única vez aqui. Se a inicialização do banco
+    /// falhar, registramos o erro e seguimos com um environment "vazio" — mais à frente
+    /// (Fase 5) o app exigirá auth e teremos uma tela de erro dedicada.
     @State private var environment: AppEnvironment
 
     init() {

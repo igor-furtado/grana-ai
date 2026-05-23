@@ -17,13 +17,13 @@ final class CategorizationCorrectionRepository: Sendable {
     func insert(_ correction: CategorizationCorrection) async throws {
         try await db.execute(
             sql: """
-                INSERT INTO categorization_corrections
-                    (id, description_hash, normalized_description,
-                     original_category_id, original_subcategory_id,
-                     corrected_category_id, corrected_subcategory_id,
-                     transaction_id, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+            INSERT INTO categorization_corrections
+                (id, description_hash, normalized_description,
+                 original_category_id, original_subcategory_id,
+                 corrected_category_id, corrected_subcategory_id,
+                 transaction_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             parameters: [
                 correction.id.uuidString,
                 correction.descriptionHash,
@@ -43,10 +43,10 @@ final class CategorizationCorrectionRepository: Sendable {
     func recent(limit: Int) async throws -> [CategorizationCorrection] {
         try await db.getAll(
             sql: """
-                SELECT * FROM categorization_corrections
-                ORDER BY created_at DESC
-                LIMIT ?
-                """,
+            SELECT * FROM categorization_corrections
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
             parameters: [Int64(limit)],
             mapper: Self.mapCorrection
         )
@@ -55,9 +55,9 @@ final class CategorizationCorrectionRepository: Sendable {
     func getAll() async throws -> [CategorizationCorrection] {
         try await db.getAll(
             sql: """
-                SELECT * FROM categorization_corrections
-                ORDER BY created_at DESC
-                """,
+            SELECT * FROM categorization_corrections
+            ORDER BY created_at DESC
+            """,
             parameters: [],
             mapper: Self.mapCorrection
         )
@@ -116,10 +116,10 @@ final class CategorizationCorrectionRepository: Sendable {
             throw DatabaseError.invalidDate(column: "created_at", value: createdAtString)
         }
 
-        return CategorizationCorrection(
+        return try CategorizationCorrection(
             id: id,
-            descriptionHash: try cursor.getString(name: "description_hash"),
-            normalizedDescription: try cursor.getString(name: "normalized_description"),
+            descriptionHash: cursor.getString(name: "description_hash"),
+            normalizedDescription: cursor.getString(name: "normalized_description"),
             originalCategoryId: originalCategoryId,
             originalSubcategoryId: originalSubcategoryId,
             correctedCategoryId: correctedCategoryId,

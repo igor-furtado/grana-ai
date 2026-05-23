@@ -52,14 +52,14 @@ struct CategoriesView: View {
         // pra ~163 categorias do seed, mas evita degradação se o roadmap
         // permitir o usuário criar categorias custom.
         let byKind = Dictionary(grouping: categories, by: \.kind)
-        let income   = makeBucket(from: byKind[.income]   ?? [])
-        let expense  = makeBucket(from: byKind[.expense]  ?? [])
+        let income = makeBucket(from: byKind[.income] ?? [])
+        let expense = makeBucket(from: byKind[.expense] ?? [])
         let transfer = makeBucket(from: byKind[.transfer] ?? [])
 
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                kindBlock("Receitas",       bucket: income,   color: .income)
-                kindBlock("Despesas",       bucket: expense,  color: .expense)
+                kindBlock("Receitas", bucket: income, color: .income)
+                kindBlock("Despesas", bucket: expense, color: .expense)
                 kindBlock("Transferências", bucket: transfer, color: .transfer)
             }
             .padding()
@@ -76,7 +76,6 @@ struct CategoriesView: View {
     ///
     /// Trade-off: perdemos resize de coluna e header clicável que `Table`
     /// dá de graça. Pra uma tela read-only de inspeção isso não custa nada.
-    @ViewBuilder
     private func kindBlock(_ title: String, bucket: KindBucket, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             // `bucket.rootCount` é calculado uma vez em `makeBucket`,
@@ -143,8 +142,8 @@ struct CategoriesView: View {
         }
     }
 
-    private static let iconColumnWidth: CGFloat      = 56
-    private static let colorColumnWidth: CGFloat     = 80
+    private static let iconColumnWidth: CGFloat = 56
+    private static let colorColumnWidth: CGFloat = 80
     private static let rowHorizontalPadding: CGFloat = 12
 
     /// Achata a hierarquia raiz→subs (já filtradas por kind pelo caller)
@@ -179,12 +178,12 @@ struct CategoriesView: View {
     private func watch() async {
         do {
             for try await rows in try environment.container.categories.watchAll() {
-                self.categories = rows
+                categories = rows
             }
         } catch is CancellationError {
             // .task cancelado pela SwiftUI — comportamento esperado.
         } catch {
-            self.loadError = error
+            loadError = error
             ErrorCenter.shared.report(error)
         }
     }
@@ -217,8 +216,13 @@ private struct CategoryRow: Identifiable {
         self.subCount = subCount
     }
 
-    var id: UUID { category.id }
-    var isRoot: Bool { parent == nil }
+    var id: UUID {
+        category.id
+    }
+
+    var isRoot: Bool {
+        parent == nil
+    }
 
     /// Ícone "efetivo": se for raiz, usa o próprio; se for sub, herda do pai.
     var effectiveIcon: CategoryIcon? {

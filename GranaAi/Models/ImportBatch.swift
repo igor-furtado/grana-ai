@@ -3,7 +3,7 @@ import Foundation
 /// Uma execução de importação OFX. Existe pra dois motivos: rastrear *de onde*
 /// veio cada transaction (`Transaction.importBatchId`) e permitir desfazer um
 /// import inteiro como unidade (DELETE em cascata).
-struct ImportBatch: Identifiable, Codable, Hashable, Sendable {
+struct ImportBatch: Identifiable, Codable, Hashable {
     let id: UUID
     var sourceFilename: String
     var accountId: UUID

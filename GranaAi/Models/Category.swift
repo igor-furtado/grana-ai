@@ -36,8 +36,8 @@ enum CategoryKind: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .expense:  "Despesa"
-        case .income:   "Receita"
+        case .expense: "Despesa"
+        case .income: "Receita"
         case .transfer: "Transferência"
         }
     }
@@ -74,22 +74,22 @@ enum CategoryIcon: String, Codable, CaseIterable {
     /// Nome do SF Symbol correspondente, pra usar em `Image(systemName:)`.
     var systemImage: String {
         switch self {
-        case .dollarSign:     "dollarsign.circle.fill"
-        case .shoppingBag:    "bag.fill"
-        case .car:            "car.fill"
-        case .monitor:        "tv.fill"
-        case .utensils:       "fork.knife"
-        case .zap:            "bolt.fill"
-        case .creditCard:     "creditcard.fill"
-        case .heart:          "heart.fill"
-        case .shield:         "shield.fill"
-        case .trendingUp:     "chart.line.uptrend.xyaxis"
-        case .fileText:       "doc.text.fill"
-        case .banknote:       "banknote.fill"
-        case .helpCircle:     "questionmark.circle.fill"
-        case .dice:           "dice.fill"
+        case .dollarSign: "dollarsign.circle.fill"
+        case .shoppingBag: "bag.fill"
+        case .car: "car.fill"
+        case .monitor: "tv.fill"
+        case .utensils: "fork.knife"
+        case .zap: "bolt.fill"
+        case .creditCard: "creditcard.fill"
+        case .heart: "heart.fill"
+        case .shield: "shield.fill"
+        case .trendingUp: "chart.line.uptrend.xyaxis"
+        case .fileText: "doc.text.fill"
+        case .banknote: "banknote.fill"
+        case .helpCircle: "questionmark.circle.fill"
+        case .dice: "dice.fill"
         case .arrowRightLeft: "arrow.left.arrow.right"
-        case .airplane:       "airplane"
+        case .airplane: "airplane"
         }
     }
 }

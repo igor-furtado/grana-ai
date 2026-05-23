@@ -7,12 +7,14 @@ import SwiftUI
 enum IncomeVsExpenseMode: String, CaseIterable, Identifiable {
     case both, income, expense
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
-        case .both:    "Ambos"
-        case .income:  "Receitas"
+        case .both: "Ambos"
+        case .income: "Receitas"
         case .expense: "Despesas"
         }
     }
@@ -29,7 +31,7 @@ struct IncomeVsExpenseChart: View {
 
     private struct Point: Hashable {
         let month: Date
-        let label: String   // "Receita" | "Despesa"
+        let label: String // "Receita" | "Despesa"
         let value: Decimal
     }
 
@@ -101,12 +103,12 @@ struct IncomeVsExpenseChart: View {
     let today = Date()
     let startOfThisMonth = cal.date(from: cal.dateComponents([.year, .month], from: today))!
 
-    let samples: [MonthlyKindTotal] = (0..<8).reversed().map { offset in
+    let samples: [MonthlyKindTotal] = (0 ..< 8).reversed().map { offset in
         let month = cal.date(byAdding: .month, value: -offset, to: startOfThisMonth)!
         return MonthlyKindTotal(
             monthStart: month,
-            income:  Decimal(5000 + Int.random(in: -800...800)),
-            expense: Decimal(3500 + Int.random(in: -1200...1500))
+            income: Decimal(5000 + Int.random(in: -800 ... 800)),
+            expense: Decimal(3500 + Int.random(in: -1200 ... 1500))
         )
     }
 

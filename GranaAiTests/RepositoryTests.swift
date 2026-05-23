@@ -10,7 +10,6 @@ import Testing
 /// Banco some quando a instância é desalocada.
 @Suite("TransactionRepository (in-memory)")
 struct TransactionRepositoryTests {
-
     private func makeDatabase() -> any PowerSyncDatabaseProtocol {
         PowerSyncDatabase(
             schema: appSchema,
@@ -19,10 +18,10 @@ struct TransactionRepositoryTests {
         )
     }
 
-    // `Transaction` é ambíguo aqui: nosso struct (GranaAi.Transaction) e o
-    // protocolo `Transaction` do PowerSync (usado em `writeTransaction`) têm
-    // o mesmo nome. No app principal nosso tipo ganha por ser do mesmo módulo,
-    // mas no target de testes ambos vêm via `import` — precisa qualificar.
+    /// `Transaction` é ambíguo aqui: nosso struct (GranaAi.Transaction) e o
+    /// protocolo `Transaction` do PowerSync (usado em `writeTransaction`) têm
+    /// o mesmo nome. No app principal nosso tipo ganha por ser do mesmo módulo,
+    /// mas no target de testes ambos vêm via `import` — precisa qualificar.
     private func sampleTransaction(
         accountId: UUID = UUID(),
         categoryId: UUID = UUID(),
@@ -105,8 +104,8 @@ struct TransactionRepositoryTests {
         let repo = TransactionRepository(db: db)
 
         let now = Date()
-        let one   = sampleTransaction(occurredAt: now.addingTimeInterval(-3600),  description: "1h atrás")
-        let two   = sampleTransaction(occurredAt: now,                            description: "agora")
+        let one = sampleTransaction(occurredAt: now.addingTimeInterval(-3600), description: "1h atrás")
+        let two = sampleTransaction(occurredAt: now, description: "agora")
         let three = sampleTransaction(occurredAt: now.addingTimeInterval(-86400), description: "ontem")
 
         try await repo.insert(one)
@@ -126,7 +125,6 @@ struct TransactionRepositoryTests {
 
 @Suite("Seed (in-memory)")
 struct SeedTests {
-
     @Test("Seed insere contas e categorias quando vazio")
     func seedRunsOnEmptyDatabase() async throws {
         let powerSyncDb = PowerSyncDatabase(
@@ -149,9 +147,15 @@ struct SeedTests {
         // AppContainer em testes (refatorar pra injeção de deps quando crescer).
         let now = Date()
         try await accounts.insert(
-            Account(id: UUID(), name: "Carteira",
-                    type: .wallet, initialBalance: 0,
-                    archived: false, createdAt: now, updatedAt: now)
+            Account(
+                id: UUID(),
+                name: "Carteira",
+                type: .wallet,
+                initialBalance: 0,
+                archived: false,
+                createdAt: now,
+                updatedAt: now
+            )
         )
 
         let fetched = try await accounts.getAll()

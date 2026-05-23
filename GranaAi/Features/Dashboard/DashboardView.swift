@@ -50,7 +50,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private func content(store: DashboardStore) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -152,7 +151,6 @@ struct DashboardView: View {
         }
     }
 
-    @ViewBuilder
     private func chartCard<Content: View>(
         _ title: String,
         @ViewBuilder content: () -> Content
@@ -163,7 +161,6 @@ struct DashboardView: View {
     /// Sobrecarga que aceita conteúdo "trailing" no header (ex: um `Picker`
     /// de modo). Mantém o callsite limpo: cards simples seguem usando a
     /// versão de 1 argumento, cards interativos passam o trailing.
-    @ViewBuilder
     private func chartCard<Trailing: View, Content: View>(
         _ title: String,
         @ViewBuilder trailing: () -> Trailing,

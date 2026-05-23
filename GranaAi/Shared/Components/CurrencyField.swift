@@ -69,16 +69,25 @@ struct CurrencyTextField: NSViewRepresentable {
         }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
 
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: CurrencyTextField
         var isEditing = false
 
-        init(parent: CurrencyTextField) { self.parent = parent }
+        init(parent: CurrencyTextField) {
+            self.parent = parent
+        }
 
-        func controlTextDidBeginEditing(_ obj: Notification) { isEditing = true }
-        func controlTextDidEndEditing(_ obj: Notification) { isEditing = false }
+        func controlTextDidBeginEditing(_ obj: Notification) {
+            isEditing = true
+        }
+
+        func controlTextDidEndEditing(_ obj: Notification) {
+            isEditing = false
+        }
 
         /// Dispara a cada keystroke. Pegamos o conteúdo do field editor,
         /// extraímos só os dígitos, reformatamos, e reescrevemos — assim o

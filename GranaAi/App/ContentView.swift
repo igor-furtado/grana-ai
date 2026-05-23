@@ -19,7 +19,9 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
     case categories
     case institutions
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     static let groups: [SidebarGroup] = [
         SidebarGroup(title: nil, items: [.dashboard, .summary, .transactions, .creditCards, .accounts]),
@@ -30,35 +32,35 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .dashboard:      "Dashboard"
-        case .summary:        "Resumo"
-        case .transactions:   "Extrato"
-        case .creditCards:    "Cartões de crédito"
-        case .accounts:       "Contas"
-        case .planning:       "Planejamento"
-        case .savings:        "Cofrinho"
-        case .investments:    "Investimentos"
-        case .import:         "Importar dados"
+        case .dashboard: "Dashboard"
+        case .summary: "Resumo"
+        case .transactions: "Extrato"
+        case .creditCards: "Cartões de crédito"
+        case .accounts: "Contas"
+        case .planning: "Planejamento"
+        case .savings: "Cofrinho"
+        case .investments: "Investimentos"
+        case .import: "Importar dados"
         case .categorization: "Categorização"
-        case .categories:     "Categorias"
-        case .institutions:   "Instituições"
+        case .categories: "Categorias"
+        case .institutions: "Instituições"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .dashboard:      "chart.pie"
-        case .summary:        "doc.text"
-        case .transactions:   "list.bullet.rectangle"
-        case .creditCards:    "creditcard"
-        case .accounts:       "wallet.pass"
-        case .planning:       "target"
-        case .savings:        "banknote"
-        case .investments:    "chart.line.uptrend.xyaxis"
-        case .import:         "tray.and.arrow.down"
+        case .dashboard: "chart.pie"
+        case .summary: "doc.text"
+        case .transactions: "list.bullet.rectangle"
+        case .creditCards: "creditcard"
+        case .accounts: "wallet.pass"
+        case .planning: "target"
+        case .savings: "banknote"
+        case .investments: "chart.line.uptrend.xyaxis"
+        case .import: "tray.and.arrow.down"
         case .categorization: "sparkles"
-        case .categories:     "tag"
-        case .institutions:   "building.columns"
+        case .categories: "tag"
+        case .institutions: "building.columns"
         }
     }
 }
@@ -69,7 +71,9 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
 struct SidebarGroup: Identifiable {
     let title: String?
     let items: [AppSection]
-    var id: String { title ?? "_top" }
+    var id: String {
+        title ?? "_top"
+    }
 }
 
 struct ContentView: View {
@@ -95,18 +99,18 @@ struct ContentView: View {
         } detail: {
             Group {
                 switch selection {
-                case .dashboard:      DashboardView()
-                case .summary:        placeholder(for: .summary)
-                case .transactions:   TransactionsView()
-                case .creditCards:    placeholder(for: .creditCards)
-                case .accounts:       AccountsView()
-                case .planning:       placeholder(for: .planning)
-                case .savings:        placeholder(for: .savings)
-                case .investments:    placeholder(for: .investments)
-                case .import:         ImportHistoryView()
+                case .dashboard: DashboardView()
+                case .summary: placeholder(for: .summary)
+                case .transactions: TransactionsView()
+                case .creditCards: placeholder(for: .creditCards)
+                case .accounts: AccountsView()
+                case .planning: placeholder(for: .planning)
+                case .savings: placeholder(for: .savings)
+                case .investments: placeholder(for: .investments)
+                case .import: ImportHistoryView()
                 case .categorization: CategorizationSettingsView()
-                case .categories:     CategoriesView()
-                case .institutions:   SupportedInstitutionsView()
+                case .categories: CategoriesView()
+                case .institutions: SupportedInstitutionsView()
                 }
             }
             .tint(.brandSecondary)
@@ -217,13 +221,12 @@ struct ContentView: View {
         let ordered = orderedSections
         guard let idx = ordered.firstIndex(of: selection) else { return }
         switch direction {
-        case .up   where idx > 0:                 selection = ordered[idx - 1]
+        case .up where idx > 0: selection = ordered[idx - 1]
         case .down where idx < ordered.count - 1: selection = ordered[idx + 1]
         default: break
         }
     }
 
-    @ViewBuilder
     private func placeholder(for section: AppSection) -> some View {
         ContentUnavailableView(
             section.title,

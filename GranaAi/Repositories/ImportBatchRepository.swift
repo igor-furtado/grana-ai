@@ -14,11 +14,11 @@ final class ImportBatchRepository: Sendable {
     func insert(_ batch: ImportBatch) async throws {
         try await db.execute(
             sql: """
-                INSERT INTO import_batches
-                    (id, source_filename, account_id, row_count, imported_at,
-                     created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
+            INSERT INTO import_batches
+                (id, source_filename, account_id, row_count, imported_at,
+                 created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
             parameters: [
                 batch.id.uuidString,
                 batch.sourceFilename,
@@ -99,11 +99,11 @@ final class ImportBatchRepository: Sendable {
             throw DatabaseError.invalidDate(column: "updated_at", value: updatedAtString)
         }
 
-        return ImportBatch(
+        return try ImportBatch(
             id: id,
-            sourceFilename: try cursor.getString(name: "source_filename"),
+            sourceFilename: cursor.getString(name: "source_filename"),
             accountId: accountId,
-            rowCount: Int(try cursor.getInt64(name: "row_count")),
+            rowCount: Int(cursor.getInt64(name: "row_count")),
             importedAt: importedAt,
             createdAt: createdAt,
             updatedAt: updatedAt

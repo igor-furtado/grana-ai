@@ -11,10 +11,10 @@ final class InstitutionRepository: Sendable {
     func insert(_ institution: Institution) async throws {
         try await db.execute(
             sql: """
-                INSERT INTO institutions
-                    (id, code, name, kind, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
+            INSERT INTO institutions
+                (id, code, name, kind, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
             parameters: [
                 institution.id.uuidString,
                 institution.code,
@@ -29,10 +29,10 @@ final class InstitutionRepository: Sendable {
     func update(_ institution: Institution) async throws {
         try await db.execute(
             sql: """
-                UPDATE institutions SET
-                    code = ?, name = ?, kind = ?, updated_at = ?
-                WHERE id = ?
-                """,
+            UPDATE institutions SET
+                code = ?, name = ?, kind = ?, updated_at = ?
+            WHERE id = ?
+            """,
             parameters: [
                 institution.code,
                 institution.name,
@@ -94,10 +94,10 @@ final class InstitutionRepository: Sendable {
         guard let updatedAt = Converters.stringToDate(updatedAtString) else {
             throw DatabaseError.invalidDate(column: "updated_at", value: updatedAtString)
         }
-        return Institution(
+        return try Institution(
             id: id,
-            code: try cursor.getString(name: "code"),
-            name: try cursor.getString(name: "name"),
+            code: cursor.getString(name: "code"),
+            name: cursor.getString(name: "name"),
             kind: kind,
             createdAt: createdAt,
             updatedAt: updatedAt

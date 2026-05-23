@@ -4,12 +4,11 @@ import Testing
 
 @Suite("Converters")
 struct ConvertersTests {
-
     // MARK: - decimalToCents / centsToDecimal
 
     @Test("Roundtrip valores simples")
     func roundtripSimple() {
-        let values: [Decimal] = [0, 1, 10, 100, 1_000, 9_999_999]
+        let values: [Decimal] = [0, 1, 10, 100, 1000, 9_999_999]
         for v in values {
             let cents = Converters.decimalToCents(v)
             #expect(Converters.centsToDecimal(cents) == v)
@@ -24,12 +23,12 @@ struct ConvertersTests {
         // direto em base 10) ou via `Decimal(N) / 100`. É como nossos Decimals
         // nascem em produção (sempre de `Int/100`, nunca de literal float).
         let cases: [(String, Int64)] = [
-            ("0.01",    1),
-            ("0.10",    10),
-            ("1.00",    100),
-            ("1.50",    150),
-            ("12.34",   1234),
-            ("1234.56", 123456),
+            ("0.01", 1),
+            ("0.10", 10),
+            ("1.00", 100),
+            ("1.50", 150),
+            ("12.34", 1234),
+            ("1234.56", 123_456),
         ]
         for (decimalString, expectedCents) in cases {
             let decimal = try #require(Decimal(string: decimalString))

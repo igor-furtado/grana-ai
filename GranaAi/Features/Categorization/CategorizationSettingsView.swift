@@ -32,23 +32,27 @@ struct CategorizationSettingsView: View {
                     title: "Confiança para auto-aprovar",
                     help: "Sugestões da IA acima deste valor são aplicadas automaticamente, sem revisão.",
                     value: $autoApproved,
-                    range: 0.5...1.0
+                    range: 0.5 ... 1.0
                 )
                 thresholdRow(
                     title: "Confiança para revisão",
                     help: "Sugestões entre este valor e o de auto-aprovação entram na fila de revisão. Abaixo, ficam em 'Não Classificado'.",
                     value: $reviewRequired,
-                    range: 0.3...0.95
+                    range: 0.3 ... 0.95
                 )
-                Text("Atual: ≥ \(percent(autoApproved)) auto-aplica · ≥ \(percent(reviewRequired)) revisar · abaixo cai em Não Classificado.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Atual: ≥ \(percent(autoApproved)) auto-aplica · ≥ \(percent(reviewRequired)) revisar · abaixo cai em Não Classificado."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             } header: {
                 Text("Confiança")
             } footer: {
-                Text("Valores recomendados: auto-aprovar 0.85, revisão 0.70. Ajuste pra cima se a IA estiver errando muito; pra baixo se você confia bastante no acerto.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    "Valores recomendados: auto-aprovar 0.85, revisão 0.70. Ajuste pra cima se a IA estiver errando muito; pra baixo se você confia bastante no acerto."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section("Manutenção") {
@@ -58,10 +62,12 @@ struct CategorizationSettingsView: View {
                     Label("Recategorizar transações antigas", systemImage: "wand.and.stars")
                 }
                 .disabled(isRunning)
-                Text("Reprocessa todas as transações que ainda estão em 'Não Classificado'. Usa o cache atual + correções recentes.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let store, case .classifying(let processed, let total, let message) = store.status {
+                Text(
+                    "Reprocessa todas as transações que ainda estão em 'Não Classificado'. Usa o cache atual + correções recentes."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                if let store, case let .classifying(processed, total, message) = store.status {
                     ProgressView(
                         value: Double(processed),
                         total: Double(max(total, 1))
@@ -70,7 +76,7 @@ struct CategorizationSettingsView: View {
                             .font(.caption)
                     }
                 }
-                if let store, case .failed(let message) = store.status {
+                if let store, case let .failed(message) = store.status {
                     Text(message).foregroundStyle(.red).font(.caption)
                 }
             }
@@ -95,7 +101,6 @@ struct CategorizationSettingsView: View {
         }
     }
 
-    @ViewBuilder
     private func thresholdRow(
         title: String,
         help: String,

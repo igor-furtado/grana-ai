@@ -41,11 +41,11 @@ struct AppErrorPresentation: Equatable {
     /// rótulos em PT-BR; tipos desconhecidos viram "Erro inesperado".
     private static func defaultTitle(for error: Error) -> String {
         switch error {
-        case is DatabaseError:        return "Erro no banco"
-        case is ImportError:          return "Erro na importação"
-        case is AIError:              return "Erro na IA"
-        case is CategorizationError:  return "Erro na categorização"
-        default:                      return "Erro inesperado"
+        case is DatabaseError: return "Erro no banco"
+        case is ImportError: return "Erro na importação"
+        case is AIError: return "Erro na IA"
+        case is CategorizationError: return "Erro na categorização"
+        default: return "Erro inesperado"
         }
     }
 }

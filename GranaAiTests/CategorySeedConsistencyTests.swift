@@ -10,7 +10,6 @@ import Testing
 /// o drift em CI antes de subir.
 @Suite("CategorySeedData ↔ CategoryIcon+Slug consistency")
 struct CategorySeedConsistencyTests {
-
     @Test("toda raiz do seed tem ícone resolvido pelo mapping")
     func everySeedSlugHasIcon() {
         for definition in CategorySeedData.categories {

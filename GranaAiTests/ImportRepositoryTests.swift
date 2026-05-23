@@ -5,7 +5,6 @@ import Testing
 
 @Suite("ImportBatchRepository (in-memory)")
 struct ImportBatchRepositoryTests {
-
     private func makeDatabase() -> any PowerSyncDatabaseProtocol {
         PowerSyncDatabase(
             schema: appSchema,
@@ -146,7 +145,6 @@ struct ImportBatchRepositoryTests {
 
 @Suite("TransactionRepository.insertBatch + findPotentialDuplicates")
 struct TransactionRepositoryImportTests {
-
     private func makeDatabase() -> any PowerSyncDatabaseProtocol {
         PowerSyncDatabase(
             schema: appSchema,
@@ -178,7 +176,7 @@ struct TransactionRepositoryImportTests {
             updatedAt: now
         )
 
-        let transactions: [GranaAi.Transaction] = (0..<3).map { i in
+        let transactions: [GranaAi.Transaction] = (0 ..< 3).map { i in
             GranaAi.Transaction(
                 id: UUID(),
                 accountId: accountId,
@@ -217,27 +215,27 @@ struct TransactionRepositoryImportTests {
         // O ponto deste teste é exatamente comparação por dia LOCAL — não
         // pelo dia UTC do timestamp.
         var spCalendar = Calendar(identifier: .gregorian)
-        spCalendar.timeZone = TimeZone(identifier: "America/Sao_Paulo")!
+        spCalendar.timeZone = try #require(TimeZone(identifier: "America/Sao_Paulo"))
 
         var components = DateComponents(
             calendar: spCalendar,
             timeZone: TimeZone(identifier: "America/Sao_Paulo"),
             year: 2026, month: 3, day: 15, hour: 10, minute: 0
         )
-        let morning = components.date!
+        let morning = try #require(components.date)
         components.hour = 23
         components.minute = 30
-        let nightSameDay = components.date!
+        let nightSameDay = try #require(components.date)
         components.day = 16
-        let nextDay = components.date!
+        let nextDay = try #require(components.date)
 
         // Existing transaction às 10h.
-        let existing = GranaAi.Transaction(
+        let existing = try GranaAi.Transaction(
             id: UUID(),
             accountId: accountId,
             categoryId: categoryId,
             subcategoryId: nil,
-            amount: Decimal(string: "123.45")!,
+            amount: #require(Decimal(string: "123.45")),
             occurredAt: morning,
             description: "Mercado XYZ",
             notes: nil,
@@ -248,7 +246,7 @@ struct TransactionRepositoryImportTests {
         try await repo.insert(existing)
 
         // Mesmo dia, mesmo valor, mesma descrição → match.
-        let amountCents = Converters.decimalToCents(Decimal(string: "123.45")!)
+        let amountCents = try Converters.decimalToCents(#require(Decimal(string: "123.45")))
         let matches = try await repo.findPotentialDuplicates(
             date: nightSameDay,
             amountCents: amountCents,
@@ -291,7 +289,6 @@ struct TransactionRepositoryImportTests {
 
 @Suite("ImportTemplateRepository (in-memory)")
 struct ImportTemplateRepositoryTests {
-
     private func makeDatabase() -> any PowerSyncDatabaseProtocol {
         PowerSyncDatabase(
             schema: appSchema,

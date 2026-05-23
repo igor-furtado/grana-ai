@@ -11,10 +11,10 @@ final class CategoryRepository: Sendable {
     func insert(_ category: Category) async throws {
         try await db.execute(
             sql: """
-                INSERT INTO categories
-                    (id, parent_id, name, kind, slug, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
+            INSERT INTO categories
+                (id, parent_id, name, kind, slug, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
             parameters: [
                 category.id.uuidString,
                 category.parentId?.uuidString,
@@ -64,10 +64,10 @@ final class CategoryRepository: Sendable {
     func findRootByName(_ name: String) async throws -> Category? {
         try await db.getOptional(
             sql: """
-                SELECT * FROM categories
-                WHERE parent_id IS NULL AND name = ?
-                LIMIT 1
-                """,
+            SELECT * FROM categories
+            WHERE parent_id IS NULL AND name = ?
+            LIMIT 1
+            """,
             parameters: [name],
             mapper: Self.mapCategory
         )
@@ -109,10 +109,10 @@ final class CategoryRepository: Sendable {
             throw DatabaseError.invalidDate(column: "created_at", value: createdAtString)
         }
 
-        return Category(
+        return try Category(
             id: id,
             parentId: parentId,
-            name: try cursor.getString(name: "name"),
+            name: cursor.getString(name: "name"),
             kind: kind,
             slug: slug,
             createdAt: createdAt

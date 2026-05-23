@@ -79,14 +79,14 @@ final class DashboardStore {
             // Cards do topo: rodam em qualquer escopo de filtro.
             async let balanceTask = computeTotalBalance()
             async let expensesTask = container.transactions.sum(kind: .expense, from: from, to: to)
-            async let incomeTask   = container.transactions.sum(kind: .income,  from: from, to: to)
+            async let incomeTask = container.transactions.sum(kind: .income, from: from, to: to)
 
             let (balance, expenses, income) =
                 try await (balanceTask, expensesTask, incomeTask)
 
-            self.totalBalance = balance
-            self.periodExpenses = expenses
-            self.periodIncome = income
+            totalBalance = balance
+            periodExpenses = expenses
+            periodIncome = income
 
             switch filter.scope {
             case .singleMonth:
@@ -97,9 +97,9 @@ final class DashboardStore {
                     kind: .expense, from: from, to: to
                 )
                 let (byCategory, byWeekday) = try await (byCategoryTask, byWeekdayTask)
-                self.expensesByCategory = byCategory
-                self.weekdayExpenses = byWeekday
-                self.monthlyByKind = []
+                expensesByCategory = byCategory
+                weekdayExpenses = byWeekday
+                monthlyByKind = []
 
             case .multiMonth:
                 // `totalsByCategory` na janela 6/12m dá o acumulado por
@@ -113,14 +113,14 @@ final class DashboardStore {
                 )
                 let (byCategory, monthlyKind) =
                     try await (byCategoryTask, monthlyByKindTask)
-                self.expensesByCategory = byCategory
-                self.monthlyByKind = monthlyKind
-                self.weekdayExpenses = []
+                expensesByCategory = byCategory
+                monthlyByKind = monthlyKind
+                weekdayExpenses = []
             }
 
-            self.lastError = nil
+            lastError = nil
         } catch {
-            self.lastError = error
+            lastError = error
             ErrorCenter.shared.report(error)
         }
     }
@@ -137,7 +137,7 @@ final class DashboardStore {
         let lifetimeTo = Date.distantFuture
 
         async let initialTask = container.accounts.sumInitialBalance()
-        async let incomeTask = container.transactions.sum(kind: .income,  from: lifetimeFrom, to: lifetimeTo)
+        async let incomeTask = container.transactions.sum(kind: .income, from: lifetimeFrom, to: lifetimeTo)
         async let expenseTask = container.transactions.sum(kind: .expense, from: lifetimeFrom, to: lifetimeTo)
 
         let (initial, income, expense) = try await (initialTask, incomeTask, expenseTask)

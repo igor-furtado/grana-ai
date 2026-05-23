@@ -14,16 +14,15 @@ import OSLog
 ///
 /// **`nonisolated`:** chamado do service rodando off-main.
 nonisolated enum CategorizationPrompt {
-
     /// Item de input pra IA — descrição + valor + data + conta por linha.
-    struct Item: Sendable, Encodable {
+    struct Item: Encodable {
         let index: Int
         let description: String
         /// Valor com sinal pra IA inferir kind do contexto (CSV/XLSX trazem
         /// sinal antes de normalizar; isso ajuda o modelo a decidir income vs
         /// expense quando a descrição é ambígua, ex: "PIX RECEBIDO" vs "PIX ENVIADO").
         let signedAmount: String
-        let date: String   // "yyyy-MM-dd"
+        let date: String // "yyyy-MM-dd"
         /// Conta onde a transação está sendo registrada (nome + tipo). Permite
         /// à IA entender o contexto: ex. uma compra dentro de uma conta-cartão
         /// nunca é transferência — é despesa direta no cartão.
@@ -46,31 +45,31 @@ nonisolated enum CategorizationPrompt {
 
     /// Few-shot pulled da tabela `categorization_corrections`. Slug em vez de
     /// UUID pra alinhar com o output esperado.
-    struct FewShotExample: Sendable {
+    struct FewShotExample {
         let normalizedDescription: String
         let correctedCategorySlug: String
         let correctedSubcategoryName: String?
     }
 
     /// Categoria raiz exposta pro modelo (resolução slug→UUID acontece no service).
-    struct CategoryOption: Sendable {
+    struct CategoryOption {
         let slug: String
         let name: String
-        let kind: String           // "expense" | "income" | "transfer"
+        let kind: String // "expense" | "income" | "transfer"
         let subcategories: [String]
     }
 
     /// Conta do usuário exposta pro modelo. Serve pra decidir se uma
     /// transação é transferência entre contas próprias (raiz `transferencias`)
     /// ou movimento com terceiro (categoriza pela natureza).
-    struct OwnAccountInfo: Sendable {
+    struct OwnAccountInfo {
         let name: String
-        let typeDisplay: String          // "Conta Corrente", "Poupança", etc
+        let typeDisplay: String // "Conta Corrente", "Poupança", etc
         let institutionName: String?
     }
 
     /// Empacota tudo que o `ClaudeCLIClient.runStructured(...)` precisa.
-    struct CLIInvocation: Sendable {
+    struct CLIInvocation {
         let systemPrompt: String
         let userPrompt: String
         let jsonSchema: String
@@ -102,7 +101,10 @@ nonisolated enum CategorizationPrompt {
     ) -> String {
         var lines: [String] = []
         lines.append("Você classifica transações financeiras pessoais em pt-BR.")
-        lines.append("SAÍDA: UM objeto JSON apenas, sem markdown, sem texto antes/depois. Chave `results` = array, um item por transação de entrada.")
+        lines
+            .append(
+                "SAÍDA: UM objeto JSON apenas, sem markdown, sem texto antes/depois. Chave `results` = array, um item por transação de entrada."
+            )
         lines.append("")
         lines.append("CAMPOS DE SAÍDA:")
         lines.append("- `category_slug`: slug exato da raiz (não o nome).")
@@ -113,13 +115,25 @@ nonisolated enum CategorizationPrompt {
         lines.append("CAMPOS DE ENTRADA:")
         lines.append("- `signed_amount`: positivo=entrada (income), negativo=saída (expense).")
         lines.append("- `account_context` (nome · tipo da conta):")
-        lines.append("    · Cartão de Crédito → toda compra é despesa direta pela natureza. NUNCA `transferencias`. IOF/tarifas → `impostos-e-taxas`.")
+        lines
+            .append(
+                "    · Cartão de Crédito → toda compra é despesa direta pela natureza. NUNCA `transferencias`. IOF/tarifas → `impostos-e-taxas`."
+            )
         lines.append("    · Demais contas → segue a regra de `transferencias` abaixo.")
-        lines.append("- `source_hint` (opcional, categoria do banco origem): dica forte pra desambiguar. Mapeie: SUPERMERCADO/RESTAURANTES/BARES→`alimentacao-e-supermercado` · TRANSPORTE→`transporte` · VIAGEM→`viagem` · DROGARIA/SAUDE→`saude-e-medicina` · ENTRETENIMENTO/CULTURA→`entretenimento-e-lazer` · VESTUARIO/COMPRAS/CONSTRUCAO→`compras-pessoais` · SERVICOS→`contas-e-servicos` ou `compras-pessoais` pelo contexto · PAGAMENTOS→avalie · OUTROS→ignore. Se a descrição contradiz o hint claramente, siga a descrição.")
+        lines
+            .append(
+                "- `source_hint` (opcional, categoria do banco origem): dica forte pra desambiguar. Mapeie: SUPERMERCADO/RESTAURANTES/BARES→`alimentacao-e-supermercado` · TRANSPORTE→`transporte` · VIAGEM→`viagem` · DROGARIA/SAUDE→`saude-e-medicina` · ENTRETENIMENTO/CULTURA→`entretenimento-e-lazer` · VESTUARIO/COMPRAS/CONSTRUCAO→`compras-pessoais` · SERVICOS→`contas-e-servicos` ou `compras-pessoais` pelo contexto · PAGAMENTOS→avalie · OUTROS→ignore. Se a descrição contradiz o hint claramente, siga a descrição."
+            )
         lines.append("")
         lines.append("REGRA CRÍTICA — `transferencias` (sai do dashboard, USE COM CUIDADO):")
-        lines.append("- USE apenas quando a descrição indica movimentação entre contas DO USUÁRIO listadas abaixo: contraparte bate com nome/instituição de uma conta listada; OU termos \"transferência entre contas\", \"TED própria\"; OU \"aplicação/resgate <produto>\" com conta listada pra esse produto.")
-        lines.append("- NÃO USE quando: contraparte é terceiro (pessoa, empresa, comércio, empregador, governo) → classifique pela natureza · pagamento de fatura de cartão → `creditos-e-emprestimos`/\"Cartão de Crédito\" · investimento sem conta listada pro produto → saída vira `investimentos-e-poupanca`, entrada vira `renda-e-pagamentos`/\"Juros de Investimentos\" ou \"Dividendos\" · descrição genérica \"PIX RECEBIDO/ENVIADO\" sem contraparte → `nao-classificado` confidence baixa.")
+        lines
+            .append(
+                "- USE apenas quando a descrição indica movimentação entre contas DO USUÁRIO listadas abaixo: contraparte bate com nome/instituição de uma conta listada; OU termos \"transferência entre contas\", \"TED própria\"; OU \"aplicação/resgate <produto>\" com conta listada pra esse produto."
+            )
+        lines
+            .append(
+                "- NÃO USE quando: contraparte é terceiro (pessoa, empresa, comércio, empregador, governo) → classifique pela natureza · pagamento de fatura de cartão → `creditos-e-emprestimos`/\"Cartão de Crédito\" · investimento sem conta listada pro produto → saída vira `investimentos-e-poupanca`, entrada vira `renda-e-pagamentos`/\"Juros de Investimentos\" ou \"Dividendos\" · descrição genérica \"PIX RECEBIDO/ENVIADO\" sem contraparte → `nao-classificado` confidence baixa."
+            )
         lines.append("- Em dúvida, NÃO use `transferencias` — errar pela natureza é melhor que sumir do dashboard.")
         lines.append("")
 
@@ -152,7 +166,10 @@ nonisolated enum CategorizationPrompt {
         var sections: [String] = []
 
         if !fewShots.isEmpty {
-            sections.append("Exemplos de correções recentes do usuário (use-as como referência forte para padrões semelhantes):")
+            sections
+                .append(
+                    "Exemplos de correções recentes do usuário (use-as como referência forte para padrões semelhantes):"
+                )
             var fewShotLines: [String] = []
             for shot in fewShots {
                 var line = "- \"\(shot.normalizedDescription)\" → \(shot.correctedCategorySlug)"
@@ -174,7 +191,7 @@ nonisolated enum CategorizationPrompt {
         guard let payloadString = String(data: payload, encoding: .utf8) else {
             throw AIError.decoding(
                 NSError(domain: "CategorizationPrompt", code: 0, userInfo: [
-                    NSLocalizedDescriptionKey: "Falha ao serializar transações para o prompt"
+                    NSLocalizedDescriptionKey: "Falha ao serializar transações para o prompt",
                 ])
             )
         }
@@ -201,28 +218,28 @@ nonisolated enum CategorizationPrompt {
                         "properties": [
                             "index": [
                                 "type": "integer",
-                                "description": "Índice da transação no input."
+                                "description": "Índice da transação no input.",
                             ],
                             "category_slug": [
                                 "type": "string",
-                                "description": "Slug exato da categoria raiz da taxonomia."
+                                "description": "Slug exato da categoria raiz da taxonomia.",
                             ],
                             "subcategory_name": [
                                 "type": ["string", "null"],
-                                "description": "Nome exato da subcategoria, opcional."
+                                "description": "Nome exato da subcategoria, opcional.",
                             ],
                             "confidence": [
                                 "type": "number",
                                 "minimum": 0.0,
                                 "maximum": 1.0,
-                                "description": "Confiança da classificação entre 0 e 1."
-                            ]
+                                "description": "Confiança da classificação entre 0 e 1.",
+                            ],
                         ],
-                        "required": ["index", "category_slug", "confidence"]
-                    ]
-                ]
+                        "required": ["index", "category_slug", "confidence"],
+                    ],
+                ],
             ],
-            "required": ["results"]
+            "required": ["results"],
         ]
 
         let data = try JSONSerialization.data(withJSONObject: schema, options: [.sortedKeys])
@@ -235,7 +252,7 @@ nonisolated enum CategorizationPrompt {
     // MARK: - Parsing da resposta
 
     /// Resultado decodificado do JSON estruturado.
-    struct ClassificationResult: Sendable, Hashable {
+    struct ClassificationResult: Hashable {
         let index: Int
         let categorySlug: String
         let subcategoryName: String?
@@ -282,12 +299,16 @@ nonisolated enum CategorizationPrompt {
         }
 
         if let extracted = extractFirstJSONObject(from: data),
-           let decoded = try? decoder.decode(StructuredResponse.self, from: extracted) {
+           let decoded = try? decoder.decode(StructuredResponse.self, from: extracted)
+        {
             return decoded.results.map(Self.normalize)
         }
 
         let preview = String(data: data, encoding: .utf8)?.prefix(500) ?? "<não-UTF8>"
-        log.ai.error("CategorizationPrompt: resposta não-JSON do Claude CLI — preview: \(String(preview), privacy: .public)")
+        log.ai
+            .error(
+                "CategorizationPrompt: resposta não-JSON do Claude CLI — preview: \(String(preview), privacy: .public)"
+            )
         throw AIError.decoding(firstError)
     }
 
@@ -334,7 +355,7 @@ nonisolated enum CategorizationPrompt {
             case "}":
                 depth -= 1
                 if depth == 0, let start = startIndex {
-                    let slice = text[start...index]
+                    let slice = text[start ... index]
                     return Data(slice.utf8)
                 }
             default:

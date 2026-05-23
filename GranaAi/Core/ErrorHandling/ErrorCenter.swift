@@ -67,7 +67,9 @@ final class ErrorCenter {
 
     /// Limpa tudo. Usado em previews/testes; produção raramente precisa.
     func dismissAll() {
-        for task in autoDismissTasks.values { task.cancel() }
+        for task in autoDismissTasks.values {
+            task.cancel()
+        }
         autoDismissTasks.removeAll()
         notices.removeAll()
     }
@@ -92,7 +94,8 @@ final class ErrorCenter {
         notices.append(notice)
 
         if let underlying {
-            log.ui.error("ErrorCenter: \(title, privacy: .public) — \(String(describing: underlying), privacy: .public)")
+            log.ui
+                .error("ErrorCenter: \(title, privacy: .public) — \(String(describing: underlying), privacy: .public)")
         } else {
             log.ui.error("ErrorCenter: \(title, privacy: .public) — \(message, privacy: .public)")
         }

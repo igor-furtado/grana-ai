@@ -22,16 +22,15 @@ import Foundation
 /// com valor negativo é pulada**. Conta quantas foram puladas pra reportar
 /// na UI.
 struct InterCreditCardCSVReader {
-
     /// Resultado da leitura: linhas válidas (todas positivas) + contagem de
     /// linhas negativas puladas + ano/mês inferido da maior data do arquivo
     /// (usado pro batch tag, não pra filtro).
-    struct Statement: Sendable {
+    struct Statement {
         let rows: [Row]
         let skippedNegativeCount: Int
     }
 
-    struct Row: Sendable, Hashable {
+    struct Row: Hashable {
         let date: Date
         let description: String
         /// Categoria do Inter (SUPERMERCADO, TRANSPORTE, etc). Mantida como
@@ -121,7 +120,7 @@ struct InterCreditCardCSVReader {
         // Strip BOM (EF BB BF) se presente.
         var bytes = data
         if bytes.count >= 3, bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
-            bytes = bytes.subdata(in: 3..<bytes.count)
+            bytes = bytes.subdata(in: 3 ..< bytes.count)
         }
 
         guard let utf8 = String(data: bytes, encoding: .utf8) else {
@@ -133,7 +132,8 @@ struct InterCreditCardCSVReader {
         // se o conteúdo for Latin-1 puro disfarçado de UTF-8), decoda esses
         // bytes como UTF-8.
         if let latin1Bytes = utf8.data(using: .isoLatin1, allowLossyConversion: false),
-           let recovered = String(data: latin1Bytes, encoding: .utf8) {
+           let recovered = String(data: latin1Bytes, encoding: .utf8)
+        {
             return recovered
         }
 
@@ -273,9 +273,8 @@ struct InterCreditCardCSVReader {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         // Regex `\s+` cobre NBSP também — `isWhitespace` na lib do Swift
         // inclui NBSP.
-        let collapsed = trimmed.split(whereSeparator: { $0.isWhitespace })
+        return trimmed.split(whereSeparator: { $0.isWhitespace })
             .joined(separator: " ")
-        return collapsed
     }
 
     /// `external_id` sintético pra dedup. O CSV do Inter não tem ID único

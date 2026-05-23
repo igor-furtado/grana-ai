@@ -20,10 +20,10 @@ final class CategorizationCacheRepository: Sendable {
     func lookup(descriptionHash: String, model: String) async throws -> CategorizationCacheEntry? {
         try await db.getOptional(
             sql: """
-                SELECT * FROM categorization_cache
-                WHERE description_hash = ? AND model = ?
-                LIMIT 1
-                """,
+            SELECT * FROM categorization_cache
+            WHERE description_hash = ? AND model = ?
+            LIMIT 1
+            """,
             parameters: [descriptionHash, model],
             mapper: Self.mapEntry
         )
@@ -39,9 +39,9 @@ final class CategorizationCacheRepository: Sendable {
         // hashes + model como parâmetros — ainda blindado contra injection.
         let placeholders = Array(repeating: "?", count: descriptionHashes.count).joined(separator: ", ")
         let sql = """
-            SELECT * FROM categorization_cache
-            WHERE description_hash IN (\(placeholders)) AND model = ?
-            """
+        SELECT * FROM categorization_cache
+        WHERE description_hash IN (\(placeholders)) AND model = ?
+        """
         var parameters: [(any Sendable)?] = descriptionHashes.map { $0 as any Sendable }
         parameters.append(model)
 
@@ -110,11 +110,11 @@ final class CategorizationCacheRepository: Sendable {
     // MARK: - SQL/mapper
 
     private nonisolated static let insertSQL = """
-        INSERT INTO categorization_cache
-            (id, description_hash, normalized_description, category_id,
-             subcategory_id, confidence, model, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
+    INSERT INTO categorization_cache
+        (id, description_hash, normalized_description, category_id,
+         subcategory_id, confidence, model, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
 
     private nonisolated static func insertParameters(for entry: CategorizationCacheEntry) -> [(any Sendable)?] {
         [
@@ -161,14 +161,14 @@ final class CategorizationCacheRepository: Sendable {
             throw DatabaseError.invalidDate(column: "updated_at", value: updatedAtString)
         }
 
-        return CategorizationCacheEntry(
+        return try CategorizationCacheEntry(
             id: id,
-            descriptionHash: try cursor.getString(name: "description_hash"),
-            normalizedDescription: try cursor.getString(name: "normalized_description"),
+            descriptionHash: cursor.getString(name: "description_hash"),
+            normalizedDescription: cursor.getString(name: "normalized_description"),
             categoryId: categoryId,
             subcategoryId: subcategoryId,
-            confidence: try cursor.getDouble(name: "confidence"),
-            model: try cursor.getString(name: "model"),
+            confidence: cursor.getDouble(name: "confidence"),
+            model: cursor.getString(name: "model"),
             createdAt: createdAt,
             updatedAt: updatedAt
         )

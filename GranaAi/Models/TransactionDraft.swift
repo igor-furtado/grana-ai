@@ -12,7 +12,7 @@ import Foundation
 /// **`id` já fixado**: gerado quando o draft é criado, propagado pra
 /// `Transaction.id` no commit. Permite usar o mesmo UUID em
 /// `CategorizationSuggestion.transactionId` durante a revisão.
-struct TransactionDraft: Sendable, Identifiable, Hashable {
+struct TransactionDraft: Identifiable, Hashable {
     let id: UUID
     let accountId: UUID
     let importBatchId: UUID

@@ -19,22 +19,22 @@ enum PeriodFilter: Hashable, Identifiable {
 
     var id: String {
         switch self {
-        case .currentMonth:  "current"
+        case .currentMonth: "current"
         case .previousMonth: "previous"
-        case .last6Months:   "last6"
-        case .last12Months:  "last12"
-        case .custom(let from, let to):
+        case .last6Months: "last6"
+        case .last12Months: "last12"
+        case let .custom(from, to):
             "custom-\(from.timeIntervalSince1970)-\(to.timeIntervalSince1970)"
         }
     }
 
     var displayName: String {
         switch self {
-        case .currentMonth:  "Mês atual"
+        case .currentMonth: "Mês atual"
         case .previousMonth: "Mês anterior"
-        case .last6Months:   "Últimos 6 meses"
-        case .last12Months:  "Últimos 12 meses"
-        case .custom:        "Customizado"
+        case .last6Months: "Últimos 6 meses"
+        case .last12Months: "Últimos 12 meses"
+        case .custom: "Customizado"
         }
     }
 
@@ -45,7 +45,7 @@ enum PeriodFilter: Hashable, Identifiable {
     var scope: Scope {
         switch self {
         case .currentMonth, .previousMonth, .custom: .singleMonth
-        case .last6Months,  .last12Months:           .multiMonth
+        case .last6Months, .last12Months: .multiMonth
         }
     }
 
@@ -79,7 +79,7 @@ enum PeriodFilter: Hashable, Identifiable {
             return rollingMonths(count: 6, calendar: calendar, today: today)
         case .last12Months:
             return rollingMonths(count: 12, calendar: calendar, today: today)
-        case .custom(let from, let to):
+        case let .custom(from, to):
             return (from, to)
         }
     }

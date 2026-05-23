@@ -20,25 +20,25 @@ extension CategoryIcon {
 
     private static let slugToIcon: [String: CategoryIcon] = [
         // Receitas
-        "renda-e-pagamentos":          .dollarSign,
+        "renda-e-pagamentos": .dollarSign,
 
         // Despesas
-        "compras-pessoais":            .shoppingBag,
-        "transporte":                  .car,
-        "viagem":                      .airplane,
-        "entretenimento-e-lazer":      .monitor,
-        "alimentacao-e-supermercado":  .utensils,
-        "contas-e-servicos":           .zap,
-        "creditos-e-emprestimos":      .creditCard,
-        "saude-e-medicina":            .heart,
-        "seguros":                     .shield,
-        "investimentos-e-poupanca":    .trendingUp,
-        "impostos-e-taxas":            .fileText,
-        "saques-e-atm":                .banknote,
-        "nao-classificado":            .helpCircle,
-        "jogos-e-apostas":             .dice,
+        "compras-pessoais": .shoppingBag,
+        "transporte": .car,
+        "viagem": .airplane,
+        "entretenimento-e-lazer": .monitor,
+        "alimentacao-e-supermercado": .utensils,
+        "contas-e-servicos": .zap,
+        "creditos-e-emprestimos": .creditCard,
+        "saude-e-medicina": .heart,
+        "seguros": .shield,
+        "investimentos-e-poupanca": .trendingUp,
+        "impostos-e-taxas": .fileText,
+        "saques-e-atm": .banknote,
+        "nao-classificado": .helpCircle,
+        "jogos-e-apostas": .dice,
 
         // Transferências
-        "transferencias":              .arrowRightLeft,
+        "transferencias": .arrowRightLeft,
     ]
 }

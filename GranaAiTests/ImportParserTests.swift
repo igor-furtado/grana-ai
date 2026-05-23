@@ -4,7 +4,6 @@ import Testing
 
 @Suite("ImportParser")
 struct ImportParserTests {
-
     private func makeParser(
         amount: Int? = 2,
         debit: Int? = nil,
@@ -32,7 +31,7 @@ struct ImportParserTests {
     // MARK: - parseBRLAmount
 
     @Test("Valor BRL com R$ e separador de milhar")
-    func brlWithThousands() throws {
+    func brlWithThousands() {
         let locale = Locale(identifier: "pt_BR")
         #expect(ImportParser.parseBRLAmount("R$ 1.234,56", locale: locale) == Decimal(string: "1234.56"))
         #expect(ImportParser.parseBRLAmount("1.234,56", locale: locale) == Decimal(string: "1234.56"))
@@ -40,21 +39,21 @@ struct ImportParserTests {
     }
 
     @Test("Valor com parênteses vira negativo")
-    func parenthesesNegative() throws {
+    func parenthesesNegative() {
         let locale = Locale(identifier: "pt_BR")
         #expect(ImportParser.parseBRLAmount("(123,45)", locale: locale) == Decimal(string: "-123.45"))
         #expect(ImportParser.parseBRLAmount("(R$ 1.000,00)", locale: locale) == Decimal(string: "-1000"))
     }
 
     @Test("Valor com sinal de menos explícito")
-    func explicitMinus() throws {
+    func explicitMinus() {
         let locale = Locale(identifier: "pt_BR")
         #expect(ImportParser.parseBRLAmount("-50,00", locale: locale) == Decimal(string: "-50"))
         #expect(ImportParser.parseBRLAmount("-R$ 50,00", locale: locale) == Decimal(string: "-50"))
     }
 
     @Test("Valor com separador decimal ponto (locale en)")
-    func englishDecimal() throws {
+    func englishDecimal() {
         let locale = Locale(identifier: "en_US_POSIX")
         #expect(ImportParser.parseBRLAmount("1234.56", locale: locale) == Decimal(string: "1234.56"))
         #expect(ImportParser.parseBRLAmount("-12.50", locale: locale) == Decimal(string: "-12.50"))
@@ -70,10 +69,10 @@ struct ImportParserTests {
     // MARK: - parse rows
 
     @Test("Data dd/MM/yyyy + amount unificado")
-    func parseUnifiedAmount() throws {
+    func parseUnifiedAmount() {
         let parser = makeParser(amount: 2)
         let rows: [[String]] = [
-            ["Data", "Descrição", "Valor"],       // header, skipado
+            ["Data", "Descrição", "Valor"], // header, skipado
             ["15/03/2026", "Mercado XYZ", "-123,45"],
             ["16/03/2026", "Salário", "5.000,00"],
         ]
@@ -89,7 +88,7 @@ struct ImportParserTests {
     }
 
     @Test("Débito vira negativo, crédito vira positivo")
-    func debitCreditReconciliation() throws {
+    func debitCreditReconciliation() {
         let parser = makeParser(amount: nil, debit: 2, credit: 3)
         let rows: [[String]] = [
             ["Data", "Descrição", "Débito", "Crédito"],
@@ -103,7 +102,7 @@ struct ImportParserTests {
     }
 
     @Test("Débito já com sinal negativo na planilha continua negativo")
-    func debitAlreadyNegative() throws {
+    func debitAlreadyNegative() {
         let parser = makeParser(amount: nil, debit: 2, credit: 3)
         let rows: [[String]] = [
             ["Data", "Descrição", "Débito", "Crédito"],
@@ -115,7 +114,7 @@ struct ImportParserTests {
     }
 
     @Test("Data inválida marca status invalidDate")
-    func invalidDate() throws {
+    func invalidDate() {
         let parser = makeParser()
         let rows: [[String]] = [
             ["Data", "Desc", "Valor"],
@@ -123,7 +122,7 @@ struct ImportParserTests {
         ]
         let parsed = parser.parse(rows: rows)
         #expect(parsed.count == 1)
-        if case .invalidDate(let raw) = parsed[0].status {
+        if case let .invalidDate(raw) = parsed[0].status {
             #expect(raw == "xxx")
         } else {
             Issue.record("esperava .invalidDate, recebi \(parsed[0].status)")
@@ -132,14 +131,14 @@ struct ImportParserTests {
     }
 
     @Test("Valor inválido marca status invalidAmount")
-    func invalidAmount2() throws {
+    func invalidAmount2() {
         let parser = makeParser()
         let rows: [[String]] = [
             ["Data", "Desc", "Valor"],
             ["15/03/2026", "Y", "abc"],
         ]
         let parsed = parser.parse(rows: rows)
-        if case .invalidAmount(let raw) = parsed[0].status {
+        if case let .invalidAmount(raw) = parsed[0].status {
             #expect(raw == "abc")
         } else {
             Issue.record("esperava .invalidAmount, recebi \(parsed[0].status)")
@@ -147,7 +146,7 @@ struct ImportParserTests {
     }
 
     @Test("Linha completamente vazia vira missingFields (não erro)")
-    func emptyRow() throws {
+    func emptyRow() {
         let parser = makeParser()
         let rows: [[String]] = [
             ["Data", "Desc", "Valor"],
@@ -169,7 +168,10 @@ struct ImportParserTests {
         ]
         let parsed = parser.parse(rows: rows)
         #expect(parsed[0].status == .valid)
-        let comps = Calendar.current.dateComponents([.year, .month, .day], from: parsed[0].derived!.occurredAt)
+        let comps = try Calendar.current.dateComponents(
+            [.year, .month, .day],
+            from: #require(parsed[0].derived?.occurredAt)
+        )
         #expect(comps.year == 2026)
         #expect(comps.month == 3)
         #expect(comps.day == 15)

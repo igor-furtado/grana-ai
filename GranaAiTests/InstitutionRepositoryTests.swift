@@ -5,7 +5,6 @@ import Testing
 
 @Suite("InstitutionRepository (in-memory)")
 struct InstitutionRepositoryTests {
-
     private func makeDatabase() -> any PowerSyncDatabaseProtocol {
         PowerSyncDatabase(
             schema: appSchema,
@@ -40,14 +39,13 @@ struct InstitutionRepositoryTests {
     @Test("InstitutionKind.fromCode resolve Inter")
     func kindFromCode() {
         #expect(InstitutionKind.fromCode("077") == .inter)
-        #expect(InstitutionKind.fromCode(" 077 ") == .inter)   // tolera whitespace
+        #expect(InstitutionKind.fromCode(" 077 ") == .inter) // tolera whitespace
         #expect(InstitutionKind.fromCode("341") == .other)
     }
 }
 
 @Suite("AccountRepository.findByBankIdentity")
 struct AccountRepositoryBankIdentityTests {
-
     private func makeDatabase() -> any PowerSyncDatabaseProtocol {
         PowerSyncDatabase(
             schema: appSchema,
@@ -137,7 +135,6 @@ struct AccountRepositoryBankIdentityTests {
 
 @Suite("TransactionRepository.insertMultipleBatches + findByExternalId")
 struct TransactionRepositoryOFXTests {
-
     private func makeDatabase() -> any PowerSyncDatabaseProtocol {
         PowerSyncDatabase(
             schema: appSchema,

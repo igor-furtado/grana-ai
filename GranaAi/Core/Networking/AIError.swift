@@ -22,15 +22,15 @@ enum AIError: LocalizedError {
         switch self {
         case .cliNotFound:
             return "CLI do Claude Code não encontrado. Instale com `npm i -g @anthropic-ai/claude-code` ou configure `Config.claudeCLIPath`."
-        case .cliExitCode(let code, _):
+        case let .cliExitCode(code, _):
             return "Claude CLI terminou com erro (exit \(code))."
-        case .cliTimeout(let seconds):
+        case let .cliTimeout(seconds):
             return "Claude CLI não respondeu em \(Int(seconds))s."
         case .responseParse:
             return "Resposta do Claude CLI veio em formato inesperado."
         case .decoding:
             return "Não foi possível interpretar a resposta do Claude CLI."
-        case .unknownCategorySlug(let slug):
+        case let .unknownCategorySlug(slug):
             return "A IA sugeriu uma categoria desconhecida (\(slug))."
         case .cancelled:
             return "Operação cancelada."
@@ -49,9 +49,9 @@ enum CategorizationError: LocalizedError {
         switch self {
         case .noTransactionsToClassify:
             return "Nenhuma transação pendente de categorização."
-        case .categoryNotFound(let slug):
+        case let .categoryNotFound(slug):
             return "Categoria com slug '\(slug)' não encontrada no banco — seed corrompido?"
-        case .persistFailed(let underlying):
+        case let .persistFailed(underlying):
             return "Falha ao persistir categorizações: \(underlying.localizedDescription)"
         }
     }

@@ -18,8 +18,12 @@ import SwiftUI
 /// extension em `Color` puro só permitiria `Color.danger` explícito.
 extension ShapeStyle where Self == Color {
     /// Sucesso — compartilha paleta com `income` (verde sage).
-    static var success: Color { .income }
+    static var success: Color {
+        .income
+    }
 
     /// Erro/destrutivo — compartilha paleta com `expense` (terracotta).
-    static var danger: Color { .expense }
+    static var danger: Color {
+        .expense
+    }
 }

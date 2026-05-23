@@ -201,7 +201,10 @@ final class ClaudeCLIClient: Sendable {
         let stderr = await stderrTask
         let elapsed = Date().timeIntervalSince(started)
 
-        log.ai.debug("claude CLI exit=\(process.terminationStatus) latency=\(String(format: "%.2f", elapsed))s stdout=\(stdout.count)B stderr=\(stderr.count)B")
+        log.ai
+            .debug(
+                "claude CLI exit=\(process.terminationStatus) latency=\(String(format: "%.2f", elapsed))s stdout=\(stdout.count)B stderr=\(stderr.count)B"
+            )
 
         guard process.terminationStatus == 0 else {
             let stderrText = String(data: stderr, encoding: .utf8) ?? ""
@@ -245,7 +248,10 @@ final class ClaudeCLIClient: Sendable {
     /// cai pra `result` quando o schema não foi aplicado.
     private func unwrapResultField(rawStdout: Data) throws -> Data {
         guard let object = try JSONSerialization.jsonObject(with: rawStdout) as? [String: Any] else {
-            throw AIError.responseParse("stdout não é objeto JSON: \(String(data: rawStdout, encoding: .utf8)?.prefix(200) ?? "")")
+            throw AIError
+                .responseParse(
+                    "stdout não é objeto JSON: \(String(data: rawStdout, encoding: .utf8)?.prefix(200) ?? "")"
+                )
         }
 
         if let isError = object["is_error"] as? Bool, isError {
@@ -263,7 +269,8 @@ final class ClaudeCLIClient: Sendable {
         // Fallback: campo `result` como string (modo sem schema, ou versão
         // antiga do CLI).
         if let inner = object["result"] as? String, !inner.isEmpty,
-           let data = inner.data(using: .utf8) {
+           let data = inner.data(using: .utf8)
+        {
             return data
         }
 

@@ -17,15 +17,15 @@
 // removendo as guardas.
 
 #if false
-import Foundation
+    import Foundation
 
-enum Config {
-    static let supabaseURL = "https://YOUR_PROJECT.supabase.co"
-    static let supabaseAnonKey = "YOUR_ANON_KEY"
-    static let powerSyncURL = "https://YOUR_INSTANCE.powersync.journeyapps.com"
+    enum Config {
+        static let supabaseURL = "https://YOUR_PROJECT.supabase.co"
+        static let supabaseAnonKey = "YOUR_ANON_KEY"
+        static let powerSyncURL = "https://YOUR_INSTANCE.powersync.journeyapps.com"
 
-    /// Caminho absoluto pro binário `claude`. nil = auto-detect nos paths comuns.
-    static let claudeCLIPath: String? = nil
-    static let claudeCLIModel = "claude-haiku-4-5-20251001"
-}
+        /// Caminho absoluto pro binário `claude`. nil = auto-detect nos paths comuns.
+        static let claudeCLIPath: String? = nil
+        static let claudeCLIModel = "claude-haiku-4-5-20251001"
+    }
 #endif

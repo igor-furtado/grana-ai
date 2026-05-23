@@ -23,17 +23,17 @@ struct CategorizationConfidenceBadge: View {
 
     private var tint: Color {
         switch bucket {
-        case .high:   .green
+        case .high: .green
         case .medium: .orange
-        case .low:    .red
+        case .low: .red
         }
     }
 
     private var helpText: String {
         switch bucket {
-        case .high:   "Confiança alta — categoria auto-aplicada."
+        case .high: "Confiança alta — categoria auto-aplicada."
         case .medium: "Confiança média — revise antes de confirmar."
-        case .low:    "Confiança baixa — categorização incerta."
+        case .low: "Confiança baixa — categorização incerta."
         }
     }
 }

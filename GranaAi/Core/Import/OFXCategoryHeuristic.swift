@@ -12,7 +12,6 @@ import Foundation
 /// 3. **Sem tabelas em RAM**: recebemos os IDs das raízes resolvidas pelo
 ///    `ImportStore` e devolvemos um deles — a função fica pura, fácil de testar.
 struct OFXCategoryHeuristic {
-
     /// IDs das categorias raiz relevantes pra heurística. O `ImportStore`
     /// resolve esses IDs uma vez via `CategoryRepository.findRootByName` e
     /// passa pra cada chamada de `categoryId(for:)`.
@@ -50,7 +49,7 @@ private extension String {
     /// Busca case-insensitive por qualquer um dos termos. Atalho útil pra
     /// inspeção rápida de MEMO/NAME.
     func containsAny(_ needles: [String]) -> Bool {
-        let haystack = self.lowercased()
+        let haystack = lowercased()
         for needle in needles {
             if haystack.contains(needle) { return true }
         }

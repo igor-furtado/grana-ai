@@ -32,8 +32,8 @@ struct CategoryBadge: View {
 
     private func tint(for kind: CategoryKind) -> Color {
         switch kind {
-        case .expense:  return .expense
-        case .income:   return .income
+        case .expense: return .expense
+        case .income: return .income
         case .transfer: return .transfer
         }
     }

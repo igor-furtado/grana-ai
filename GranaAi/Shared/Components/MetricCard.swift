@@ -46,13 +46,13 @@ struct MetricCard: View {
     VStack(spacing: 12) {
         MetricCard(
             title: "Saldo total",
-            value: 12_345.67,
+            value: 12345.67,
             icon: .balance,
             accent: .brandPrimary
         )
         MetricCard(
             title: "Gastos do mês",
-            value: 2_340.00,
+            value: 2340.00,
             icon: .expenseFlow,
             accent: .expense
         )

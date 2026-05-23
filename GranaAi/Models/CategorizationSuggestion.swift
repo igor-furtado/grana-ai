@@ -39,7 +39,7 @@ struct CategorizationSuggestion: Identifiable, Hashable {
 
     /// Snapshot do draft pra renderizar a row sem precisar voltar no `ImportStore`.
     var transactionDescription: String
-    var transactionAmount: Decimal     // magnitude (`abs`) — UI renderiza assim
+    var transactionAmount: Decimal // magnitude (`abs`) — UI renderiza assim
     var transactionOccurredAt: Date
     var transactionAccountId: UUID
     /// Marca de revisão. Quando o usuário aceita explicitamente (botão de
@@ -50,7 +50,7 @@ struct CategorizationSuggestion: Identifiable, Hashable {
     /// da sugestão original. Usado pra decidir se gera `CategorizationCorrection`
     /// no commit.
     var wasCorrected: Bool {
-        guard let originalCategoryId else { return true }   // fallback corrigido = sempre correção
+        guard let originalCategoryId else { return true } // fallback corrigido = sempre correção
         return categoryId != originalCategoryId || subcategoryId != originalSubcategoryId
     }
 
@@ -61,9 +61,9 @@ struct CategorizationSuggestion: Identifiable, Hashable {
 
         var displayName: String {
             switch self {
-            case .high:   "Alta"
+            case .high: "Alta"
             case .medium: "Média"
-            case .low:    "Baixa"
+            case .low: "Baixa"
             }
         }
     }
