@@ -39,11 +39,11 @@ final class AccountStore {
     private func streamAccounts() async {
         do {
             for try await rows in try container.accounts.watchAll() {
-                self.accounts = rows
+                accounts = rows
             }
         } catch is CancellationError {
         } catch {
-            self.lastError = error
+            lastError = error
             ErrorCenter.shared.report(error)
         }
     }
@@ -51,11 +51,11 @@ final class AccountStore {
     private func streamInstitutions() async {
         do {
             for try await rows in try container.institutions.watchAll() {
-                self.institutions = rows
+                institutions = rows
             }
         } catch is CancellationError {
         } catch {
-            self.lastError = error
+            lastError = error
             ErrorCenter.shared.report(error)
         }
     }
@@ -63,11 +63,11 @@ final class AccountStore {
     private func streamBalances() async {
         do {
             for try await dict in try container.accounts.watchBalances() {
-                self.balances = dict
+                balances = dict
             }
         } catch is CancellationError {
         } catch {
-            self.lastError = error
+            lastError = error
             ErrorCenter.shared.report(error)
         }
     }
@@ -90,27 +90,36 @@ final class AccountStore {
         balances[account.id] ?? account.initialBalance
     }
 
+    /// Nome derivado da conta pra exibição. Como `Account` não armazena nome a
+    /// partir da Fase 4.5, o display vem da combinação `instituição + tipo +
+    /// identificador específico` (número da conta pra bancos, ••••last4 pra
+    /// cartão). Reusa a versão estática — qualquer caller que tenha
+    /// `institutions` em mãos pode resolver sem passar pelo store.
+    func displayName(for account: Account) -> String {
+        Account.displayName(for: account, institutions: institutions)
+    }
+
     // MARK: - Mutations
 
     func create(
-        name: String,
         type: AccountType,
         initialBalance: Decimal,
         institutionId: UUID?,
         branchId: String?,
         accountNumber: String?,
+        cardLastFour: String?,
         currency: String
     ) async throws {
         let now = Date()
         let account = Account(
             id: UUID(),
-            name: name,
             type: type,
             initialBalance: initialBalance,
             archived: false,
             institutionId: institutionId,
             branchId: branchId,
             accountNumber: accountNumber,
+            cardLastFour: cardLastFour,
             currency: currency,
             createdAt: now,
             updatedAt: now

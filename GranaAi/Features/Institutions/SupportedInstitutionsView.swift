@@ -14,10 +14,12 @@ struct SupportedInstitutionsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Bancos com auto-detecção de extrato OFX e identidade visual própria. Bancos fora dessa lista funcionam normalmente — entram como “Outro” na criação da conta.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Bancos com auto-detecção de extrato OFX e identidade visual própria. Bancos fora dessa lista funcionam normalmente — entram como “Outro” na criação da conta."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(InstitutionKind.supported, id: \.rawValue) { kind in
@@ -37,13 +39,7 @@ private struct InstitutionCatalogCard: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(kind.brandColor.opacity(0.15))
-                InstitutionLogoImage(kind: kind)
-                    .padding(10)
-            }
-            .frame(width: 48, height: 48)
+            InstitutionIcon(kind: kind, size: 48)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(kind.displayName)

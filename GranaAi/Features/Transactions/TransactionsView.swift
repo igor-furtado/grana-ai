@@ -14,7 +14,7 @@ struct TransactionsView: View {
     /// padrão do `getAll()` no repo. Usuário pode clicar no header da coluna
     /// pra alternar entre asc/desc ou trocar de coluna.
     @State private var sortOrder: [KeyPathComparator<Transaction>] = [
-        KeyPathComparator(\Transaction.occurredAt, order: .reverse)
+        KeyPathComparator(\Transaction.occurredAt, order: .reverse),
     ]
 
     var body: some View {
@@ -34,7 +34,6 @@ struct TransactionsView: View {
         }
     }
 
-    @ViewBuilder
     private func content(store: TransactionStore) -> some View {
         list(store: store)
             .overlay {
@@ -100,7 +99,6 @@ struct TransactionsView: View {
             }
     }
 
-    @ViewBuilder
     private func list(store: TransactionStore) -> some View {
         // Table nativa do macOS: virtualizada (escala bem com milhares de
         // linhas), colunas redimensionáveis pelo usuário, e segue o padrão
@@ -135,8 +133,11 @@ struct TransactionsView: View {
             .width(min: 160, ideal: 200)
 
             TableColumn("Conta") { transaction in
-                Text(store.account(for: transaction.accountId)?.name ?? "—")
-                    .foregroundStyle(.secondary)
+                Text(
+                    store.account(for: transaction.accountId)
+                        .map { store.displayName(for: $0) } ?? "—"
+                )
+                .foregroundStyle(.secondary)
             }
             .width(min: 120, ideal: 150)
 
@@ -179,10 +180,10 @@ struct TransactionsView: View {
 
     private func amountColor(for transaction: Transaction, store: TransactionStore) -> Color {
         switch store.category(for: transaction.categoryId)?.kind {
-        case .income:   return .income
+        case .income: return .income
         case .transfer: return .transfer
-        case .expense:  return transaction.amount < 0 ? .expense : .primary
-        case .none:     return .primary
+        case .expense: return transaction.amount < 0 ? .expense : .primary
+        case .none: return .primary
         }
     }
 

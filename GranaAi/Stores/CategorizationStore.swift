@@ -46,6 +46,12 @@ final class CategorizationStore {
     private(set) var mode: Mode = .preCommit
 
     private(set) var categories: [Category] = []
+    /// Snapshots de accounts/institutions pra resolver o logo do banco em
+    /// cada row da revisão (`institutionKind(forAccountId:)`). Carregado uma
+    /// vez no `loadCategories`; as rows não precisam refletir mutações live
+    /// (durante a revisão da IA não se cadastra/edita conta).
+    private(set) var accounts: [Account] = []
+    private(set) var institutions: [Institution] = []
     var thresholds: CategorizationService.ConfidenceThresholds = .default
 
     private var currentTask: Task<Void, Never>?
@@ -56,7 +62,12 @@ final class CategorizationStore {
 
     func loadCategories() async {
         do {
-            categories = try await container.categories.getAll()
+            async let cats = container.categories.getAll()
+            async let accs = container.accounts.getAll()
+            async let insts = container.institutions.getAll()
+            categories = try await cats
+            accounts = try await accs
+            institutions = try await insts
         } catch {
             ErrorCenter.shared.report(error)
         }
@@ -72,6 +83,17 @@ final class CategorizationStore {
 
     func category(for id: UUID) -> Category? {
         categories.first { $0.id == id }
+    }
+
+    /// Logo do banco da row na tela de revisão. Resolve via
+    /// `account.institutionId → institution.kind`. Devolve `nil` se a conta
+    /// não tem instituição mapeada (ex: `.other`) — caller esconde o slot.
+    func institutionKind(forAccountId accountId: UUID) -> InstitutionKind? {
+        guard let account = accounts.first(where: { $0.id == accountId }),
+              let institutionId = account.institutionId,
+              let institution = institutions.first(where: { $0.id == institutionId })
+        else { return nil }
+        return institution.kind
     }
 
     // MARK: - Pré-commit (wizard de import)
@@ -236,7 +258,7 @@ final class CategorizationStore {
         for idx in suggestions.indices where suggestions[idx].descriptionHash == hash {
             suggestions[idx].categoryId = categoryId
             suggestions[idx].subcategoryId = subcategoryId
-            suggestions[idx].confidence = 1.0   // usuário confirmou; máxima confiança
+            suggestions[idx].confidence = 1.0 // usuário confirmou; máxima confiança
             suggestions[idx].isReviewed = true
         }
     }
@@ -305,9 +327,9 @@ final class CategorizationStore {
 
     private func handle(progress: CategorizationService.Progress) {
         switch progress {
-        case .started(let total):
+        case let .started(total):
             status = .classifying(processed: 0, total: total, message: "Verificando cache…")
-        case .cacheChecked(let hits, let misses):
+        case let .cacheChecked(hits, misses):
             let total = hits + misses
             let message: String
             if misses == 0 {
@@ -316,7 +338,7 @@ final class CategorizationStore {
                 message = "\(hits) via cache · \(misses) na IA…"
             }
             status = .classifying(processed: hits, total: total, message: message)
-        case .aiCallStarted(let misses):
+        case let .aiCallStarted(misses):
             // O `aiChunkFinished` posterior vai trazer a contagem cumulativa
             // correta. Aqui só atualiza a mensagem pro usuário entender que
             // saiu do cache pra IA — `processed` e `total` ficam de fora pra
@@ -330,7 +352,7 @@ final class CategorizationStore {
             } else {
                 status = .classifying(processed: 0, total: misses, message: "Categorizando \(misses) com IA…")
             }
-        case .aiChunkFinished(let processed, let total):
+        case let .aiChunkFinished(processed, total):
             let remaining = max(0, total - processed)
             let message = remaining > 0
                 ? "\(processed) de \(total) prontas · \(remaining) restantes…"
@@ -338,9 +360,9 @@ final class CategorizationStore {
             status = .classifying(processed: processed, total: total, message: message)
         case .aiCallFinished:
             break
-        case .finished(let total, let fromCache, let fromAI, let fallback):
+        case let .finished(total, fromCache, fromAI, fallback):
             status = .ready(total: total, fromCache: fromCache, fromAI: fromAI, fallback: fallback)
-        case .failed(let error):
+        case let .failed(error):
             status = .failed(message: error.localizedDescription)
         }
     }

@@ -19,23 +19,27 @@ import PowerSync
 ///   tem flag de NOT NULL no schema. Constraint de obrigatoriedade fica no
 ///   model Swift (propriedade não-opcional) + na lógica de insert.
 let appSchema = Schema(tables: [
-    // Fase 1: transactions, accounts, categories
     Table(
         name: "transactions",
         columns: [
             .text("account_id"),
             .text("category_id"),
-            .text("subcategory_id"),     // nullable
-            .integer("amount_cents"),    // valor em centavos (ver §4 PROJECT.md)
-            .text("occurred_at"),        // ISO8601, hora local
+            .text("subcategory_id"), // nullable
+            .integer("amount_cents"), // valor em centavos (ver §4 PROJECT.md)
+            .text("occurred_at"), // ISO8601, hora local
             .text("description"),
-            .text("notes"),              // nullable
+            .text("notes"), // nullable
             // Fase 3: link pro batch que originou a transaction (NULL = entrada
             // manual). Permite o "desfazer batch" via DELETE WHERE import_batch_id = ?.
-            .text("import_batch_id"),    // nullable
+            .text("import_batch_id"), // nullable
             // ID externo da instituição (ex: FITID do OFX). Usado pra detectar
             // duplicata exata em re-imports do mesmo extrato.
-            .text("external_id"),        // nullable
+            .text("external_id"), // nullable
+            // Fase 4.5: contraparte quando a categoria da transação tem
+            // `kind = transfer`. O cálculo de saldo soma o `amount` nesta
+            // conta de destino e subtrai da `account_id`. NULL pra qualquer
+            // transação que não é transferência.
+            .text("destination_account_id"),
             .text("created_at"),
             .text("updated_at"),
         ]
@@ -44,16 +48,22 @@ let appSchema = Schema(tables: [
     Table(
         name: "accounts",
         columns: [
-            .text("name"),
-            .text("type"),                  // enum AccountType serializado
+            .text("type"), // enum AccountType serializado
             .integer("initial_balance_cents"),
-            .integer("archived"),           // 0/1
-            // Fase 3: vínculo opcional com `institutions`. NULL pra contas que
-            // não são de banco (ex: "Carteira").
-            .text("institution_id"),        // nullable
-            .text("branch_id"),             // nullable — agência
-            .text("account_number"),        // nullable — número da conta no banco
-            .text("currency"),              // ISO 4217 (default "BRL" preenchido pelo Repository)
+            .integer("archived"), // 0/1
+            // Fase 3: vínculo com `institutions`. Tecnicamente nullable no
+            // schema (PowerSync não tem NOT NULL — ver §invariantes do
+            // CLAUDE.md), mas a partir da Fase 4.5 vira **invariante de
+            // aplicação**: o display name depende dela, e o `AccountFormView`
+            // bloqueia o save sem instituição. Mappers leem como opcional
+            // só pra tolerar contas legadas pré-Fase 4.5.
+            .text("institution_id"),
+            .text("branch_id"), // nullable — agência
+            .text("account_number"), // nullable — número da conta no banco
+            // Fase 4.5: últimos 4 dígitos do cartão de crédito. Só populado
+            // quando `type = creditCard`. Convenção PCI — nunca o PAN completo.
+            .text("card_last_four"), // nullable
+            .text("currency"), // ISO 4217 (default "BRL" preenchido pelo Repository)
             .text("created_at"),
             .text("updated_at"),
         ]
@@ -66,9 +76,9 @@ let appSchema = Schema(tables: [
     Table(
         name: "institutions",
         columns: [
-            .text("code"),                  // FEBRABAN/COMPE (ex: "077")
-            .text("name"),                  // "Banco Inter"
-            .text("kind"),                  // raw value de InstitutionKind
+            .text("code"), // FEBRABAN/COMPE (ex: "077")
+            .text("name"), // "Banco Inter"
+            .text("kind"), // raw value de InstitutionKind
             .text("created_at"),
             .text("updated_at"),
         ]
@@ -80,10 +90,10 @@ let appSchema = Schema(tables: [
     Table(
         name: "categories",
         columns: [
-            .text("parent_id"),    // nullable — null = raiz
+            .text("parent_id"), // nullable — null = raiz
             .text("name"),
-            .text("kind"),         // expense | income | transfer
-            .text("slug"),         // nullable — só categorias raiz têm slug; mapping slug→ícone vive em CategoryIcon+Slug.swift
+            .text("kind"), // expense | income | transfer
+            .text("slug"), // nullable — só categorias raiz têm slug; mapping slug→ícone vive em CategoryIcon+Slug.swift
             .text("created_at"),
         ]
     ),
@@ -96,7 +106,7 @@ let appSchema = Schema(tables: [
             .text("source_filename"),
             .text("account_id"),
             .integer("row_count"),
-            .text("imported_at"),        // ISO8601
+            .text("imported_at"), // ISO8601
             .text("created_at"),
             .text("updated_at"),
         ]
@@ -119,12 +129,12 @@ let appSchema = Schema(tables: [
     Table(
         name: "categorization_cache",
         columns: [
-            .text("description_hash"),       // SHA256 hex da descrição normalizada
+            .text("description_hash"), // SHA256 hex da descrição normalizada
             .text("normalized_description"), // pra debug + invalidação por correção
             .text("category_id"),
-            .text("subcategory_id"),         // nullable
-            .real("confidence"),             // 0.0–1.0
-            .text("model"),                  // ex: "claude-haiku-4-5-20251001"
+            .text("subcategory_id"), // nullable
+            .real("confidence"), // 0.0–1.0
+            .text("model"), // ex: "claude-haiku-4-5-20251001"
             .text("created_at"),
             .text("updated_at"),
         ]
@@ -139,15 +149,14 @@ let appSchema = Schema(tables: [
         columns: [
             .text("description_hash"),
             .text("normalized_description"),
-            .text("original_category_id"),     // nullable — o que a IA sugeriu
-            .text("original_subcategory_id"),  // nullable
+            .text("original_category_id"), // nullable — o que a IA sugeriu
+            .text("original_subcategory_id"), // nullable
             .text("corrected_category_id"),
             .text("corrected_subcategory_id"), // nullable
-            .text("transaction_id"),           // rastreabilidade pra auditoria
+            .text("transaction_id"), // rastreabilidade pra auditoria
             .text("created_at"),
         ]
     ),
 
     // Fase 6: assets, holdings, quotes
-    // Fase 7: chat_messages
 ])

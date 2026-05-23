@@ -11,21 +11,21 @@ final class AccountRepository: Sendable {
     func insert(_ account: Account) async throws {
         try await db.execute(
             sql: """
-                INSERT INTO accounts
-                    (id, name, type, initial_balance_cents, archived,
-                     institution_id, branch_id, account_number, currency,
-                     created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+            INSERT INTO accounts
+                (id, type, initial_balance_cents, archived,
+                 institution_id, branch_id, account_number, card_last_four,
+                 currency, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             parameters: [
                 account.id.uuidString,
-                account.name,
                 account.type.rawValue,
                 Converters.decimalToCents(account.initialBalance),
                 account.archived ? 1 : 0,
                 account.institutionId?.uuidString,
                 account.branchId,
                 account.accountNumber,
+                account.cardLastFour,
                 account.currency,
                 Converters.dateToString(account.createdAt),
                 Converters.dateToString(account.updatedAt),
@@ -36,20 +36,20 @@ final class AccountRepository: Sendable {
     func update(_ account: Account) async throws {
         try await db.execute(
             sql: """
-                UPDATE accounts SET
-                    name = ?, type = ?, initial_balance_cents = ?, archived = ?,
-                    institution_id = ?, branch_id = ?, account_number = ?, currency = ?,
-                    updated_at = ?
-                WHERE id = ?
-                """,
+            UPDATE accounts SET
+                type = ?, initial_balance_cents = ?, archived = ?,
+                institution_id = ?, branch_id = ?, account_number = ?,
+                card_last_four = ?, currency = ?, updated_at = ?
+            WHERE id = ?
+            """,
             parameters: [
-                account.name,
                 account.type.rawValue,
                 Converters.decimalToCents(account.initialBalance),
                 account.archived ? 1 : 0,
                 account.institutionId?.uuidString,
                 account.branchId,
                 account.accountNumber,
+                account.cardLastFour,
                 account.currency,
                 Converters.dateToString(account.updatedAt),
                 account.id.uuidString,
@@ -76,12 +76,12 @@ final class AccountRepository: Sendable {
         // não trazem agência. Usamos `(branch_id = ? OR (branch_id IS NULL AND ? IS NULL))`.
         try await db.getOptional(
             sql: """
-                SELECT * FROM accounts
-                WHERE institution_id = ?
-                  AND account_number = ?
-                  AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
-                LIMIT 1
-                """,
+            SELECT * FROM accounts
+            WHERE institution_id = ?
+              AND account_number = ?
+              AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
+            LIMIT 1
+            """,
             parameters: [
                 institutionId.uuidString,
                 accountNumber,
@@ -94,7 +94,11 @@ final class AccountRepository: Sendable {
 
     func getAll() async throws -> [Account] {
         try await db.getAll(
-            sql: "SELECT * FROM accounts ORDER BY name ASC",
+            sql: """
+            SELECT * FROM accounts
+            ORDER BY type ASC, institution_id ASC, branch_id ASC,
+                     account_number ASC, card_last_four ASC
+            """,
             parameters: [],
             mapper: Self.mapAccount
         )
@@ -107,10 +111,10 @@ final class AccountRepository: Sendable {
     func sumInitialBalance() async throws -> Decimal {
         let cents = try await db.get(
             sql: """
-                SELECT COALESCE(SUM(initial_balance_cents), 0) AS total
-                FROM accounts
-                WHERE archived = 0
-                """,
+            SELECT COALESCE(SUM(initial_balance_cents), 0) AS total
+            FROM accounts
+            WHERE archived = 0
+            """,
             parameters: [],
             mapper: { (cursor: SqlCursor) throws -> Int64 in
                 try cursor.getInt64(name: "total")
@@ -121,20 +125,35 @@ final class AccountRepository: Sendable {
 
     func watchAll() throws -> AsyncThrowingStream<[Account], Error> {
         try db.watch(
-            sql: "SELECT * FROM accounts ORDER BY name ASC",
+            sql: """
+            SELECT * FROM accounts
+            ORDER BY type ASC, institution_id ASC, branch_id ASC,
+                     account_number ASC, card_last_four ASC
+            """,
             parameters: [],
             mapper: Self.mapAccount
         )
     }
 
-    /// Saldo atual por conta = `initial_balance_cents + Σ(amount com sinal)`,
-    /// onde o sinal vem do `categories.kind`: `income` soma, `expense`
-    /// subtrai, `transfer` (e qualquer outro) é neutro.
+    /// Saldo atual por conta = `initial_balance_cents + saídas pela conta +
+    /// entradas vindas de transferências apontadas pra esta conta`.
     ///
-    /// `LEFT JOIN` garante que contas sem transação ainda apareçam (saldo =
-    /// inicial). `LEFT JOIN categories` cobre o caso degenerado em que a
-    /// `category_id` da transaction aponta pra uma categoria removida — não
-    /// derruba o saldo, só ignora a transação órfã.
+    /// Detalhe por `categories.kind`:
+    /// - `income` → soma na `account_id`.
+    /// - `expense` → subtrai da `account_id`.
+    /// - `transfer` com `destination_account_id` preenchido → subtrai da
+    ///   `account_id` (origem) E soma na `destination_account_id` (destino).
+    ///   É como modelamos pagamento de fatura de cartão: a corrente perde, o
+    ///   cartão abate dívida — sem precisar de transação espelho.
+    /// - `transfer` sem destino → neutro (compat com transferências legadas
+    ///   importadas antes da Fase 4.5).
+    ///
+    /// **Por que duas subqueries em vez de LEFT JOIN + GROUP BY:** o lado de
+    /// entrada (`destination_account_id = a.id`) exige um segundo JOIN com
+    /// outro alias da `transactions` — o GROUP BY explodia em produto
+    /// cartesiano. Subqueries correlacionadas mantêm cada lado isolado e o
+    /// SQLite otimiza com índice por `account_id` / `destination_account_id`.
+    /// Custo extra é desprezível pra contas com poucas centenas de transações.
     ///
     /// Watch re-emite a cada mudança em `accounts`, `transactions` ou
     /// `categories` — fechando o ciclo reativo: criar/editar/apagar
@@ -142,19 +161,32 @@ final class AccountRepository: Sendable {
     func watchBalances() throws -> AsyncThrowingStream<[UUID: Decimal], Error> {
         let stream = try db.watch(
             sql: """
-                SELECT a.id AS account_id,
-                       a.initial_balance_cents + COALESCE(SUM(
+            SELECT a.id AS account_id,
+                   a.initial_balance_cents
+                   + COALESCE((
+                       SELECT SUM(
                            CASE c.kind
-                               WHEN 'income'  THEN  t.amount_cents
-                               WHEN 'expense' THEN -t.amount_cents
+                               WHEN 'income'   THEN  t.amount_cents
+                               WHEN 'expense'  THEN -t.amount_cents
+                               WHEN 'transfer' THEN
+                                   CASE WHEN t.destination_account_id IS NOT NULL
+                                        THEN -t.amount_cents ELSE 0 END
                                ELSE 0
                            END
-                       ), 0) AS balance_cents
-                FROM accounts a
-                LEFT JOIN transactions t ON t.account_id = a.id
-                LEFT JOIN categories c ON c.id = t.category_id
-                GROUP BY a.id, a.initial_balance_cents
-                """,
+                       )
+                       FROM transactions t
+                       JOIN categories c ON c.id = t.category_id
+                       WHERE t.account_id = a.id
+                   ), 0)
+                   + COALESCE((
+                       SELECT SUM(t.amount_cents)
+                       FROM transactions t
+                       JOIN categories c ON c.id = t.category_id
+                       WHERE t.destination_account_id = a.id
+                         AND c.kind = 'transfer'
+                   ), 0) AS balance_cents
+            FROM accounts a
+            """,
             parameters: [],
             mapper: Self.mapBalanceRow
         )
@@ -217,19 +249,19 @@ final class AccountRepository: Sendable {
         // `currency` veio depois do schema da Fase 1: contas legadas (criadas
         // antes desta fase) podem não ter o valor. Default "BRL" cobre isso
         // sem precisar de migration.
-        let currency = (try cursor.getStringOptional(name: "currency")) ?? "BRL"
+        let currency = try (cursor.getStringOptional(name: "currency")) ?? "BRL"
 
-        return Account(
+        return try Account(
             id: id,
-            name: try cursor.getString(name: "name"),
             type: type,
             initialBalance: Converters.centsToDecimal(
-                try cursor.getInt64(name: "initial_balance_cents")
+                cursor.getInt64(name: "initial_balance_cents")
             ),
-            archived: (try cursor.getInt64(name: "archived")) != 0,
+            archived: (cursor.getInt64(name: "archived")) != 0,
             institutionId: institutionId,
-            branchId: try cursor.getStringOptional(name: "branch_id"),
-            accountNumber: try cursor.getStringOptional(name: "account_number"),
+            branchId: cursor.getStringOptional(name: "branch_id"),
+            accountNumber: cursor.getStringOptional(name: "account_number"),
+            cardLastFour: cursor.getStringOptional(name: "card_last_four"),
             currency: currency,
             createdAt: createdAt,
             updatedAt: updatedAt

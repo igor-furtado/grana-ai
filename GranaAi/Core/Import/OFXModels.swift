@@ -9,37 +9,26 @@ struct OFXInstitutionHeader: Hashable, Sendable {
 
 /// `<BANKACCTFROM>`: identidade bancária da conta dona do extrato. `bankId` é
 /// o FEBRABAN/COMPE; quando o OFX traz só `BANKID` (sem `<FI>`), usamos ele
-/// como FID. `branchId` é a agência; `accountId` é o número da conta no banco;
-/// `accountType` é o tipo OFX (CHECKING/SAVINGS/...).
+/// como FID. `branchId` é a agência; `accountId` é o número da conta no banco.
+///
+/// O `<ACCTTYPE>` do OFX (CHECKING/SAVINGS/...) é deliberadamente ignorado
+/// no parse: a partir da Fase 4.5 o app só tem `.checking` no lado bancário
+/// e o usuário aponta cada extrato pra uma conta já cadastrada.
 struct OFXAccountKey: Hashable, Sendable {
     var bankId: String
     var branchId: String?
     var accountId: String
-    var accountType: String
-
-    /// Mapeia o `accountType` do OFX para o `AccountType` do app. OFX tem
-    /// CHECKING/SAVINGS/MONEYMRKT/CREDITLINE — os dois primeiros têm
-    /// correspondência direta; o resto vira `.checking` por default.
-    var mappedAccountType: AccountType {
-        switch accountType.uppercased() {
-        case "CHECKING":   return .checking
-        case "SAVINGS":    return .savings
-        case "MONEYMRKT":  return .savings
-        case "CREDITLINE": return .checking
-        default:           return .checking
-        }
-    }
 }
 
 /// Uma transação solta `<STMTTRN>`. `fitid` é a chave única emitida pelo
 /// banco — usada pra detecção exata de duplicata em re-imports.
 struct OFXTransaction: Hashable, Sendable {
-    var trnType: String        // CREDIT / DEBIT / PAYMENT / XFER / DEP / ...
+    var trnType: String // CREDIT / DEBIT / PAYMENT / XFER / DEP / ...
     var datePosted: Date
     var amount: Decimal
     var fitid: String
-    var name: String?          // contraparte (ex: nome do pagador/recebedor)
-    var memo: String?          // descrição livre (ex: "Pix recebido: ...")
+    var name: String? // contraparte (ex: nome do pagador/recebedor)
+    var memo: String? // descrição livre (ex: "Pix recebido: ...")
     var checkNumber: String?
     var refNumber: String?
 
@@ -63,7 +52,7 @@ struct OFXBalance: Hashable, Sendable {
 /// Um `<STMTRS>` completo: identidade da conta, moeda, transações e saldo.
 /// Um arquivo OFX pode ter vários `STMTRS` — cada um vira um statement aqui.
 struct OFXStatement: Hashable, Sendable {
-    var currency: String              // CURDEF (ex: "BRL")
+    var currency: String // CURDEF (ex: "BRL")
     var institutionHeader: OFXInstitutionHeader
     var account: OFXAccountKey
     var transactions: [OFXTransaction]
@@ -73,9 +62,9 @@ struct OFXStatement: Hashable, Sendable {
 /// Resultado completo do parser: cabeçalho do arquivo (charset, versão) +
 /// lista de statements. Cabeçalho fica disponível pra logging/troubleshooting.
 struct OFXDocument: Hashable, Sendable {
-    var version: String                 // "102" pra OFX 1.x; "200"+ pra 2.x
-    var encoding: String                // "USASCII" / "UTF-8" / etc.
-    var charset: String?                // "1252" no formato 1.x
+    var version: String // "102" pra OFX 1.x; "200"+ pra 2.x
+    var encoding: String // "USASCII" / "UTF-8" / etc.
+    var charset: String? // "1252" no formato 1.x
     var statements: [OFXStatement]
 }
 

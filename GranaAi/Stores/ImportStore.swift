@@ -47,10 +47,14 @@ final class ImportStore {
 
     // Fase 4: estado "em voo" entre o preview e o commit final. Construído
     // pelo `confirmOFXImport`; consumido pelo `finalizeImport`.
-    private(set) var pendingDrafts: [TransactionDraft] = []
-    private(set) var pendingInstitutionsToInsert: [Institution] = []
-    private(set) var pendingAccountsToInsert: [Account] = []
-    private(set) var pendingBatchesWithDrafts: [(batch: ImportBatch, draftIds: [UUID])] = []
+    //
+    // Não há mais criação de Institution/Account no commit — a partir da
+    // Fase 4.5 a importação **exige** uma conta existente escolhida pelo
+    // usuário. Drafts ficam só pra transactions + batches. Privados porque
+    // nenhum caller fora do store precisa ler — fluxo é confirm → categorize
+    // → finalize, todo dentro deste arquivo.
+    private var pendingDrafts: [TransactionDraft] = []
+    private var pendingBatchesWithDrafts: [(batch: ImportBatch, draftIds: [UUID])] = []
 
     /// Contexto do arquivo aberto. Fica fora do `Phase` pra sobreviver às
     /// transições.
@@ -125,7 +129,7 @@ final class ImportStore {
         switch categorization.status {
         case .ready:
             phase = .reviewingCategorization
-        case .failed(let message):
+        case let .failed(message):
             // Mesmo em falha, deixa o usuário revisar — sugestões fallback
             // ainda permitem confirmar/corrigir manualmente. O erro
             // original já foi reportado ao ErrorCenter pelo CategorizationStore;
@@ -236,31 +240,51 @@ final class ImportStore {
     }
 
     /// Materializa uma `OFXStatementResolution` a partir de um `OFXStatement`
-    /// parseado. Faz, em ordem:
-    /// 1. Auto-detect da instituição via FID (busca por código; se não achar
-    ///    e o kind for `.inter`, usa o seed; se for `.other`, draft com nome
-    ///    do OFX que o usuário pode editar).
-    /// 2. Match exato da conta pela tripla (institution, branch, accountId).
-    /// 3. Parsing de cada transação em `DerivedTransaction` + detecção de
-    ///    duplicata via FITID (só faz sentido quando a conta já existe).
+    /// parseado. Tenta auto-detectar uma conta existente que bate com a
+    /// identidade bancária (instituição+agência+número). Se não achar,
+    /// `accountId` fica nil e o usuário precisa escolher uma conta existente
+    /// no preview — **não criamos contas novas a partir do import** (MVP).
     private func resolveStatement(
         _ statement: OFXStatement,
         heuristic: OFXCategoryHeuristic
     ) async throws -> OFXStatementResolution {
-        let inst = try await resolveInstitution(for: statement)
-        let acc = try await resolveAccount(for: statement, institution: inst)
+        let matchedAccountId = try await autoDetectAccountId(for: statement)
 
         // **Batched dedup**: pra contas existentes, busca TODOS os FITIDs já
         // gravados de uma vez e converte pra Set. O check por linha vira O(1)
         // em memória em vez de uma query por linha — em extratos com 500+
         // transações isso é a diferença entre <1s e 30+s.
         let existingExternalIds: Set<String>
-        if let existingId = acc.existingId {
-            existingExternalIds = (try? await container.transactions.externalIds(forAccount: existingId)) ?? []
+        if let matchedAccountId {
+            existingExternalIds = (try? await container.transactions.externalIds(forAccount: matchedAccountId)) ?? []
         } else {
             existingExternalIds = []
         }
 
+        let rows = buildOFXRows(
+            for: statement,
+            existingExternalIds: existingExternalIds,
+            heuristic: heuristic
+        )
+
+        return OFXStatementResolution(
+            statement: statement,
+            accountId: matchedAccountId,
+            wasAutoDetected: matchedAccountId != nil,
+            ofxBankLabel: ofxBankLabel(for: statement),
+            ofxAccountLabel: ofxAccountLabel(for: statement),
+            rows: rows
+        )
+    }
+
+    /// Constrói as `OFXPreviewRow` aplicando dedup contra um set já carregado.
+    /// Extraído pra ser reusado no `setOFXAccount` quando o usuário troca a
+    /// conta no picker — re-dedup roda sem refazer o parse inteiro.
+    private func buildOFXRows(
+        for statement: OFXStatement,
+        existingExternalIds: Set<String>,
+        heuristic: OFXCategoryHeuristic
+    ) -> [OFXPreviewRow] {
         var rows: [OFXPreviewRow] = []
         rows.reserveCapacity(statement.transactions.count)
         for trn in statement.transactions {
@@ -282,70 +306,78 @@ final class ImportStore {
                 selected: !isDuplicate
             ))
         }
-
-        return OFXStatementResolution(
-            statement: statement,
-            institution: inst,
-            account: acc,
-            rows: rows
-        )
+        return rows
     }
 
-    private func resolveInstitution(for statement: OFXStatement) async throws -> InstitutionResolution {
+    /// Procura uma conta existente que bata com o `<BANKACCTFROM>` do OFX via
+    /// instituição (pelo `bankId` / FID) + agência + número. Retorna `nil` se
+    /// qualquer parte não bater — usuário precisa escolher manualmente.
+    private func autoDetectAccountId(for statement: OFXStatement) async throws -> UUID? {
         let code = statement.account.bankId
-        if let existing = try await container.institutions.findByCode(code) {
-            return InstitutionResolution(
-                existingId: existing.id,
-                code: existing.code,
-                name: existing.name,
-                kind: existing.kind
-            )
+        guard let institution = try await container.institutions.findByCode(code) else {
+            return nil
         }
-        // Não existe → propor criação. Detecta kind pelo FID; se desconhecido,
-        // usa nome vindo do <FI><ORG> do arquivo (ou fallback genérico).
-        let kind = InstitutionKind.fromCode(code)
-        let name = statement.institutionHeader.organization ?? kind.displayName
-        return InstitutionResolution(existingId: nil, code: code, name: name, kind: kind)
-    }
-
-    private func resolveAccount(
-        for statement: OFXStatement,
-        institution: InstitutionResolution
-    ) async throws -> AccountResolution {
-        let bankAccount = statement.account
-        if let institutionId = institution.existingId,
-           let existing = try await container.accounts.findByBankIdentity(
-               institutionId: institutionId,
-               branchId: bankAccount.branchId,
-               accountNumber: bankAccount.accountId
-           ) {
-            return AccountResolution(
-                existingId: existing.id,
-                name: existing.name,
-                type: existing.type,
-                branchId: existing.branchId,
-                accountNumber: existing.accountNumber ?? bankAccount.accountId,
-                currency: existing.currency
-            )
-        }
-        // Não existe → draft pré-preenchido pra criação.
-        return AccountResolution(
-            existingId: nil,
-            name: defaultName(for: bankAccount, institution: institution),
-            type: bankAccount.mappedAccountType,
-            branchId: bankAccount.branchId,
-            accountNumber: bankAccount.accountId,
-            currency: statement.currency
+        let existing = try await container.accounts.findByBankIdentity(
+            institutionId: institution.id,
+            branchId: statement.account.branchId,
+            accountNumber: statement.account.accountId
         )
+        return existing?.id
     }
 
-    private func defaultName(
-        for bankAccount: OFXAccountKey,
-        institution: InstitutionResolution
-    ) -> String {
-        // "Inter · 310013887" é compacto e único o suficiente. Usuário pode
-        // renomear antes de confirmar.
-        "\(institution.name) · \(bankAccount.accountId)"
+    /// Label do banco vindo do OFX pra exibição no header da Section. Usa o
+    /// `<FI><ORG>` quando disponível; cai pro `displayName` do `InstitutionKind`
+    /// derivado do FID quando o cabeçalho `<FI>` está vazio (acontece em OFX
+    /// legados).
+    private func ofxBankLabel(for statement: OFXStatement) -> String {
+        if let org = statement.institutionHeader.organization, !org.isEmpty {
+            return org
+        }
+        return InstitutionKind.fromCode(statement.account.bankId).displayName
+    }
+
+    /// Label da conta vindo do OFX pra exibição. Formata `código · agência ·
+    /// conta` compactamente — é o que o usuário precisa pra reconhecer "essa
+    /// conta do extrato é qual das minhas".
+    private func ofxAccountLabel(for statement: OFXStatement) -> String {
+        var parts: [String] = [statement.account.accountId]
+        if let branch = statement.account.branchId, !branch.isEmpty {
+            parts.append("Ag \(branch)")
+        }
+        parts.append("cód. \(statement.account.bankId)")
+        return parts.joined(separator: " · ")
+    }
+
+    /// Trocar a conta selecionada no preview OFX exige refazer o dedup contra
+    /// o novo conjunto de external_ids — sem isso, o badge "Já importada"
+    /// ficaria desatualizado.
+    func setOFXAccount(statementIndex idx: Int, to accountId: UUID?) async {
+        guard ofxResolutions.indices.contains(idx) else { return }
+        var resolution = ofxResolutions[idx]
+        resolution.accountId = accountId
+        resolution.wasAutoDetected = false
+
+        let existingExternalIds: Set<String>
+        if let accountId {
+            existingExternalIds = (try? await container.transactions.externalIds(forAccount: accountId)) ?? []
+        } else {
+            existingExternalIds = []
+        }
+
+        // Re-aplica dedup mantendo a categoria já resolvida pela heurística.
+        // `selected` só é recalculado quando o flag `isDuplicate` muda — assim
+        // qualquer decisão manual do usuário (desmarcar uma row não-duplicada
+        // que ele não quer importar) é preservada ao trocar a conta.
+        for rowIdx in resolution.rows.indices {
+            let fitid = resolution.rows[rowIdx].raw.fitid
+            let wasDup = resolution.rows[rowIdx].isDuplicate
+            let isDup = existingExternalIds.contains(fitid)
+            resolution.rows[rowIdx].isDuplicate = isDup
+            if wasDup != isDup {
+                resolution.rows[rowIdx].selected = !isDup
+            }
+        }
+        ofxResolutions[idx] = resolution
     }
 
     /// Resolve as categorias raiz "Não Classificado", "Transferências" e
@@ -367,32 +399,24 @@ final class ImportStore {
     // MARK: - CSV de fatura de cartão (Fase 4.5)
 
     /// Lê CSV de fatura de cartão (Inter) → monta uma única `CSVStatementResolution`
-    /// com as linhas válidas. **Não auto-detecta conta** — o usuário escolhe
-    /// no preview. Sem conta selecionada, o `existing_external_ids` fica vazio
-    /// e o dedup só roda quando o picker é tocado.
+    /// com as linhas válidas. **Exige conta-cartão existente** — se o usuário
+    /// não tem nenhuma cadastrada, falha com mensagem orientando a criar uma
+    /// antes (MVP simplificado: import nunca cria contas). Pré-seleciona
+    /// quando há uma única conta-cartão pra reduzir cliques.
     private func loadCSV(url: URL) async throws {
         phase = .loading(progress: "Lendo fatura…")
         let reader = InterCreditCardCSVReader()
         let statement = try reader.read(from: url)
 
-        // **Resolução de conta destino** — três cenários:
-        // - Nenhuma conta-cartão cadastrada → monta um draft "Cartão Inter"
-        //   (institution = Inter da seed) que será criado no commit atômico.
-        //   Usuário pode renomear no preview antes de confirmar.
-        // - Única conta-cartão cadastrada → pré-seleciona (reduz cliques no
-        //   caso comum).
-        // - Múltiplas → picker manual (nenhuma seleção inicial).
+        // Arquivadas ficam fora — o usuário tirou do dia-a-dia, importar pra
+        // elas seria inesperado. Desarquivar é o passo explícito.
         let creditCardAccounts = accounts.filter { $0.type == .creditCard && !$0.archived }
-        let initialAccountId: UUID?
-        let draftAccount: CSVDraftAccount?
         if creditCardAccounts.isEmpty {
-            let interInstitutionId = institutions.first(where: { $0.kind == .inter })?.id
-            draftAccount = CSVDraftAccount(name: "Cartão Inter", institutionId: interInstitutionId)
-            initialAccountId = nil
-        } else {
-            draftAccount = nil
-            initialAccountId = creditCardAccounts.count == 1 ? creditCardAccounts.first?.id : nil
+            throw ImportError.noCreditCardAccount
         }
+        let initialAccountId: UUID? = creditCardAccounts.count == 1
+            ? creditCardAccounts.first?.id
+            : nil
 
         let rows: [CSVPreviewRow] = statement.rows.map { raw in
             let externalId = InterCreditCardCSVReader.makeExternalId(
@@ -418,14 +442,10 @@ final class ImportStore {
         var resolution = CSVStatementResolution(
             sourceFilename: url.lastPathComponent,
             accountId: initialAccountId,
-            draftAccount: draftAccount,
             rows: rows,
             skippedNegativeCount: statement.skippedNegativeCount
         )
 
-        // Se já existe conta selecionada (single creditCard), roda dedup
-        // imediatamente antes de mostrar o preview. Draft account não tem
-        // transações pra deduplicar contra — pula.
         if let accId = initialAccountId {
             resolution = await applyCSVDedup(resolution, accountId: accId)
         }
@@ -470,44 +490,14 @@ final class ImportStore {
     }
 
     /// Confirma o preview CSV. Mesmo padrão do OFX: monta drafts em voo +
-    /// dispara categorização pré-commit. Commit acontece em `finalizeImport()`.
-    /// Se a conta é nova (draft), entra em `pendingAccountsToInsert` pro
-    /// commit atômico criar conta + transações juntas.
+    /// dispara categorização pré-commit. **Exige conta-cartão selecionada** —
+    /// MVP não cria conta no import.
     func confirmCSVImport() async {
         guard phase == .csvReview else { return }
         guard let resolution = csvResolution else { return }
 
-        let now = Date()
-
-        // Resolve `accountId` final: existente (escolhido no picker) ou novo
-        // (a partir do draft, criado no commit atômico).
-        let accountId: UUID
-        var accountsToInsert: [Account] = []
-        if let existingId = resolution.accountId {
-            accountId = existingId
-        } else if let draft = resolution.draftAccount {
-            let trimmedName = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedName.isEmpty else {
-                phase = .failed(message: ImportError.creditCardAccountUnnamed.localizedDescription)
-                return
-            }
-            let newAccount = Account(
-                id: UUID(),
-                name: trimmedName,
-                type: .creditCard,
-                initialBalance: 0,
-                archived: false,
-                institutionId: draft.institutionId,
-                branchId: nil,
-                accountNumber: nil,
-                currency: "BRL",
-                createdAt: now,
-                updatedAt: now
-            )
-            accountsToInsert.append(newAccount)
-            accountId = newAccount.id
-        } else {
-            phase = .failed(message: ImportError.creditCardAccountNotSelected.localizedDescription)
+        guard let accountId = resolution.accountId else {
+            phase = .failed(message: ImportError.accountNotSelected.localizedDescription)
             return
         }
 
@@ -517,6 +507,7 @@ final class ImportStore {
             return
         }
 
+        let now = Date()
         let batchId = UUID()
         let batch = ImportBatch(
             id: batchId,
@@ -549,8 +540,6 @@ final class ImportStore {
         }
 
         pendingDrafts = drafts
-        pendingInstitutionsToInsert = []
-        pendingAccountsToInsert = accountsToInsert
         pendingBatchesWithDrafts = [(batch, drafts.map(\.id))]
 
         startCategorization()
@@ -570,75 +559,32 @@ final class ImportStore {
 
     // MARK: - Confirm OFX (multi-account) → drafts → categorização
 
-    /// Confirma o preview OFX. **Não insere no banco** — monta institutions
-    /// novas, accounts novas e drafts (com `signedAmount` original do OFX).
-    /// Dispara categorização pré-commit. Commit acontece em `finalizeImport()`.
+    /// Confirma o preview OFX. **Não cria conta nova** — toda statement precisa
+    /// estar apontada pra uma conta existente do usuário (auto-detectada ou
+    /// escolhida manualmente). Monta drafts (com `signedAmount` original do
+    /// OFX) e dispara a categorização pré-commit. Commit acontece em
+    /// `finalizeImport()`.
     func confirmOFXImport() async {
         guard phase == .ofxReview else { return }
 
-        // Consistência de institutions (mesmo code → mesmo name/kind).
-        let grouped = Dictionary(grouping: ofxResolutions, by: { $0.institution.code })
-        for (code, group) in grouped where group.count > 1 {
-            let names = Set(group.map { $0.institution.name })
-            let kinds = Set(group.map { $0.institution.kind })
-            if names.count > 1 || kinds.count > 1 {
-                phase = .failed(message: "Múltiplas contas usam o código \(code) mas com nome ou tipo divergente. Edite todas pra ficarem iguais antes de confirmar.")
-                return
+        // Normaliza upfront pra (resolution, accountId) — uma única checagem
+        // de obrigatoriedade, sem precisar reabrir o opcional dentro do loop.
+        let resolved: [(resolution: OFXStatementResolution, accountId: UUID)] = ofxResolutions
+            .compactMap { resolution in
+                resolution.accountId.map { (resolution, $0) }
             }
+        guard resolved.count == ofxResolutions.count else {
+            phase = .failed(message: ImportError.accountNotSelected.localizedDescription)
+            return
         }
 
         let now = Date()
-
-        var institutionsToInsert: [Institution] = []
-        var resolvedInstitutionIds: [String: UUID] = [:]
-        for code in Set(ofxResolutions.map { $0.institution.code }) {
-            if let resolution = ofxResolutions.first(where: { $0.institution.code == code }) {
-                if let existing = resolution.institution.existingId {
-                    resolvedInstitutionIds[code] = existing
-                } else {
-                    let newInst = Institution(
-                        id: UUID(),
-                        code: code,
-                        name: resolution.institution.name,
-                        kind: resolution.institution.kind,
-                        createdAt: now,
-                        updatedAt: now
-                    )
-                    institutionsToInsert.append(newInst)
-                    resolvedInstitutionIds[code] = newInst.id
-                }
-            }
-        }
-
-        var accountsToInsert: [Account] = []
         var batchesWithDrafts: [(batch: ImportBatch, draftIds: [UUID])] = []
         var allDrafts: [TransactionDraft] = []
 
-        for resolution in ofxResolutions {
+        for (resolution, accountId) in resolved {
             let toImport = resolution.rows.filter { $0.selected }
             if toImport.isEmpty { continue }
-
-            let institutionId = resolvedInstitutionIds[resolution.institution.code]
-            let accountId: UUID
-            if let existingId = resolution.account.existingId {
-                accountId = existingId
-            } else {
-                let newAccount = Account(
-                    id: UUID(),
-                    name: resolution.account.name,
-                    type: resolution.account.type,
-                    initialBalance: 0,
-                    archived: false,
-                    institutionId: institutionId,
-                    branchId: resolution.account.branchId,
-                    accountNumber: resolution.account.accountNumber,
-                    currency: resolution.account.currency,
-                    createdAt: now,
-                    updatedAt: now
-                )
-                accountsToInsert.append(newAccount)
-                accountId = newAccount.id
-            }
 
             let batchId = UUID()
             let batch = ImportBatch(
@@ -656,7 +602,7 @@ final class ImportStore {
                     id: UUID(),
                     accountId: accountId,
                     importBatchId: batchId,
-                    signedAmount: row.derived.amount,   // **mantém o sinal do OFX** pra IA
+                    signedAmount: row.derived.amount, // **mantém o sinal do OFX** pra IA
                     occurredAt: row.derived.occurredAt,
                     description: row.derived.description,
                     notes: row.derived.notes,
@@ -673,8 +619,6 @@ final class ImportStore {
         }
 
         pendingDrafts = allDrafts
-        pendingInstitutionsToInsert = institutionsToInsert
-        pendingAccountsToInsert = accountsToInsert
         pendingBatchesWithDrafts = batchesWithDrafts
 
         startCategorization()
@@ -739,8 +683,6 @@ final class ImportStore {
 
             do {
                 try await container.transactions.commitImport(
-                    institutions: pendingInstitutionsToInsert,
-                    accounts: pendingAccountsToInsert,
                     batchesWithTransactions: batchesWithTransactions,
                     cacheEntries: cacheEntries,
                     corrections: corrections
@@ -749,9 +691,6 @@ final class ImportStore {
                 throw ImportError.batchInsertFailed(underlying: error)
             }
 
-            // Atualiza caches locais pós-commit.
-            accounts = try await container.accounts.getAll()
-            institutions = try await container.institutions.getAll()
             await refreshBatches()
 
             let totalRows = batchesWithTransactions.reduce(0) { $0 + $1.transactions.count }
@@ -786,8 +725,6 @@ final class ImportStore {
 
     private func clearPendingState() {
         pendingDrafts = []
-        pendingInstitutionsToInsert = []
-        pendingAccountsToInsert = []
         pendingBatchesWithDrafts = []
     }
 
@@ -805,77 +742,56 @@ final class ImportStore {
 
 // MARK: - OFX resolution data structures
 
-/// Estado por `STMTRS`. Mutável — o usuário pode editar o `name` da conta
-/// nova antes de confirmar.
+/// Estado por `STMTRS`. A partir da Fase 4.5 o import **nunca cria contas** —
+/// usuário aponta cada statement pra uma conta existente. `accountId` começa
+/// preenchido se o auto-detect (instituição+agência+número) bater com uma
+/// conta cadastrada; senão, fica `nil` até o usuário escolher no picker.
 struct OFXStatementResolution: Identifiable, Equatable {
     let id = UUID()
     let statement: OFXStatement
-    var institution: InstitutionResolution
-    var account: AccountResolution
+    /// Conta de destino — `nil` bloqueia a confirmação até o usuário escolher.
+    var accountId: UUID?
+    /// `true` se o auto-detect encontrou a conta sozinho; `false` se o usuário
+    /// escolheu manualmente ou ainda não escolheu. Usado pra badge na UI.
+    var wasAutoDetected: Bool
+    /// Banco como o OFX declara (`<FI><ORG>` ou fallback pelo FID). Exibido
+    /// no header da Section pra orientar o usuário no picker.
+    let ofxBankLabel: String
+    /// Identidade da conta como o OFX declara (`accountId · Ag X · cód. Y`).
+    let ofxAccountLabel: String
     var rows: [OFXPreviewRow]
-
-    var isAccountNew: Bool { account.existingId == nil }
-    var isInstitutionNew: Bool { institution.existingId == nil }
 
     var validRowCount: Int {
         rows.filter { !$0.isDuplicate }.count
     }
+
     var duplicateRowCount: Int {
         rows.filter(\.isDuplicate).count
     }
 }
 
-struct InstitutionResolution: Equatable {
-    var existingId: UUID?
-    var code: String
-    var name: String
-    var kind: InstitutionKind
-}
-
-struct AccountResolution: Equatable {
-    var existingId: UUID?
-    var name: String
-    var type: AccountType
-    var branchId: String?
-    var accountNumber: String
-    var currency: String
-}
-
 // MARK: - CSV resolution data structures (Fase 4.5)
 
-/// Estado do preview de fatura CSV (cartão de crédito). Diferente do OFX,
-/// é um único batch por arquivo (uma fatura = uma conta).
-///
-/// **Modo conta:** `accountId != nil` → usuário escolheu uma conta-cartão
-/// existente; `draftAccount != nil` → nenhuma conta-cartão existia ainda e
-/// vamos criar uma no commit atômico junto com as transações (mesmo padrão
-/// do OFX). Os dois nunca são populados ao mesmo tempo.
+/// Estado do preview de fatura CSV (cartão de crédito). É um único batch por
+/// arquivo (uma fatura = uma conta). `accountId` precisa estar definido pra
+/// confirmar — pré-selecionado quando há uma única conta-cartão cadastrada,
+/// senão o usuário escolhe no picker.
 struct CSVStatementResolution: Equatable {
     let sourceFilename: String
-    /// Conta-cartão existente escolhida pelo usuário. Mutuamente exclusivo
-    /// com `draftAccount`.
     var accountId: UUID?
-    /// Conta-cartão NOVA a ser criada junto com o import. Populada quando
-    /// nenhuma conta-cartão existia no momento de abrir o arquivo. Nome
-    /// editável no preview; tipo fixo em `.creditCard`.
-    var draftAccount: CSVDraftAccount?
     var rows: [CSVPreviewRow]
     /// Quantas linhas com valor negativo (pagamentos da fatura anterior +
     /// estornos) foram puladas no parse. Reportado na UI pra o usuário
     /// saber que houve filtro.
     let skippedNegativeCount: Int
 
-    var selectedCount: Int { rows.filter(\.selected).count }
-    var duplicateCount: Int { rows.filter(\.isDuplicate).count }
-    var isAccountNew: Bool { draftAccount != nil }
-}
+    var selectedCount: Int {
+        rows.filter(\.selected).count
+    }
 
-/// Esboço da conta-cartão a ser criada junto com o import. Espelha
-/// `AccountResolution` do OFX, mas só com os campos relevantes pra cartão
-/// (sem agência/número — cartão não tem).
-struct CSVDraftAccount: Equatable {
-    var name: String
-    var institutionId: UUID?
+    var duplicateCount: Int {
+        rows.filter(\.isDuplicate).count
+    }
 }
 
 struct CSVPreviewRow: Identifiable, Hashable {

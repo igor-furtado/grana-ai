@@ -18,12 +18,18 @@ struct Transaction: Identifiable, Codable, Hashable {
     var occurredAt: Date
     var description: String
     var notes: String?
-    // Fase 3: NULL para entradas manuais; preenchido pelo commit de import.
+    /// Fase 3: NULL para entradas manuais; preenchido pelo commit de import.
     var importBatchId: UUID?
     /// ID externo (ex: FITID do OFX). Permite detecção exata de duplicata em
     /// re-imports do mesmo extrato — chave única do banco emissor por conta.
     /// NULL pra entradas manuais ou imports CSV/XLSX.
     var externalId: String?
+    /// Conta de destino quando a transação é uma transferência entre contas
+    /// próprias do usuário (categoria com `kind = transfer`). Saldo subtrai da
+    /// `accountId` e soma na `destinationAccountId`. Sem destino → transferência
+    /// fica neutra de saldo (ex: importações antigas). Não é exposto pela IA;
+    /// usuário preenche manualmente ao categorizar como Transferência.
+    var destinationAccountId: UUID?
     let createdAt: Date
     var updatedAt: Date
 
@@ -38,6 +44,7 @@ struct Transaction: Identifiable, Codable, Hashable {
         notes: String? = nil,
         importBatchId: UUID? = nil,
         externalId: String? = nil,
+        destinationAccountId: UUID? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -51,6 +58,7 @@ struct Transaction: Identifiable, Codable, Hashable {
         self.notes = notes
         self.importBatchId = importBatchId
         self.externalId = externalId
+        self.destinationAccountId = destinationAccountId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

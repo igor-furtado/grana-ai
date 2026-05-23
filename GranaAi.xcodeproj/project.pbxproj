@@ -94,6 +94,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 2898A1BF2FB3C58F0070C51B /* Build configuration list for PBXNativeTarget "GranaAi" */;
 			buildPhases = (
+				2853744D2FC1D409004EB650 /* SwiftLint */,
 				2898A1B02FB3C58D0070C51B /* Sources */,
 				2898A1B12FB3C58D0070C51B /* Frameworks */,
 				2898A1B22FB3C58D0070C51B /* Resources */,
@@ -201,6 +202,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		2853744D2FC1D409004EB650 /* SwiftLint */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = SwiftLint;
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if command -v swiftlint >/dev/null 2>&1; then\n    swiftlint\nelif [ -x /opt/homebrew/bin/swiftlint ]; then\n    /opt/homebrew/bin/swiftlint\nelif [ -x /usr/local/bin/swiftlint ]; then\n    /usr/local/bin/swiftlint\nelse\n    echo \"warning: SwiftLint não instalado — instalar com: brew install swiftlint\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		2898A1B02FB3C58D0070C51B /* Sources */ = {
@@ -355,6 +378,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -398,6 +422,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

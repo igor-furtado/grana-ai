@@ -33,7 +33,7 @@ final class CategorizationService: Sendable {
     /// Thresholds usados pelo UI pra agrupar sugestões em alta/média/baixa.
     /// `absoluteMinimum` ainda é usado: AI retornando confidence abaixo dele
     /// cai como fallback (não pode poluir cache nem virar sugestão "real").
-    struct ConfidenceThresholds: Sendable, Hashable {
+    struct ConfidenceThresholds: Hashable, Sendable {
         var autoApproved: Double = 0.85
         var reviewRequired: Double = 0.70
         var absoluteMinimum: Double = 0.30
@@ -135,7 +135,7 @@ final class CategorizationService: Sendable {
             .filter { !$0.archived }
             .map { account in
                 CategorizationPrompt.OwnAccountInfo(
-                    name: account.name,
+                    name: Account.displayName(for: account, institutions: allInstitutions),
                     typeDisplay: account.type.displayName,
                     institutionName: account.institutionId.flatMap { institutionNamesById[$0] }
                 )
@@ -144,10 +144,12 @@ final class CategorizationService: Sendable {
         // Map por id pra popular `account_context` em cada item. Inclui contas
         // arquivadas — drafts em voo podem (teoricamente) apontar pra uma
         // conta recém-arquivada; melhor mostrar o contexto certo do que
-        // "Desconhecida".
+        // "Desconhecida". `displayName(for:)` já carrega o tipo no formato curto
+        // (ex: "Inter Cartão · ••••1234"), então não concatenamos o
+        // `type.displayName` de novo — economiza tokens e evita ruído.
         let accountContextById: [UUID: String] = Dictionary(
             uniqueKeysWithValues: allAccounts.map { acc in
-                (acc.id, "\(acc.name) · \(acc.type.displayName)")
+                (acc.id, Account.displayName(for: acc, institutions: allInstitutions))
             }
         )
 
@@ -209,13 +211,17 @@ final class CategorizationService: Sendable {
             // `chunkSize` é sempre o tamanho do chunk original — pra progresso
             // não travar se a IA devolver menos itens que o esperado.
             enum ChunkOutcome {
-                case success(chunkSize: Int, suggestions: [CategorizationSuggestion], cacheEntries: [CategorizationCacheEntry])
+                case success(
+                    chunkSize: Int,
+                    suggestions: [CategorizationSuggestion],
+                    cacheEntries: [CategorizationCacheEntry]
+                )
                 case failure(drafts: [TransactionDraft], error: Error)
 
                 var chunkSize: Int {
                     switch self {
-                    case .success(let size, _, _): size
-                    case .failure(let drafts, _):  drafts.count
+                    case let .success(size, _, _): size
+                    case let .failure(drafts, _): drafts.count
                     }
                 }
             }
@@ -241,7 +247,11 @@ final class CategorizationService: Sendable {
                                 fewShots: fewShots,
                                 thresholds: thresholds
                             )
-                            return .success(chunkSize: chunkSize, suggestions: aiSuggestions, cacheEntries: aiCacheEntries)
+                            return .success(
+                                chunkSize: chunkSize,
+                                suggestions: aiSuggestions,
+                                cacheEntries: aiCacheEntries
+                            )
                         } catch {
                             return .failure(drafts: chunk, error: error)
                         }
@@ -264,23 +274,26 @@ final class CategorizationService: Sendable {
             var failedCount = 0
             for outcome in outcomes {
                 switch outcome {
-                case .success(_, let aiSuggestions, let aiCacheEntries):
+                case let .success(_, aiSuggestions, aiCacheEntries):
                     for s in aiSuggestions {
                         switch s.source {
-                        case .ai:       fromAI += 1
+                        case .ai: fromAI += 1
                         case .fallback: fromFallback += 1
-                        case .cache:    break
+                        case .cache: break
                         }
                     }
                     suggestions.append(contentsOf: aiSuggestions)
                     for entry in aiCacheEntries {
                         pendingCacheEntries[entry.descriptionHash] = entry
                     }
-                case .failure(let chunk, let error):
+                case let .failure(chunk, error):
                     failedCount += 1
                     // Loga o erro raw pra diagnóstico (não vira toast aqui;
                     // o toast resumido vem depois do laço).
-                    log.ai.error("Chunk de categorização falhou (\(chunk.count) drafts): \(error.localizedDescription, privacy: .public)")
+                    log.ai
+                        .error(
+                            "Chunk de categorização falhou (\(chunk.count) drafts): \(error.localizedDescription, privacy: .public)"
+                        )
                     for draft in chunk {
                         let hash = hashByDraftId[draft.id] ?? DescriptionNormalizer.hash(draft.description)
                         suggestions.append(buildSuggestion(
@@ -317,7 +330,10 @@ final class CategorizationService: Sendable {
             fallback: fromFallback
         ))
 
-        log.ai.info("classifyDrafts total=\(drafts.count) cacheHits=\(fromCache) fromAI=\(fromAI) fallback=\(fromFallback)")
+        log.ai
+            .info(
+                "classifyDrafts total=\(drafts.count) cacheHits=\(fromCache) fromAI=\(fromAI) fallback=\(fromFallback)"
+            )
 
         // Ordena por confidence ascendente — usuário revisa primeiro o que
         // mais precisa de atenção.
@@ -362,7 +378,7 @@ final class CategorizationService: Sendable {
             TransactionDraft(
                 id: tx.id,
                 accountId: tx.accountId,
-                importBatchId: tx.importBatchId ?? UUID(),   // batch real não é usado nesse caminho
+                importBatchId: tx.importBatchId ?? UUID(), // batch real não é usado nesse caminho
                 signedAmount: tx.amount,
                 occurredAt: tx.occurredAt,
                 description: tx.description,
@@ -496,7 +512,9 @@ final class CategorizationService: Sendable {
         }
 
         var byIndex: [Int: CategorizationPrompt.ClassificationResult] = [:]
-        for r in results { byIndex[r.index] = r }
+        for r in results {
+            byIndex[r.index] = r
+        }
 
         // **Por que duas passadas:** dois drafts com mesma descrição normalizada
         // (mesmo hash) podem receber respostas diferentes da IA — cada item leva
@@ -671,7 +689,7 @@ private extension Array {
     func chunked(into size: Int) -> [[Element]] {
         guard size > 0 else { return [self] }
         return stride(from: 0, to: count, by: size).map {
-            Array(self[$0..<Swift.min($0 + size, count)])
+            Array(self[$0 ..< Swift.min($0 + size, count)])
         }
     }
 }

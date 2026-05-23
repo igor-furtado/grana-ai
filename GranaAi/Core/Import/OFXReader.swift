@@ -16,7 +16,6 @@ import Foundation
 /// Não montamos uma árvore de objetos genérica; vamos direto pros nós que
 /// importam (`SONRS/FI`, `STMTRS`, `STMTTRN`, `LEDGERBAL`).
 struct OFXReader {
-
     enum DecodingError: Error {
         case unreadable(URL)
         case noStatements
@@ -54,7 +53,7 @@ struct OFXReader {
 
     // MARK: - Header + body separation
 
-    private struct HeaderInfo: Sendable {
+    private struct HeaderInfo {
         var version: String
         var encoding: String
         var charset: String?
@@ -79,8 +78,12 @@ struct OFXReader {
             let encoding: String = {
                 if let range = probe.range(of: #"encoding=\"[^\"]+\""#, options: .regularExpression),
                    let q1 = probe[range].range(of: "\""),
-                   let q2 = probe[range].range(of: "\"", range: probe.index(after: q1.lowerBound)..<probe[range].endIndex) {
-                    return String(probe[range][probe.index(after: q1.lowerBound)..<q2.lowerBound])
+                   let q2 = probe[range].range(
+                       of: "\"",
+                       range: probe.index(after: q1.lowerBound) ..< probe[range].endIndex
+                   )
+                {
+                    return String(probe[range][probe.index(after: q1.lowerBound) ..< q2.lowerBound])
                 }
                 return "UTF-8"
             }()
@@ -109,9 +112,9 @@ struct OFXReader {
                 let key = String(line[..<colon]).uppercased()
                 let value = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
                 switch key {
-                case "VERSION":  version = value
+                case "VERSION": version = value
                 case "ENCODING": encoding = value
-                case "CHARSET":  charset = value
+                case "CHARSET": charset = value
                 default: break
                 }
             }
@@ -306,9 +309,9 @@ struct OFXReader {
         /// pra MEMOs com `&amp;` que aparecem em alguns bancos.
         private func decodeEntities(_ s: String) -> String {
             s
-                .replacingOccurrences(of: "&amp;",  with: "&")
-                .replacingOccurrences(of: "&lt;",   with: "<")
-                .replacingOccurrences(of: "&gt;",   with: ">")
+                .replacingOccurrences(of: "&amp;", with: "&")
+                .replacingOccurrences(of: "&lt;", with: "<")
+                .replacingOccurrences(of: "&gt;", with: ">")
                 .replacingOccurrences(of: "&quot;", with: "\"")
                 .replacingOccurrences(of: "&apos;", with: "'")
         }
@@ -347,16 +350,15 @@ struct OFXReader {
         guard let acctNode = stmt.firstChild("BANKACCTFROM") else { return nil }
         guard let acctIdNode = acctNode.firstChild("ACCTID")?.value.nonEmpty,
               let bankIdNode = acctNode.firstChild("BANKID")?.value.nonEmpty
-                ?? fileLevelHeader.fid else {
+              ?? fileLevelHeader.fid
+        else {
             return nil
         }
-        let accountType = acctNode.firstChild("ACCTTYPE")?.value.nonEmpty ?? "CHECKING"
         let branchId = acctNode.firstChild("BRANCHID")?.value.nonEmpty
         let account = OFXAccountKey(
             bankId: bankIdNode,
             branchId: branchId,
-            accountId: acctIdNode,
-            accountType: accountType
+            accountId: acctIdNode
         )
 
         let transactions = (stmt.firstChild("BANKTRANLIST")?.allChildren("STMTTRN") ?? [])
@@ -365,7 +367,8 @@ struct OFXReader {
         let balance: OFXBalance? = {
             guard let bal = stmt.firstChild("LEDGERBAL"),
                   let amount = parseAmount(bal.firstChild("BALAMT")?.value),
-                  let asOf = parseOFXDateTime(bal.firstChild("DTASOF")?.value) else {
+                  let asOf = parseOFXDateTime(bal.firstChild("DTASOF")?.value)
+            else {
                 return nil
             }
             return OFXBalance(amount: amount, asOf: asOf)
@@ -383,7 +386,8 @@ struct OFXReader {
     private static func parseTransaction(_ node: Node) -> OFXTransaction? {
         guard let fitid = node.firstChild("FITID")?.value.nonEmpty,
               let amount = parseAmount(node.firstChild("TRNAMT")?.value),
-              let date = parseOFXDateTime(node.firstChild("DTPOSTED")?.value) else {
+              let date = parseOFXDateTime(node.firstChild("DTPOSTED")?.value)
+        else {
             return nil
         }
         let trnType = node.firstChild("TRNTYPE")?.value.uppercased() ?? "OTHER"
@@ -406,7 +410,7 @@ struct OFXReader {
         guard var s = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
         // Alguns bancos colocam vírgula como decimal mesmo em OFX (errado mas
         // existe). Trocar pra ponto antes de parsear com locale POSIX.
-        if s.contains(",") && !s.contains(".") {
+        if s.contains(","), !s.contains(".") {
             s = s.replacingOccurrences(of: ",", with: ".")
         }
         return Decimal(string: s, locale: Locale(identifier: "en_US_POSIX"))

@@ -18,10 +18,15 @@ struct TransactionFormView: View {
     /// números e o "R$ X,YY" apareça automaticamente, sem precisar pensar em
     /// vírgula ou separador de milhar.
     @State private var amountCents: Int = 0
-    @State private var occurredAt: Date = Date()
+    @State private var occurredAt: Date = .init()
     @State private var accountId: UUID?
     @State private var categoryId: UUID?
     @State private var subcategoryId: UUID?
+    /// Fase 4.5: contraparte quando a categoria selecionada é `transfer`.
+    /// Aparece como picker logo abaixo do "Conta" — só renderizado quando
+    /// `selectedCategoryKind == .transfer`. Ao trocar a categoria pra qualquer
+    /// outro kind, o valor é limpo (`onChange` em `categoryId`).
+    @State private var destinationAccountId: UUID?
     @State private var notes: String = ""
     @State private var saveError: String?
 
@@ -49,7 +54,16 @@ struct TransactionFormView: View {
                 // `accountId` é defaultado pra primeira conta em `loadExisting`.
                 Picker("Conta", selection: $accountId) {
                     ForEach(store.accounts) { account in
-                        Text(account.name).tag(UUID?.some(account.id))
+                        Text(store.displayName(for: account)).tag(UUID?.some(account.id))
+                    }
+                }
+                .onChange(of: accountId) { _, newValue in
+                    // Origem mudou pra mesma conta que o destino → zera o
+                    // destino. Sem isso o save passaria com origem == destino
+                    // (transferência pra si mesma, neutra no saldo mas suja
+                    // na lista).
+                    if destinationAccountId == newValue {
+                        destinationAccountId = nil
                     }
                 }
 
@@ -65,15 +79,35 @@ struct TransactionFormView: View {
                     // sobrescreveríamos a subcategoria que está sendo carregada.
                     if oldValue != nil {
                         subcategoryId = nil
+                        // Sair de uma categoria "transfer" → joga fora o destino
+                        // (só faz sentido pra transferências). `loadExisting`
+                        // preserva o destino porque `oldValue == nil` nesse caso.
+                        if selectedCategoryKind != .transfer {
+                            destinationAccountId = nil
+                        }
                     }
                 }
 
                 if let categoryId,
-                   !store.subcategories(of: categoryId).isEmpty {
+                   !store.subcategories(of: categoryId).isEmpty
+                {
                     Picker("Subcategoria", selection: $subcategoryId) {
                         Text("(nenhuma)").tag(UUID?.none)
                         ForEach(store.subcategories(of: categoryId)) { sub in
                             Text(sub.name).tag(UUID?.some(sub.id))
+                        }
+                    }
+                }
+
+                // Fase 4.5: contraparte da transferência. Só aparece se a
+                // categoria selecionada for `transfer` — pra qualquer outra,
+                // destination_account_id fica NULL e o saldo se comporta como
+                // sempre (sinal vem do kind income/expense).
+                if selectedCategoryKind == .transfer {
+                    Picker("Conta de destino", selection: $destinationAccountId) {
+                        Text("(nenhuma)").tag(UUID?.none)
+                        ForEach(destinationAccountOptions) { account in
+                            Text(store.displayName(for: account)).tag(UUID?.some(account.id))
                         }
                     }
                 }
@@ -146,10 +180,44 @@ struct TransactionFormView: View {
     // MARK: - Save
 
     private var canSave: Bool {
-        !description.trimmingCharacters(in: .whitespaces).isEmpty
-            && amountCents > 0
-            && accountId != nil
-            && categoryId != nil
+        guard !description.trimmingCharacters(in: .whitespaces).isEmpty,
+              amountCents > 0,
+              accountId != nil,
+              categoryId != nil
+        else { return false }
+        // Transferência exige destino diferente da origem. `destinationAccountId`
+        // nulo é aceito (transferência neutra, compat com legados); o que
+        // bloqueia é destino == origem.
+        if selectedCategoryKind == .transfer,
+           let dest = destinationAccountId,
+           dest == accountId
+        {
+            return false
+        }
+        return true
+    }
+
+    /// `kind` da categoria atualmente selecionada — usado pra decidir se mostra
+    /// o picker de destino, decidir se persiste `destinationAccountId`, etc.
+    /// `nil` se a categoria ainda não foi carregada (race entre `onAppear` e
+    /// o stream de categorias) ou nenhuma foi escolhida.
+    private var selectedCategoryKind: CategoryKind? {
+        guard let categoryId else { return nil }
+        return store.categories.first { $0.id == categoryId }?.kind
+    }
+
+    /// Opções pro picker de destino: todas as contas menos a de origem
+    /// (transferir pra si mesmo não faz sentido). Inclui arquivadas só se
+    /// já era a contraparte de uma transferência existente — assim a edição
+    /// não "perde" a conta arquivada do dropdown.
+    private var destinationAccountOptions: [Account] {
+        store.accounts.filter { account in
+            guard account.id != accountId else { return false }
+            if account.archived {
+                return existing?.destinationAccountId == account.id
+            }
+            return true
+        }
     }
 
     private func loadExisting() {
@@ -166,6 +234,7 @@ struct TransactionFormView: View {
         accountId = existing.accountId
         categoryId = existing.categoryId
         subcategoryId = existing.subcategoryId
+        destinationAccountId = existing.destinationAccountId
         notes = existing.notes ?? ""
     }
 
@@ -174,6 +243,13 @@ struct TransactionFormView: View {
         let trimmedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let notesValue = trimmedNotes.isEmpty ? nil : trimmedNotes
         let amount = Decimal(amountCents) / 100
+
+        // Só persiste destino quando a categoria é transferência. Trocar a
+        // categoria pra outro kind sem reabrir o form não devia acontecer
+        // (zeramos no onChange), mas o guard aqui é cinto + suspensório.
+        let resolvedDestination: UUID? = (selectedCategoryKind == .transfer)
+            ? destinationAccountId
+            : nil
 
         do {
             if let existing {
@@ -185,6 +261,7 @@ struct TransactionFormView: View {
                 updated.occurredAt = occurredAt
                 updated.description = description
                 updated.notes = notesValue
+                updated.destinationAccountId = resolvedDestination
                 try await store.update(updated)
             } else {
                 try await store.add(
@@ -194,7 +271,8 @@ struct TransactionFormView: View {
                     amount: amount,
                     occurredAt: occurredAt,
                     description: description,
-                    notes: notesValue
+                    notes: notesValue,
+                    destinationAccountId: resolvedDestination
                 )
             }
             dismiss()

@@ -1,9 +1,10 @@
 import Foundation
 import SwiftUI
 
-/// Lista de contas em grid de cards, com form inline. Reativa via
-/// `AccountStore.start()` — saldos, contas e instituições streamam em
-/// paralelo e a UI re-renderiza via `@Observable`.
+/// Lista de contas em grid de cards. Reativa via `AccountStore.start()` —
+/// saldos, contas e instituições streamam em paralelo e a UI re-renderiza
+/// via `@Observable`. Create/edit acontecem em **sheet modal**
+/// (`.sheet(item:)`) — padrão idiomático macOS pra esse tipo de fluxo.
 ///
 /// Diferença pro Finest: aqui distinguimos **Conta** (livre, criada pelo
 /// usuário) de **Banco** (catálogo fixo via `InstitutionKind`). O card de
@@ -15,9 +16,19 @@ struct AccountsView: View {
     @State private var formMode: FormMode?
     @State private var showArchived = false
 
-    enum FormMode {
+    /// `Identifiable` pra alimentar o `.sheet(item:)` — o id distingue
+    /// "novo" de cada edição específica, garantindo que trocar de "editar
+    /// conta A" pra "editar conta B" remonte o form (estado limpo).
+    enum FormMode: Identifiable {
         case create
         case edit(Account)
+
+        var id: String {
+            switch self {
+            case .create: return "create"
+            case let .edit(account): return "edit-\(account.id.uuidString)"
+            }
+        }
     }
 
     var body: some View {
@@ -41,32 +52,34 @@ struct AccountsView: View {
                 }
                 .disabled(formMode != nil)
             }
-            ToolbarItem(placement: .secondaryAction) {
-                Toggle("Mostrar arquivadas", isOn: $showArchived)
+            // Toggle só aparece quando existe pelo menos uma conta arquivada.
+            // Sem isso o controle ficava sempre visível mesmo no estado vazio
+            // ou quando o usuário nunca arquivou nada — ruído de UI.
+            if hasArchivedAccount {
+                ToolbarItem(placement: .secondaryAction) {
+                    Toggle("Mostrar arquivadas", isOn: $showArchived)
+                }
             }
         }
     }
 
-    @ViewBuilder
     private func content(store: AccountStore) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if let formMode {
-                    AccountFormView(
-                        existing: editingAccount(from: formMode),
-                        onCancel: { self.formMode = nil },
-                        onSaved: { self.formMode = nil }
-                    )
-                    // `.id(...)` força remontagem (estado limpo + `onAppear`
-                    // re-disparado) quando o usuário troca de "novo" pra
-                    // "editar conta X", ou entre duas edições. Sem isso, a
-                    // mesma instância do form se mantém com `@State` velho.
-                    .id(formIdentity(for: formMode))
-                    .environment(store)
-                }
                 listOrEmpty(store: store)
             }
             .padding(20)
+        }
+        // Form sheet aparece centralizado e dimming no fundo — padrão macOS
+        // pra create/edit. `.sheet(item:)` re-monta o conteúdo a cada novo
+        // `formMode` (id muda), garantindo estado limpo entre aberturas.
+        .sheet(item: $formMode) { mode in
+            AccountFormView(
+                existing: editingAccount(from: mode),
+                onCancel: { formMode = nil },
+                onSaved: { formMode = nil }
+            )
+            .environment(store)
         }
     }
 
@@ -76,6 +89,12 @@ struct AccountsView: View {
         if count == 0 { return "Nenhuma conta cadastrada" }
         if count == 1 { return "1 conta cadastrada" }
         return "\(count) contas cadastradas"
+    }
+
+    /// `true` quando pelo menos uma conta está arquivada. Gateia a exibição
+    /// do toggle "Mostrar arquivadas" — esconde quando não há nada arquivado.
+    private var hasArchivedAccount: Bool {
+        store?.accounts.contains(where: \.archived) ?? false
     }
 
     @ViewBuilder
@@ -91,6 +110,7 @@ struct AccountsView: View {
                 ForEach(visibleAccounts) { account in
                     AccountCard(
                         account: account,
+                        displayName: store.displayName(for: account),
                         institution: store.institution(forAccount: account),
                         currentBalance: store.currentBalance(for: account),
                         onEdit: { formMode = .edit(account) },
@@ -111,11 +131,13 @@ struct AccountsView: View {
                 .foregroundStyle(.secondary)
             Text("Nenhuma conta cadastrada")
                 .font(.title3.weight(.semibold))
-            Text("Cadastre as contas que você usa (Inter, Nubank, carteira, etc.) para vincular transações e organizar suas movimentações.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 420)
+            Text(
+                "Cadastre as contas e cartões que você usa (Inter, Nubank, XP, etc.) para vincular transações e organizar suas movimentações."
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: 420)
             Button {
                 formMode = .create
             } label: {
@@ -149,15 +171,8 @@ struct AccountsView: View {
     }
 
     private func editingAccount(from mode: FormMode) -> Account? {
-        if case .edit(let account) = mode { return account }
+        if case let .edit(account) = mode { return account }
         return nil
-    }
-
-    private func formIdentity(for mode: FormMode) -> String {
-        switch mode {
-        case .create:           return "create"
-        case .edit(let account): return "edit-\(account.id.uuidString)"
-        }
     }
 }
 
@@ -165,6 +180,7 @@ struct AccountsView: View {
 
 private struct AccountCard: View {
     let account: Account
+    let displayName: String
     let institution: Institution?
     let currentBalance: Decimal
     let onEdit: () -> Void
@@ -182,21 +198,19 @@ private struct AccountCard: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top) {
-                    ZStack {
-                        Circle()
-                            .fill(accentColor.opacity(0.15))
-                        accountIcon
-                    }
-                    .frame(width: 44, height: 44)
+                    accountIcon
 
                     Spacer()
 
                     if isHovered {
                         HStack(spacing: 6) {
                             iconButton(systemImage: AppIcon.edit.systemImage, help: "Editar", action: onEdit)
-                            iconButton(systemImage: account.archived ? AppIcon.unarchive.systemImage : AppIcon.archive.systemImage,
-                                       help: account.archived ? "Desarquivar" : "Arquivar",
-                                       action: onToggleArchive)
+                            iconButton(
+                                systemImage: account.archived ? AppIcon.unarchive.systemImage : AppIcon.archive
+                                    .systemImage,
+                                help: account.archived ? "Desarquivar" : "Arquivar",
+                                action: onToggleArchive
+                            )
                             iconButton(systemImage: AppIcon.delete.systemImage, help: "Apagar") {
                                 showDeleteConfirm = true
                             }
@@ -207,7 +221,7 @@ private struct AccountCard: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(account.name)
+                        Text(displayName)
                             .font(.headline)
                         if account.archived {
                             Text("arquivada")
@@ -254,7 +268,7 @@ private struct AccountCard: View {
             Button("Apagar", role: .destructive) { showDeleteConfirm = true }
         }
         .confirmationDialog(
-            "Apagar conta “\(account.name)”?",
+            "Apagar conta “\(displayName)”?",
             isPresented: $showDeleteConfirm,
             titleVisibility: .visible
         ) {
@@ -271,34 +285,34 @@ private struct AccountCard: View {
 
     private var defaultAccent: Color {
         switch account.type {
-        case .wallet:     return .income
         case .creditCard: return .transfer
-        default:          return .brandSecondary
+        default: return .brandSecondary
         }
     }
 
-    /// Ícone da conta. Quando tem `Institution`, usa o logo da marca (asset
-    /// real se cadastrado, ou SF Symbol tintado pela cor da marca como
-    /// fallback). Sem instituição, cai num SF Symbol por tipo de conta.
+    /// Ícone da conta. Quando tem `Institution`, usa o avatar da marca
+    /// (`InstitutionIcon`). Sem instituição (caso degenerado pós-Fase 4.5),
+    /// cai num SF Symbol por tipo de conta sobre o tint do `accentColor`.
     @ViewBuilder
     private var accountIcon: some View {
-        if account.type != .wallet, let institution {
-            InstitutionLogoImage(kind: institution.kind)
-                .padding(8)
+        if let institution {
+            InstitutionIcon(kind: institution.kind, size: 44)
         } else {
-            Image(systemName: fallbackIconName)
-                .font(.title2)
-                .foregroundStyle(accentColor)
+            ZStack {
+                Circle()
+                    .fill(accentColor.opacity(0.15))
+                Image(systemName: fallbackIconName)
+                    .font(.title2)
+                    .foregroundStyle(accentColor)
+            }
+            .frame(width: 44, height: 44)
         }
     }
 
     private var fallbackIconName: String {
         switch account.type {
-        case .checking:   return "building.columns"
-        case .savings:    return "banknote"
-        case .brokerage:  return "chart.line.uptrend.xyaxis"
+        case .checking: return "building.columns"
         case .creditCard: return "creditcard.fill"
-        case .wallet:     return "wallet.pass.fill"
         }
     }
 

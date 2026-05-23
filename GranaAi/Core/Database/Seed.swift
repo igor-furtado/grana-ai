@@ -10,31 +10,8 @@ import PowerSync
 /// reset durante desenvolvimento). Idempotente por design.
 enum Seed {
     static func runIfNeeded(container: AppContainer) async throws {
-        try await seedAccountsIfEmpty(container: container)
         try await seedInstitutionsIfEmpty(container: container)
         try await seedCategoriesIfEmpty(container: container)
-    }
-
-    private static func seedAccountsIfEmpty(container: AppContainer) async throws {
-        let existing = try await container.accounts.getAll()
-        guard existing.isEmpty else { return }
-
-        // Apenas "Carteira" como padrão na Fase 3 em diante. Contas bancárias
-        // são criadas pelo usuário (manualmente) ou pelo importer OFX —
-        // criar uma "Conta Corrente" genérica no seed era enganoso porque
-        // não tinha instituição associada.
-        let now = Date()
-        let wallet = Account(
-            id: UUID(),
-            name: "Carteira",
-            type: .wallet,
-            initialBalance: 0,
-            archived: false,
-            createdAt: now,
-            updatedAt: now
-        )
-        try await container.accounts.insert(wallet)
-        log.database.info("Seed: conta padrão 'Carteira' inserida")
     }
 
     /// Pré-cadastra todas as instituições "ricamente suportadas" — qualquer
@@ -80,10 +57,10 @@ enum Seed {
             let nowString = Converters.dateToString(Date())
 
             let insertSQL = """
-                INSERT INTO categories
-                    (id, parent_id, name, kind, slug, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """
+            INSERT INTO categories
+                (id, parent_id, name, kind, slug, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """
 
             for definition in CategorySeedData.categories {
                 let parentId = UUID()
@@ -91,10 +68,10 @@ enum Seed {
                     sql: insertSQL,
                     parameters: [
                         parentId.uuidString,
-                        nil,                            // raiz
+                        nil, // raiz
                         definition.name,
                         definition.kind.rawValue,
-                        definition.slug,                // slug só na raiz; ícone resolve via CategoryIcon.forSlug
+                        definition.slug, // slug só na raiz; ícone resolve via CategoryIcon.forSlug
                         nowString,
                     ]
                 )
@@ -121,6 +98,9 @@ enum Seed {
         }
 
         let total = CategorySeedData.categories.reduce(0) { $0 + 1 + $1.subcategories.count }
-        log.database.info("Seed: \(CategorySeedData.categories.count) raízes + \(total - CategorySeedData.categories.count) subcategorias inseridas (transacional)")
+        log.database
+            .info(
+                "Seed: \(CategorySeedData.categories.count) raízes + \(total - CategorySeedData.categories.count) subcategorias inseridas (transacional)"
+            )
     }
 }

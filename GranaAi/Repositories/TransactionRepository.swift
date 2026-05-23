@@ -29,12 +29,12 @@ final class TransactionRepository: Sendable {
     func update(_ transaction: Transaction) async throws {
         try await db.execute(
             sql: """
-                UPDATE transactions SET
-                    account_id = ?, category_id = ?, subcategory_id = ?,
-                    amount_cents = ?, occurred_at = ?, description = ?,
-                    notes = ?, updated_at = ?
-                WHERE id = ?
-                """,
+            UPDATE transactions SET
+                account_id = ?, category_id = ?, subcategory_id = ?,
+                amount_cents = ?, occurred_at = ?, description = ?,
+                notes = ?, destination_account_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
             parameters: [
                 transaction.accountId.uuidString,
                 transaction.categoryId.uuidString,
@@ -43,6 +43,7 @@ final class TransactionRepository: Sendable {
                 Converters.dateToString(transaction.occurredAt),
                 transaction.description,
                 transaction.notes,
+                transaction.destinationAccountId?.uuidString,
                 Converters.dateToString(transaction.updatedAt),
                 transaction.id.uuidString,
             ]
@@ -89,10 +90,10 @@ final class TransactionRepository: Sendable {
     func watchByAccount(accountId: UUID) throws -> AsyncThrowingStream<[Transaction], Error> {
         try db.watch(
             sql: """
-                SELECT * FROM transactions
-                WHERE account_id = ?
-                ORDER BY occurred_at DESC
-                """,
+            SELECT * FROM transactions
+            WHERE account_id = ?
+            ORDER BY occurred_at DESC
+            """,
             parameters: [accountId.uuidString],
             mapper: Self.mapTransaction
         )
@@ -101,10 +102,10 @@ final class TransactionRepository: Sendable {
     func watchByDateRange(from: Date, to: Date) throws -> AsyncThrowingStream<[Transaction], Error> {
         try db.watch(
             sql: """
-                SELECT * FROM transactions
-                WHERE occurred_at >= ? AND occurred_at <= ?
-                ORDER BY occurred_at DESC
-                """,
+            SELECT * FROM transactions
+            WHERE occurred_at >= ? AND occurred_at <= ?
+            ORDER BY occurred_at DESC
+            """,
             parameters: [
                 Converters.dateToString(from),
                 Converters.dateToString(to),
@@ -117,78 +118,35 @@ final class TransactionRepository: Sendable {
 
     /// Fase 4: commit atômico do import + categorização.
     ///
-    /// Faz tudo em UMA `writeTransaction`: institutions + accounts + batches +
-    /// transactions + cache entries + corrections. Atomicidade obrigatória —
-    /// se qualquer execute falha, nada é persistido. Garante que cancelar o
-    /// import deixe o banco intocado, e que aceitar deixe-o consistente:
-    /// transactions categorizadas + cache atualizado + corrections registradas.
+    /// Faz tudo em UMA `writeTransaction`: batches + transactions + cache
+    /// entries + corrections. Atomicidade obrigatória — se qualquer execute
+    /// falha, nada é persistido. Garante que cancelar o import deixe o banco
+    /// intocado, e que aceitar deixe-o consistente: transactions categorizadas
+    /// + cache atualizado + corrections registradas.
+    ///
+    /// **A partir da Fase 4.5 o import não cria contas nem instituições** —
+    /// o usuário aponta cada extrato pra uma conta já cadastrada. Por isso
+    /// as listas `institutions`/`accounts` do commit antigo saíram daqui.
     ///
     /// Ordem das writes:
-    /// 1. Institutions novas (FKs alvo das accounts)
-    /// 2. Accounts novas (FKs alvo das transactions)
-    /// 3. Batches (FKs alvo das transactions via `import_batch_id`)
-    /// 4. Transactions
-    /// 5. Cache entries (delete-then-insert por hash+model)
-    /// 6. Corrections
+    /// 1. Batches (FKs alvo das transactions via `import_batch_id`)
+    /// 2. Transactions
+    /// 3. Cache entries (delete-then-insert por hash+model)
+    /// 4. Corrections
     func commitImport(
-        institutions: [Institution],
-        accounts: [Account],
         batchesWithTransactions: [(batch: ImportBatch, transactions: [Transaction])],
         cacheEntries: [CategorizationCacheEntry],
         corrections: [CategorizationCorrection]
     ) async throws {
         try await db.writeTransaction { tx in
-            for institution in institutions {
-                try tx.execute(
-                    sql: """
-                        INSERT INTO institutions
-                            (id, code, name, kind, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        """,
-                    parameters: [
-                        institution.id.uuidString,
-                        institution.code,
-                        institution.name,
-                        institution.kind.rawValue,
-                        Converters.dateToString(institution.createdAt),
-                        Converters.dateToString(institution.updatedAt),
-                    ]
-                )
-            }
-
-            for account in accounts {
-                try tx.execute(
-                    sql: """
-                        INSERT INTO accounts
-                            (id, name, type, initial_balance_cents, archived,
-                             institution_id, branch_id, account_number, currency,
-                             created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                    parameters: [
-                        account.id.uuidString,
-                        account.name,
-                        account.type.rawValue,
-                        Converters.decimalToCents(account.initialBalance),
-                        account.archived ? 1 : 0,
-                        account.institutionId?.uuidString,
-                        account.branchId,
-                        account.accountNumber,
-                        account.currency,
-                        Converters.dateToString(account.createdAt),
-                        Converters.dateToString(account.updatedAt),
-                    ]
-                )
-            }
-
             for (batch, transactions) in batchesWithTransactions {
                 try tx.execute(
                     sql: """
-                        INSERT INTO import_batches
-                            (id, source_filename, account_id, row_count,
-                             imported_at, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """,
+                    INSERT INTO import_batches
+                        (id, source_filename, account_id, row_count,
+                         imported_at, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
                     parameters: [
                         batch.id.uuidString,
                         batch.sourceFilename,
@@ -215,11 +173,11 @@ final class TransactionRepository: Sendable {
                 )
                 try tx.execute(
                     sql: """
-                        INSERT INTO categorization_cache
-                            (id, description_hash, normalized_description, category_id,
-                             subcategory_id, confidence, model, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
+                    INSERT INTO categorization_cache
+                        (id, description_hash, normalized_description, category_id,
+                         subcategory_id, confidence, model, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
                     parameters: [
                         entry.id.uuidString,
                         entry.descriptionHash,
@@ -237,13 +195,13 @@ final class TransactionRepository: Sendable {
             for correction in corrections {
                 try tx.execute(
                     sql: """
-                        INSERT INTO categorization_corrections
-                            (id, description_hash, normalized_description,
-                             original_category_id, original_subcategory_id,
-                             corrected_category_id, corrected_subcategory_id,
-                             transaction_id, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
+                    INSERT INTO categorization_corrections
+                        (id, description_hash, normalized_description,
+                         original_category_id, original_subcategory_id,
+                         corrected_category_id, corrected_subcategory_id,
+                         transaction_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
                     parameters: [
                         correction.id.uuidString,
                         correction.descriptionHash,
@@ -281,13 +239,13 @@ final class TransactionRepository: Sendable {
         try await db.writeTransaction { tx in
             try tx.execute(
                 sql: """
-                    INSERT INTO categorization_corrections
-                        (id, description_hash, normalized_description,
-                         original_category_id, original_subcategory_id,
-                         corrected_category_id, corrected_subcategory_id,
-                         transaction_id, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                INSERT INTO categorization_corrections
+                    (id, description_hash, normalized_description,
+                     original_category_id, original_subcategory_id,
+                     corrected_category_id, corrected_subcategory_id,
+                     transaction_id, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 parameters: [
                     correction.id.uuidString,
                     correction.descriptionHash,
@@ -307,11 +265,11 @@ final class TransactionRepository: Sendable {
             )
             try tx.execute(
                 sql: """
-                    INSERT INTO categorization_cache
-                        (id, description_hash, normalized_description, category_id,
-                         subcategory_id, confidence, model, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                INSERT INTO categorization_cache
+                    (id, description_hash, normalized_description, category_id,
+                     subcategory_id, confidence, model, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 parameters: [
                     cacheEntry.id.uuidString,
                     cacheEntry.descriptionHash,
@@ -327,10 +285,10 @@ final class TransactionRepository: Sendable {
 
             try tx.execute(
                 sql: """
-                    UPDATE transactions
-                    SET category_id = ?, subcategory_id = ?, updated_at = ?
-                    WHERE id = ?
-                    """,
+                UPDATE transactions
+                SET category_id = ?, subcategory_id = ?, updated_at = ?
+                WHERE id = ?
+                """,
                 parameters: [
                     newCategoryId.uuidString,
                     newSubcategoryId?.uuidString,
@@ -351,10 +309,10 @@ final class TransactionRepository: Sendable {
     ) async throws -> Transaction? {
         try await db.getOptional(
             sql: """
-                SELECT * FROM transactions
-                WHERE account_id = ? AND external_id = ?
-                LIMIT 1
-                """,
+            SELECT * FROM transactions
+            WHERE account_id = ? AND external_id = ?
+            LIMIT 1
+            """,
             parameters: [accountId.uuidString, externalId],
             mapper: Self.mapTransaction
         )
@@ -367,9 +325,9 @@ final class TransactionRepository: Sendable {
     func externalIds(forAccount accountId: UUID) async throws -> Set<String> {
         let ids: [String] = try await db.getAll(
             sql: """
-                SELECT external_id FROM transactions
-                WHERE account_id = ? AND external_id IS NOT NULL
-                """,
+            SELECT external_id FROM transactions
+            WHERE account_id = ? AND external_id IS NOT NULL
+            """,
             parameters: [accountId.uuidString],
             mapper: { (cursor: SqlCursor) throws -> String in
                 try cursor.getString(name: "external_id")
@@ -383,7 +341,7 @@ final class TransactionRepository: Sendable {
     /// estreito — preferimos perder alguns matches do que reportar falsos
     /// positivos que façam o usuário descartar transações legítimas.
     ///
-    /// **Por que não `SUBSTR(occurred_at, 1, 10)`:** o `Converters.iso8601`
+    /// **Por que não recortar o prefixo `yyyy-MM-dd` do `occurred_at`:** o `Converters.iso8601`
     /// serializa em UTC ("Z"), então uma transação às 22h local Brasil
     /// (UTC−3) vira o dia seguinte em UTC. O prefixo `yyyy-MM-dd` do banco
     /// fica fora de fase com o dia local do usuário, fazendo duplicatas
@@ -410,11 +368,11 @@ final class TransactionRepository: Sendable {
 
         let candidates: [Transaction] = try await db.getAll(
             sql: """
-                SELECT * FROM transactions
-                WHERE occurred_at >= ? AND occurred_at < ?
-                  AND amount_cents = ?
-                  AND LOWER(description) = LOWER(?)
-                """,
+            SELECT * FROM transactions
+            WHERE occurred_at >= ? AND occurred_at < ?
+              AND amount_cents = ?
+              AND LOWER(description) = LOWER(?)
+            """,
             parameters: [
                 Converters.dateToString(windowStart),
                 Converters.dateToString(windowEnd),
@@ -447,13 +405,13 @@ final class TransactionRepository: Sendable {
         // de NULL — evita ter que tratar opcional aqui em cima.
         let cents = try await db.get(
             sql: """
-                SELECT COALESCE(SUM(t.amount_cents), 0) AS total
-                FROM transactions t
-                JOIN categories c ON t.category_id = c.id
-                WHERE c.kind = ?
-                  AND t.occurred_at >= ?
-                  AND t.occurred_at <= ?
-                """,
+            SELECT COALESCE(SUM(t.amount_cents), 0) AS total
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE c.kind = ?
+              AND t.occurred_at >= ?
+              AND t.occurred_at <= ?
+            """,
             parameters: [
                 kind.rawValue,
                 Converters.dateToString(from),
@@ -476,16 +434,16 @@ final class TransactionRepository: Sendable {
     ) async throws -> [CategoryTotal] {
         try await db.getAll(
             sql: """
-                SELECT c.id AS id, c.name AS name, c.slug AS slug,
-                       SUM(t.amount_cents) AS total
-                FROM transactions t
-                JOIN categories c ON t.category_id = c.id
-                WHERE c.kind = ?
-                  AND t.occurred_at >= ?
-                  AND t.occurred_at <= ?
-                GROUP BY c.id, c.name, c.slug
-                ORDER BY total DESC
-                """,
+            SELECT c.id AS id, c.name AS name, c.slug AS slug,
+                   SUM(t.amount_cents) AS total
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE c.kind = ?
+              AND t.occurred_at >= ?
+              AND t.occurred_at <= ?
+            GROUP BY c.id, c.name, c.slug
+            ORDER BY total DESC
+            """,
             parameters: [
                 kind.rawValue,
                 Converters.dateToString(from),
@@ -511,14 +469,14 @@ final class TransactionRepository: Sendable {
     ) async throws -> [WeekdayTotal] {
         let rows: [Occurrence] = try await db.getAll(
             sql: """
-                SELECT t.occurred_at  AS occurred_at,
-                       t.amount_cents AS amount_cents
-                FROM transactions t
-                JOIN categories c ON t.category_id = c.id
-                WHERE c.kind = ?
-                  AND t.occurred_at >= ?
-                  AND t.occurred_at <= ?
-                """,
+            SELECT t.occurred_at  AS occurred_at,
+                   t.amount_cents AS amount_cents
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE c.kind = ?
+              AND t.occurred_at >= ?
+              AND t.occurred_at <= ?
+            """,
             parameters: [
                 kind.rawValue,
                 Converters.dateToString(from),
@@ -551,19 +509,19 @@ final class TransactionRepository: Sendable {
     ) async throws -> [MonthlyCategoryTotal] {
         try await db.getAll(
             sql: """
-                SELECT SUBSTR(t.occurred_at, 1, 7) AS month,
-                       c.id   AS id,
-                       c.name AS name,
-                       c.slug AS slug,
-                       SUM(t.amount_cents) AS total
-                FROM transactions t
-                JOIN categories c ON t.category_id = c.id
-                WHERE c.kind = ?
-                  AND t.occurred_at >= ?
-                  AND t.occurred_at <= ?
-                GROUP BY month, c.id, c.name, c.slug
-                ORDER BY month ASC, total DESC
-                """,
+            SELECT SUBSTR(t.occurred_at, 1, 7) AS month,
+                   c.id   AS id,
+                   c.name AS name,
+                   c.slug AS slug,
+                   SUM(t.amount_cents) AS total
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE c.kind = ?
+              AND t.occurred_at >= ?
+              AND t.occurred_at <= ?
+            GROUP BY month, c.id, c.name, c.slug
+            ORDER BY month ASC, total DESC
+            """,
             parameters: [
                 kind.rawValue,
                 Converters.dateToString(from),
@@ -583,17 +541,17 @@ final class TransactionRepository: Sendable {
     ) async throws -> [MonthlyKindTotal] {
         try await db.getAll(
             sql: """
-                SELECT SUBSTR(t.occurred_at, 1, 7) AS month,
-                       SUM(CASE WHEN c.kind = 'income'  THEN t.amount_cents ELSE 0 END) AS income,
-                       SUM(CASE WHEN c.kind = 'expense' THEN t.amount_cents ELSE 0 END) AS expense
-                FROM transactions t
-                JOIN categories c ON t.category_id = c.id
-                WHERE c.kind IN ('income', 'expense')
-                  AND t.occurred_at >= ?
-                  AND t.occurred_at <= ?
-                GROUP BY month
-                ORDER BY month ASC
-                """,
+            SELECT SUBSTR(t.occurred_at, 1, 7) AS month,
+                   SUM(CASE WHEN c.kind = 'income'  THEN t.amount_cents ELSE 0 END) AS income,
+                   SUM(CASE WHEN c.kind = 'expense' THEN t.amount_cents ELSE 0 END) AS expense
+            FROM transactions t
+            JOIN categories c ON t.category_id = c.id
+            WHERE c.kind IN ('income', 'expense')
+              AND t.occurred_at >= ?
+              AND t.occurred_at <= ?
+            GROUP BY month
+            ORDER BY month ASC
+            """,
             parameters: [
                 Converters.dateToString(from),
                 Converters.dateToString(to),
@@ -608,12 +566,13 @@ final class TransactionRepository: Sendable {
     /// (coluna nova/removida) passa a exigir alteração em UM lugar — antes
     /// eram cópias paralelas e o risco de divergir uma era real.
     private nonisolated static let insertTransactionSQL = """
-        INSERT INTO transactions
-            (id, account_id, category_id, subcategory_id,
-             amount_cents, occurred_at, description, notes,
-             import_batch_id, external_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """
+    INSERT INTO transactions
+        (id, account_id, category_id, subcategory_id,
+         amount_cents, occurred_at, description, notes,
+         import_batch_id, external_id, destination_account_id,
+         created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
 
     /// Parâmetros do `insertTransactionSQL` na ordem das colunas. `nonisolated`
     /// porque é chamado de dentro do closure `@Sendable` de
@@ -630,6 +589,7 @@ final class TransactionRepository: Sendable {
             transaction.notes,
             transaction.importBatchId?.uuidString,
             transaction.externalId,
+            transaction.destinationAccountId?.uuidString,
             Converters.dateToString(transaction.createdAt),
             Converters.dateToString(transaction.updatedAt),
         ]
@@ -648,11 +608,11 @@ final class TransactionRepository: Sendable {
     /// }
     /// ```
     /// Se o segundo execute lançar, o primeiro é desfeito automaticamente.
-    // `nonisolated` porque o PowerSync chama o mapper de fora da MainActor
-    // (PowerSync.watch/getAll rodam I/O em background). Sem isso, o default
-    // MainActor do target (SWIFT_DEFAULT_ACTOR_ISOLATION) deixaria o método
-    // MainActor-isolated e o cast pra `@Sendable` perde isolamento — vira
-    // erro em Swift 6.
+    /// `nonisolated` porque o PowerSync chama o mapper de fora da MainActor
+    /// (PowerSync.watch/getAll rodam I/O em background). Sem isso, o default
+    /// MainActor do target (SWIFT_DEFAULT_ACTOR_ISOLATION) deixaria o método
+    /// MainActor-isolated e o cast pra `@Sendable` perde isolamento — vira
+    /// erro em Swift 6.
     private nonisolated static func mapTransaction(_ cursor: SqlCursor) throws -> Transaction {
         let idString = try cursor.getString(name: "id")
         guard let id = UUID(uuidString: idString) else {
@@ -701,6 +661,16 @@ final class TransactionRepository: Sendable {
 
         let externalId = try cursor.getStringOptional(name: "external_id")
 
+        let destinationAccountId: UUID?
+        if let s = try cursor.getStringOptional(name: "destination_account_id") {
+            guard let uuid = UUID(uuidString: s) else {
+                throw DatabaseError.invalidUUID(column: "destination_account_id", value: s)
+            }
+            destinationAccountId = uuid
+        } else {
+            destinationAccountId = nil
+        }
+
         let createdAtString = try cursor.getString(name: "created_at")
         guard let createdAt = Converters.stringToDate(createdAtString) else {
             throw DatabaseError.invalidDate(column: "created_at", value: createdAtString)
@@ -722,6 +692,7 @@ final class TransactionRepository: Sendable {
             notes: notes,
             importBatchId: importBatchId,
             externalId: externalId,
+            destinationAccountId: destinationAccountId,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -747,9 +718,9 @@ final class TransactionRepository: Sendable {
 
         let cents = try cursor.getInt64(name: "total")
 
-        return CategoryTotal(
+        return try CategoryTotal(
             categoryId: categoryId,
-            categoryName: try cursor.getString(name: "name"),
+            categoryName: cursor.getString(name: "name"),
             icon: icon,
             total: Converters.centsToDecimal(cents)
         )
@@ -757,7 +728,7 @@ final class TransactionRepository: Sendable {
 
     /// Linha "mínima" usada por agregações que precisam só de data + valor
     /// (ex: `weekdayTotals`, que computa o dia da semana em Swift).
-    private struct Occurrence: Sendable {
+    private struct Occurrence {
         let occurredAt: Date
         let amount: Decimal
     }
@@ -792,12 +763,12 @@ final class TransactionRepository: Sendable {
 
         let icon = try cursor.getStringOptional(name: "slug").flatMap(CategoryIcon.forSlug)
 
-        return MonthlyCategoryTotal(
+        return try MonthlyCategoryTotal(
             monthStart: monthStart,
             categoryId: categoryId,
-            categoryName: try cursor.getString(name: "name"),
+            categoryName: cursor.getString(name: "name"),
             icon: icon,
-            total: Converters.centsToDecimal(try cursor.getInt64(name: "total"))
+            total: Converters.centsToDecimal(cursor.getInt64(name: "total"))
         )
     }
 
@@ -806,10 +777,10 @@ final class TransactionRepository: Sendable {
         guard let monthStart = monthFormatter.date(from: monthString) else {
             throw DatabaseError.invalidDate(column: "month", value: monthString)
         }
-        return MonthlyKindTotal(
+        return try MonthlyKindTotal(
             monthStart: monthStart,
-            income:  Converters.centsToDecimal(try cursor.getInt64(name: "income")),
-            expense: Converters.centsToDecimal(try cursor.getInt64(name: "expense"))
+            income: Converters.centsToDecimal(cursor.getInt64(name: "income")),
+            expense: Converters.centsToDecimal(cursor.getInt64(name: "expense"))
         )
     }
 }

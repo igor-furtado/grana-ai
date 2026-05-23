@@ -14,7 +14,11 @@ import SwiftUI
 struct CategorizationReviewView: View {
     enum Mode {
         case modal
-        case wizard(onImport: @MainActor () async -> Void, onBack: @MainActor () -> Void)
+        case wizard(
+            onImport: @MainActor () async -> Void,
+            onBack: @MainActor () -> Void,
+            onClose: @MainActor () -> Void
+        )
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -47,11 +51,11 @@ struct CategorizationReviewView: View {
                     }
             }
             .frame(minWidth: 700, minHeight: 600)
-        case let .wizard(onImport, onBack):
+        case let .wizard(onImport, onBack, onClose):
             VStack(spacing: 0) {
                 content
                     .navigationSubtitle(statusSubtitle)
-                wizardBottomBar(onImport: onImport, onBack: onBack)
+                wizardBottomBar(onImport: onImport, onBack: onBack, onClose: onClose)
             }
         }
     }
@@ -71,13 +75,16 @@ struct CategorizationReviewView: View {
                 Section {
                     ScrollView {
                         LazyVStack(spacing: 0) {
+                            summaryRow
+                            Divider()
                             ForEach(groupedSections, id: \.bucket) { section in
                                 if showsBucketSubheaders {
                                     bucketSubheader(section.bucket, count: section.indices.count)
                                 }
                                 ForEach(section.indices, id: \.self) { idx in
                                     CategorizationRowView(store: store, index: idx)
-                                        .padding(.vertical, 4)
+                                        .padding(.horizontal, 14)
+                                        .padding(.vertical, 6)
                                     Divider()
                                 }
                             }
@@ -85,20 +92,34 @@ struct CategorizationReviewView: View {
                     }
                     .listRowInsets(EdgeInsets())
                 } header: {
-                    HStack(spacing: 8) {
-                        Text(headerTitle)
-                        Spacer()
-                        Text("\(store.suggestions.count)")
-                            .font(.subheadline.monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .textCase(nil)
-                    }
+                    Text(headerTitle)
                 }
             }
             .formStyle(.grouped)
             .contentMargins(.horizontal, 0, for: .scrollContent)
             .frame(maxHeight: .infinity)
         }
+    }
+
+    /// Linha de resumo logo abaixo do header — mesmo tratamento visual da
+    /// `TransactionsSelectionRow` do import. Aqui não há checkbox (revisão
+    /// é caso a caso, não em lote) — só o texto de progresso.
+    private var summaryRow: some View {
+        HStack(spacing: 12) {
+            Text(summaryText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.primary.opacity(0.03))
+    }
+
+    private var summaryText: String {
+        let total = store.suggestions.count
+        let reviewed = store.suggestions.filter(\.isReviewed).count
+        return "\(reviewed) de \(total) revisadas"
     }
 
     /// Quando há mais de um bucket presente, exibimos sub-header dentro do
@@ -117,7 +138,6 @@ struct CategorizationReviewView: View {
         return "Sugestões"
     }
 
-    @ViewBuilder
     private func bucketSubheader(
         _ bucket: CategorizationSuggestion.ConfidenceBucket,
         count: Int
@@ -143,11 +163,11 @@ struct CategorizationReviewView: View {
         switch store.status {
         case .idle:
             return ""
-        case .classifying(_, _, let message):
+        case let .classifying(_, _, message):
             return message
-        case .ready(let total, let fromCache, let fromAI, let fallback):
+        case let .ready(total, fromCache, fromAI, fallback):
             return "\(total) transações · \(fromCache) via cache · \(fromAI) via IA · \(fallback) não classificadas"
-        case .failed(let message):
+        case let .failed(message):
             return message
         }
     }
@@ -171,12 +191,15 @@ struct CategorizationReviewView: View {
 
     // MARK: - Bottom bar (wizard)
 
-    @ViewBuilder
     private func wizardBottomBar(
         onImport: @escaping @MainActor () async -> Void,
-        onBack: @escaping @MainActor () -> Void
+        onBack: @escaping @MainActor () -> Void,
+        onClose: @escaping @MainActor () -> Void
     ) -> some View {
-        BottomActionBar(caption: reviewedCaption) {
+        // Caption omitida — stats de revisão vivem no `summaryRow` da lista.
+        BottomActionBar {
+            Button("Fechar") { onClose() }
+                .keyboardShortcut(.cancelAction)
             Button("Voltar") { onBack() }
             Button {
                 Task { await onImport() }
@@ -186,13 +209,6 @@ struct CategorizationReviewView: View {
             .buttonStyle(.borderedProminent)
             .disabled(store.suggestions.isEmpty || isClassifying)
         }
-    }
-
-    private var reviewedCaption: String? {
-        let total = store.suggestions.count
-        guard total > 0 else { return nil }
-        let reviewed = store.suggestions.filter(\.isReviewed).count
-        return "\(reviewed) de \(total) revisadas"
     }
 
     private var isClassifying: Bool {
@@ -217,23 +233,23 @@ struct CategorizationReviewView: View {
                 autoApproved: thresholds.autoApproved,
                 reviewRequired: thresholds.reviewRequired
             ) {
-            case .low:    low.append(idx)
+            case .low: low.append(idx)
             case .medium: medium.append(idx)
-            case .high:   high.append(idx)
+            case .high: high.append(idx)
             }
         }
         var sections: [BucketSection] = []
-        if !low.isEmpty    { sections.append(BucketSection(bucket: .low, indices: low)) }
+        if !low.isEmpty { sections.append(BucketSection(bucket: .low, indices: low)) }
         if !medium.isEmpty { sections.append(BucketSection(bucket: .medium, indices: medium)) }
-        if !high.isEmpty   { sections.append(BucketSection(bucket: .high, indices: high)) }
+        if !high.isEmpty { sections.append(BucketSection(bucket: .high, indices: high)) }
         return sections
     }
 
     private func sectionTitle(_ bucket: CategorizationSuggestion.ConfidenceBucket) -> String {
         switch bucket {
-        case .high:   "Confiança alta"
+        case .high: "Confiança alta"
         case .medium: "Confiança média"
-        case .low:    "Confiança baixa"
+        case .low: "Confiança baixa"
         }
     }
 }

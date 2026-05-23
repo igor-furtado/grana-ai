@@ -87,12 +87,13 @@ struct ImportHistoryView: View {
                     }
                     Button("Cancelar", role: .cancel) { pendingDeleteBatch = nil }
                 } message: { batch in
-                    Text("As \(batch.rowCount) transações de **\(batch.sourceFilename)** serão removidas permanentemente.")
+                    Text(
+                        "As \(batch.rowCount) transações de **\(batch.sourceFilename)** serão removidas permanentemente."
+                    )
                 }
         }
     }
 
-    @ViewBuilder
     private func list(store: ImportStore) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
@@ -108,7 +109,7 @@ struct ImportHistoryView: View {
                             ForEach(group.batches) { batch in
                                 ImportBatchRow(
                                     batch: batch,
-                                    account: store.account(for: batch.accountId),
+                                    accountDisplayName: accountDisplayName(for: batch, store: store),
                                     institution: institution(for: batch, store: store),
                                     onUndo: { pendingDeleteBatch = batch }
                                 )
@@ -127,6 +128,11 @@ struct ImportHistoryView: View {
         guard let account = store.account(for: batch.accountId),
               let id = account.institutionId else { return nil }
         return store.institutions.first { $0.id == id }
+    }
+
+    private func accountDisplayName(for batch: ImportBatch, store: ImportStore) -> String? {
+        guard let account = store.account(for: batch.accountId) else { return nil }
+        return Account.displayName(for: account, institutions: store.institutions)
     }
 
     /// Bucketing por janela de tempo relativa, ordenado do mais recente pro
@@ -162,11 +168,11 @@ private enum PeriodBucket: CaseIterable {
 
     var title: String {
         switch self {
-        case .today:     "HOJE"
+        case .today: "HOJE"
         case .yesterday: "ONTEM"
-        case .thisWeek:  "ESTA SEMANA"
+        case .thisWeek: "ESTA SEMANA"
         case .thisMonth: "ESTE MÊS"
-        case .older:     "MAIS ANTIGOS"
+        case .older: "MAIS ANTIGOS"
         }
     }
 
@@ -183,7 +189,7 @@ private enum PeriodBucket: CaseIterable {
 
 private struct ImportBatchRow: View {
     let batch: ImportBatch
-    let account: Account?
+    let accountDisplayName: String?
     let institution: Institution?
     let onUndo: () -> Void
 
@@ -240,27 +246,18 @@ private struct ImportBatchRow: View {
 
     @ViewBuilder
     private var iconView: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(iconBackground)
-                .frame(width: 40, height: 40)
-
-            if let institution {
-                InstitutionLogoImage(kind: institution.kind)
-                    .frame(width: 24, height: 24)
-            } else {
+        if let institution {
+            InstitutionIcon(kind: institution.kind, size: 40)
+        } else {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.secondary.opacity(0.12))
+                    .frame(width: 40, height: 40)
                 Image(systemName: "doc.text")
                     .font(.title3)
                     .foregroundStyle(.secondary)
             }
         }
-    }
-
-    private var iconBackground: Color {
-        if let institution {
-            return institution.kind.brandColor.opacity(0.12)
-        }
-        return Color.secondary.opacity(0.12)
     }
 
     /// Título derivado do filename — quando óbvio (`fatura`/`extrato`),
@@ -277,8 +274,8 @@ private struct ImportBatchRow: View {
     /// sem extensão".
     private var subtitle: String {
         var parts: [String] = []
-        if let account {
-            parts.append(account.name)
+        if let accountDisplayName {
+            parts.append(accountDisplayName)
         }
         parts.append(Self.dateFormatter.string(from: batch.importedAt))
         return parts.joined(separator: " · ")

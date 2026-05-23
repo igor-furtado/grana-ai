@@ -46,7 +46,7 @@ struct BottomActionBar<Trailing: View>: View {
                 trailing()
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.vertical, 16)
         }
     }
 }

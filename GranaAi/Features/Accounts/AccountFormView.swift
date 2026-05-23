@@ -1,19 +1,13 @@
 import Foundation
 import SwiftUI
 
-/// Form inline de criação/edição de conta. Renderizado **dentro** da
-/// `AccountsView` (não como sheet), seguindo o padrão do Finest: o usuário
-/// vê o form expandindo na mesma página, sem context-switch modal.
+/// Form de criação/edição de conta. Apresentado como **sheet modal** pela
+/// `AccountsView` (`.sheet(item:)`). Padrão idiomático no macOS pra
+/// create/edit (Mail, Reminders, Notes) — dá foco total e mantém o tamanho
+/// dos campos consistente.
 ///
-/// **Identidade visual da conta vem da Institution.** O usuário escolhe o
-/// banco (logo + cor da marca canônica) — não há picker de emoji/cor por
-/// conta. Reduz fricção e garante consistência ("Inter é sempre laranja").
-///
-/// **Campos avançados (agência, número, moeda)** ficam atrás de um
-/// `DisclosureGroup` colapsado. Continuam existindo porque o auto-detect do
-/// importer OFX usa a tripla `(institution, branch, account_number)` pra
-/// reusar contas — quem importa OFX precisa preencher; quem não importa,
-/// pode ignorar.
+/// **Sem campo "Nome".** O nome amigável é derivado em runtime via
+/// `Account.displayName(for:institutions:)`.
 struct AccountFormView: View {
     @Environment(AccountStore.self) private var store
 
@@ -21,15 +15,14 @@ struct AccountFormView: View {
     let onCancel: () -> Void
     let onSaved: () -> Void
 
-    @State private var name: String = ""
     @State private var type: AccountType = .checking
     @State private var balanceCents: Int = 0
     @State private var balanceIsNegative: Bool = false
     @State private var institutionId: UUID?
     @State private var branchId: String = ""
     @State private var accountNumber: String = ""
+    @State private var cardLastFour: String = ""
     @State private var currency: String = "BRL"
-    @State private var showAdvanced: Bool = false
     @State private var saveError: String?
     @State private var isSaving: Bool = false
 
@@ -44,182 +37,200 @@ struct AccountFormView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text(existing == nil ? "Nova conta" : "Editar conta")
-                    .font(.title3.weight(.semibold))
-                Spacer()
-                Button("Cancelar", action: onCancel)
-                    .buttonStyle(.bordered)
-            }
-
-            nameField
-            typeField
-            balanceField
-            institutionField
-
-            if usesBankIdentity {
-                DisclosureGroup(isExpanded: $showAdvanced) {
-                    advancedFields
-                        .padding(.top, 8)
-                } label: {
-                    Text("Avançado")
-                        .font(.callout.weight(.medium))
+        NavigationStack {
+            Form {
+                identitySection
+                if type == .creditCard {
+                    cardDetailsSection
+                }
+                if usesBankIdentity {
+                    bankIdentitySection
+                }
+                balanceSection
+                if let saveError {
+                    errorSection(message: saveError)
                 }
             }
-
-            if let saveError {
-                Text(saveError)
-                    .foregroundStyle(.danger)
-                    .font(.callout)
-            }
-
-            Button(action: { Task { await save() } }) {
-                HStack {
-                    Spacer()
-                    if isSaving { ProgressView().controlSize(.small).tint(.white) }
-                    Text(existing == nil ? "Cadastrar conta" : "Salvar alterações")
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(.white)
-                    Spacer()
+            .formStyle(.grouped)
+            .navigationTitle(existing == nil ? "Nova conta" : "Editar conta")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar", action: onCancel)
                 }
-                .padding(.vertical, 10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(canSave ? Color.brandSecondary : Color.secondary.opacity(0.4))
-                )
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(existing == nil ? "Cadastrar" : "Salvar") {
+                        Task { await save() }
+                    }
+                    .disabled(!canSave || isSaving)
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(!canSave || isSaving)
         }
-        .padding(20)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.brandSecondary.opacity(0.4), lineWidth: 1)
-        )
+        .frame(minWidth: 520, idealWidth: 520, maxWidth: 520, minHeight: 480)
         .onAppear(perform: loadExisting)
-    }
-
-    // MARK: - Campos
-
-    private var nameField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Nome da conta").font(.caption.weight(.medium))
-            TextField("Ex: Inter principal", text: $name)
-                .textFieldStyle(.roundedBorder)
+        // Race: o stream de instituições pode emitir antes ou depois do
+        // `onAppear`. Tentamos no `loadExisting` e também aqui — quem chegar
+        // primeiro aplica o default; o outro vira no-op.
+        .onChange(of: store.institutions) { _, _ in
+            applyDefaultInstitutionIfNeeded()
         }
     }
 
-    private var typeField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Tipo").font(.caption.weight(.medium))
+    /// Pré-seleciona a primeira instituição emitida pelo stream quando o form
+    /// é "novo" e ainda não tem nada escolhido. Sem isso o picker abre em
+    /// vazio e o `canSave` fica false até o usuário escolher manualmente.
+    /// No-op em edição (`institutionId` já vem populado de `loadExisting`).
+    private func applyDefaultInstitutionIfNeeded() {
+        guard existing == nil, institutionId == nil,
+              let first = store.institutions.first
+        else { return }
+        institutionId = first.id
+    }
+
+    // MARK: - Sections
+
+    private var identitySection: some View {
+        Section {
             Picker("Tipo", selection: $type) {
                 ForEach(AccountType.allCases, id: \.rawValue) { t in
                     Text(t.displayName).tag(t)
                 }
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
             .onChange(of: type) { _, newValue in
-                // Mudou pra wallet → limpa o banco selecionado (carteira não
-                // tem instituição). Mudou pra qualquer outro → mantém o que
-                // estava (geralmente nada).
-                if newValue == .wallet { institutionId = nil }
-            }
-        }
-    }
-
-    private var balanceField: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Saldo inicial (opcional)").font(.caption.weight(.medium))
-            HStack(spacing: 8) {
-                Button(action: { balanceIsNegative.toggle() }) {
-                    Text(balanceIsNegative ? "−" : "+")
-                        .font(.title3.weight(.semibold))
-                        .frame(width: 32, height: 28)
-                        .foregroundStyle(balanceIsNegative ? .danger : .success)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill((balanceIsNegative ? Color.expense : Color.income).opacity(0.12))
-                        )
+                // Limpa campos que pertencem ao tipo "saída" pra evitar que
+                // valores digitados num modo vazem visualmente quando o
+                // usuário alterna. O save também filtra por tipo (cinto +
+                // suspensório), mas zerar aqui mantém a UX previsível.
+                if newValue == .creditCard {
+                    branchId = ""
+                    accountNumber = ""
+                } else {
+                    cardLastFour = ""
                 }
-                .buttonStyle(.plain)
-                .help(balanceIsNegative ? "Saldo negativo (ex: cheque especial)" : "Saldo positivo")
+                // Default de saldo: cartão começa "negativo" (dívida da fatura) e
+                // banco começa positivo. Só aplica quando o usuário ainda não
+                // digitou um valor — preserva input explícito se já tiver algo.
+                if balanceCents == 0 {
+                    balanceIsNegative = (newValue == .creditCard)
+                }
+            }
 
+            Picker(type == .creditCard ? "Emissor" : "Banco", selection: $institutionId) {
+                ForEach(store.institutions) { inst in
+                    Label(inst.name, systemImage: inst.kind.systemImage)
+                        .tag(UUID?.some(inst.id))
+                }
+            }
+        } header: {
+            Text("Identidade")
+        }
+    }
+
+    private var cardDetailsSection: some View {
+        Section {
+            TextField("Últimos 4 dígitos", text: $cardLastFour, prompt: Text("Ex: 1234"))
+                .onChange(of: cardLastFour) { _, newValue in
+                    // Mantém só dígitos, máx 4. Evita o usuário colar o
+                    // número completo do cartão e a gente acabar guardando
+                    // PAN inteiro (anti-padrão PCI).
+                    let digits = newValue.filter(\.isNumber)
+                    cardLastFour = String(digits.prefix(4))
+                }
+        } header: {
+            Text("Detalhes do cartão")
+        } footer: {
+            if isCardLastFourPartial {
+                Text("Informe os 4 dígitos completos.")
+                    .foregroundStyle(.danger)
+            } else {
+                Text(
+                    "Obrigatório. Aparece no nome da conta como “••••\(cardLastFour.isEmpty ? "1234" : cardLastFour)” — distingue cartões diferentes do mesmo emissor."
+                )
+            }
+        }
+    }
+
+    private var bankIdentitySection: some View {
+        Section {
+            TextField("Agência", text: $branchId, prompt: Text("Ex: 0001-9"))
+            TextField("Número da conta", text: $accountNumber, prompt: Text("Ex: 310013887"))
+        } header: {
+            Text("Identidade bancária")
+        } footer: {
+            Text(
+                "Obrigatórios. Distinguem contas do mesmo banco e habilitam o auto-detect da conta no import de OFX."
+            )
+        }
+    }
+
+    private var balanceSection: some View {
+        Section {
+            LabeledContent("Valor") {
                 CurrencyField(cents: $balanceCents)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(nsColor: .textBackgroundColor))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
-                    )
             }
-            Text("Quanto você já tem nessa conta hoje. Use o botão − para contas no vermelho (cheque especial, fatura aberta).")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Toggle("Saldo negativo", isOn: $balanceIsNegative)
+        } header: {
+            Text("Saldo inicial")
+        } footer: {
+            Text(balanceFooterText)
         }
     }
 
-    @ViewBuilder
-    private var institutionField: some View {
-        if type != .wallet {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(type == .creditCard ? "Emissor" : "Banco")
-                    .font(.caption.weight(.medium))
-                Picker(selection: $institutionId) {
-                    Text("Nenhum").tag(UUID?.none)
-                    ForEach(store.institutions) { inst in
-                        Label(inst.name, systemImage: inst.kind.systemImage)
-                            .tag(UUID?.some(inst.id))
-                    }
-                } label: { EmptyView() }
-                .labelsHidden()
-                .pickerStyle(.menu)
+    /// Erros de save aparecem como uma Section própria (em vez de texto
+    /// solto), pra manter a consistência visual do Form-grouped.
+    private func errorSection(message: String) -> some View {
+        Section {
+            Label {
+                Text(message)
+                    .foregroundStyle(.danger)
+            } icon: {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.danger)
             }
-        }
-    }
-
-    private var advancedFields: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Agência").font(.caption.weight(.medium))
-                TextField("Ex: 0001-9", text: $branchId)
-                    .textFieldStyle(.roundedBorder)
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Número da conta").font(.caption.weight(.medium))
-                TextField("Ex: 310013887", text: $accountNumber)
-                    .textFieldStyle(.roundedBorder)
-            }
-            Text("Preencha agência e número se você for importar extratos OFX desta conta — o app usa esses campos pra detectar e reaproveitar a conta no import.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
     // MARK: - Lógica
 
     private var usesBankIdentity: Bool {
-        type != .wallet && type != .creditCard
+        type != .creditCard
+    }
+
+    private var balanceFooterText: String {
+        switch type {
+        case .creditCard:
+            return "Informe a dívida atual da fatura aberta (se houver). Desmarque “Saldo negativo” se o cartão tiver crédito a receber (caso raro)."
+        default:
+            return "Quanto você já tem nessa conta hoje. Ative “Saldo negativo” se a conta está no vermelho (cheque especial)."
+        }
+    }
+
+    /// `true` quando o usuário começou a digitar o last4 mas não chegou nos 4
+    /// dígitos. Mostra footer de erro e bloqueia o save.
+    private var isCardLastFourPartial: Bool {
+        type == .creditCard && !cardLastFour.isEmpty && cardLastFour.count != 4
     }
 
     private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty
+        // Banco sempre obrigatório (display name depende dele).
+        guard institutionId != nil else { return false }
+        // Cartão: last4 obrigatório (4 dígitos) — distingue múltiplos cartões
+        // do mesmo emissor.
+        if type == .creditCard, cardLastFour.count != 4 { return false }
+        // Banco/Poupança/Corretora: agência + número obrigatórios — distinguem
+        // contas do mesmo banco e habilitam o auto-detect no import OFX.
+        if usesBankIdentity {
+            let branch = branchId.trimmingCharacters(in: .whitespaces)
+            let number = accountNumber.trimmingCharacters(in: .whitespaces)
+            if branch.isEmpty || number.isEmpty { return false }
+        }
+        return true
     }
 
     private func loadExisting() {
-        guard let existing else { return }
-        name = existing.name
+        guard let existing else {
+            applyDefaultInstitutionIfNeeded()
+            return
+        }
         type = existing.type
         let cents = Int(truncatingIfNeeded: Converters.decimalToCents(existing.initialBalance))
         balanceIsNegative = cents < 0
@@ -227,41 +238,41 @@ struct AccountFormView: View {
         institutionId = existing.institutionId
         branchId = existing.branchId ?? ""
         accountNumber = existing.accountNumber ?? ""
+        cardLastFour = existing.cardLastFour ?? ""
         currency = existing.currency
-        showAdvanced = !(existing.branchId ?? "").isEmpty || !(existing.accountNumber ?? "").isEmpty
     }
 
     private func save() async {
         isSaving = true
         defer { isSaving = false }
 
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let magnitude = Decimal(balanceCents) / 100
         let amount = balanceIsNegative ? -magnitude : magnitude
 
         let branch = usesBankIdentity && !branchId.trimmingCharacters(in: .whitespaces).isEmpty ? branchId : nil
-        let number = usesBankIdentity && !accountNumber.trimmingCharacters(in: .whitespaces).isEmpty ? accountNumber : nil
-        let effectiveInstitution = (type == .wallet) ? nil : institutionId
+        let number = usesBankIdentity && !accountNumber.trimmingCharacters(in: .whitespaces)
+            .isEmpty ? accountNumber : nil
+        let last4 = type == .creditCard && !cardLastFour.isEmpty ? cardLastFour : nil
 
         do {
             if let existing {
                 var updated = existing
-                updated.name = trimmedName
                 updated.type = type
                 updated.initialBalance = amount
-                updated.institutionId = effectiveInstitution
+                updated.institutionId = institutionId
                 updated.branchId = branch
                 updated.accountNumber = number
+                updated.cardLastFour = last4
                 updated.currency = currency
                 try await store.update(updated)
             } else {
                 try await store.create(
-                    name: trimmedName,
                     type: type,
                     initialBalance: amount,
-                    institutionId: effectiveInstitution,
+                    institutionId: institutionId,
                     branchId: branch,
                     accountNumber: number,
+                    cardLastFour: last4,
                     currency: currency
                 )
             }
@@ -278,8 +289,6 @@ struct AccountFormView: View {
     let store = AccountStore(container: env.container)
     return AccountFormView(onCancel: {}, onSaved: {})
         .environment(store)
-        .frame(width: 520)
-        .padding()
 }
 
 #Preview("Edição") {
@@ -287,7 +296,6 @@ struct AccountFormView: View {
     let store = AccountStore(container: env.container)
     let sample = Account(
         id: UUID(),
-        name: "Inter principal",
         type: .checking,
         initialBalance: 1500.00,
         archived: false,
@@ -300,6 +308,4 @@ struct AccountFormView: View {
     )
     return AccountFormView(existing: sample, onCancel: {}, onSaved: {})
         .environment(store)
-        .frame(width: 520)
-        .padding()
 }

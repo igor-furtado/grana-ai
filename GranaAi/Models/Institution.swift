@@ -62,7 +62,7 @@ enum InstitutionKind: String, Codable, CaseIterable, Sendable {
 
     /// SF Symbol usado como **fallback** quando o asset real do logo não
     /// está disponível no catálogo. Renderizar logos reais vs. fallback é
-    /// resolvido em runtime pelo `InstitutionLogoImage`.
+    /// resolvido em runtime pelo `InstitutionIcon`.
     var systemImage: String {
         switch self {
         case .other: "building.columns"
@@ -75,7 +75,7 @@ enum InstitutionKind: String, Codable, CaseIterable, Sendable {
     ///
     /// **Como ativar logo real:** arraste o PNG (1x/2x/3x) ou SVG da marca
     /// pro asset catalog com o nome retornado aqui (ex: `inter-logo`). O
-    /// `InstitutionLogoImage` detecta automaticamente e passa a renderizar
+    /// `InstitutionIcon` detecta automaticamente e passa a renderizar
     /// o asset no lugar do SF Symbol genérico — não precisa mexer em código.
     var logoAssetName: String? {
         switch self {
@@ -94,12 +94,12 @@ enum InstitutionKind: String, Codable, CaseIterable, Sendable {
     /// trouxe estes valores; refinar em PR caso a marca atualize o branding.
     var brandColor: Color {
         switch self {
-        case .inter: Color(red: 1.000, green: 0.478, blue: 0.000)  // #FF7A00 — Flush Orange
-        case .itau: Color(red: 1.00, green: 0.384, blue: 0.000)  // #FF6200 — Blaze Orange (Pentagram 2023)
-        case .bb: Color(red: 0.988, green: 0.988, blue: 0.188)  // #FCFC30 — Golden Fizz
-        case .caixa: Color(red: 0.961, green: 0.592, blue: 0.000)  // #F59700 — Pizazz
-        case .c6: Color(red: 1.000, green: 0.894, blue: 0.361)  // #FFE45C — Mustard
-        case .xp: Color(red: 1.000, green: 0.776, blue: 0.039)  // #FFC60A — Supernova
+        case .inter: Color(red: 1.000, green: 0.478, blue: 0.000) // #FF7A00 — Flush Orange
+        case .itau: Color(red: 1.00, green: 0.384, blue: 0.000) // #FF6200 — Blaze Orange (Pentagram 2023)
+        case .bb: Color(red: 0.988, green: 0.988, blue: 0.188) // #FCFC30 — Golden Fizz
+        case .caixa: Color(red: 0.004, green: 0.361, blue: 0.663) // #015CA9 — Endeavour
+        case .c6: Color(red: 0.141, green: 0.141, blue: 0.161) // #242429 — Shark
+        case .xp: Color(red: 0.000, green: 0.000, blue: 0.000) // #000000 — Black
         case .other: Color.secondary
         }
     }

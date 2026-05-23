@@ -24,6 +24,10 @@ final class TransactionStore {
 
     private(set) var transactions: [Transaction] = []
     private(set) var accounts: [Account] = []
+    /// Necessário pra derivar `displayName(for:)` da conta (que precisa do
+    /// nome do banco como prefixo). Tabela pequena e estática — overhead do
+    /// stream é desprezível.
+    private(set) var institutions: [Institution] = []
     private(set) var categories: [Category] = []
     private(set) var isLoading = false
     var lastError: Error?
@@ -49,26 +53,27 @@ final class TransactionStore {
         isLoading = true
         defer { isLoading = false }
 
-        // `async let` roda os três em paralelo. Cada um é uma função async
+        // `async let` roda os quatro em paralelo. Cada um é uma função async
         // isolada à MainActor — ao atualizar `self.X`, já estamos na main.
         // O await final só termina quando todas as streams encerrarem
         // (em prática: só quando o task pai for cancelado).
         async let t: Void = streamTransactions()
         async let a: Void = streamAccounts()
+        async let i: Void = streamInstitutions()
         async let c: Void = streamCategories()
-        _ = await (t, a, c)
+        _ = await (t, a, i, c)
     }
 
     private func streamTransactions() async {
         do {
             let stream = try container.transactions.watchAll()
             for try await rows in stream {
-                self.transactions = rows
+                transactions = rows
             }
         } catch is CancellationError {
             // .task foi cancelado pela SwiftUI — comportamento esperado.
         } catch {
-            self.lastError = error
+            lastError = error
             ErrorCenter.shared.report(error)
         }
     }
@@ -77,11 +82,24 @@ final class TransactionStore {
         do {
             let stream = try container.accounts.watchAll()
             for try await rows in stream {
-                self.accounts = rows
+                accounts = rows
             }
         } catch is CancellationError {
         } catch {
-            self.lastError = error
+            lastError = error
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    private func streamInstitutions() async {
+        do {
+            let stream = try container.institutions.watchAll()
+            for try await rows in stream {
+                institutions = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            lastError = error
             ErrorCenter.shared.report(error)
         }
     }
@@ -90,11 +108,11 @@ final class TransactionStore {
         do {
             let stream = try container.categories.watchAll()
             for try await rows in stream {
-                self.categories = rows
+                categories = rows
             }
         } catch is CancellationError {
         } catch {
-            self.lastError = error
+            lastError = error
             ErrorCenter.shared.report(error)
         }
     }
@@ -110,7 +128,8 @@ final class TransactionStore {
         amount: Decimal,
         occurredAt: Date,
         description: String,
-        notes: String?
+        notes: String?,
+        destinationAccountId: UUID? = nil
     ) async throws {
         let now = Date()
         let transaction = Transaction(
@@ -122,6 +141,7 @@ final class TransactionStore {
             occurredAt: occurredAt,
             description: description,
             notes: notes,
+            destinationAccountId: destinationAccountId,
             createdAt: now,
             updatedAt: now
         )
@@ -153,7 +173,8 @@ final class TransactionStore {
         guard let cat = category(for: categoryId) else { return nil }
         if let icon = cat.icon { return icon }
         if let parentId = cat.parentId,
-           let parent = category(for: parentId) {
+           let parent = category(for: parentId)
+        {
             return parent.icon
         }
         return nil
@@ -161,6 +182,12 @@ final class TransactionStore {
 
     func account(for id: UUID) -> Account? {
         accounts.first { $0.id == id }
+    }
+
+    /// Nome derivado da conta — espelha `AccountStore.displayName(for:)`. Cada
+    /// store tem sua cópia porque carrega institutions sob demanda da feature.
+    func displayName(for account: Account) -> String {
+        Account.displayName(for: account, institutions: institutions)
     }
 
     var rootCategories: [Category] {
