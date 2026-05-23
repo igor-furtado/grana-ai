@@ -1,0 +1,37 @@
+# SwiftFormat - Grana AI
+# Instalar (uma vez): brew install swiftformat
+# Formatar tudo: swiftformat .
+# Checar diferenças (sem escrever): swiftformat --lint .
+
+# Layout
+--indent 4
+--tabwidth 4
+--maxwidth 120
+--linebreaks lf
+
+# Imports agrupados, @testable no final
+--importgrouping testable-bottom
+
+# self. só em inits (onde o parâmetro shadows a propriedade)
+--self init-only
+
+# Quebras de linha em listas longas: primeiro arg na próxima linha
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+
+# Espaços / vírgulas
+--trimwhitespace always
+--commas always
+--semicolons never
+--emptybraces no-space
+
+# Closures
+--stripunusedargs closure-only
+
+# Ranges com espaço (1 ... 10 em vez de 1...10) — opinativo, alinha com o estilo atual
+--ranges spaced
+
+# Não tocar nesses caminhos
+--exclude .build,DerivedData,Pods,**/Generated

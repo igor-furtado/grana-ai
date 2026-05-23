@@ -12,7 +12,7 @@ App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-
 
 ## Stack travada
 
-- Swift 5.9+ / SwiftUI / `@Observable` (NUNCA `ObservableObject`)
+- Swift 5.9+ / SwiftUI / `@Observable` (`ObservableObject` é bloqueado pelo SwiftLint)
 - PowerSync Swift SDK `1.13.1` exact — produto `PowerSync` estático (não `PowerSyncDynamic` nem `PowerSyncGRDB`)
 - Swift Charts, URLSession
 - **IA via shell-out** pro `claude` CLI (Claude Code) usando a assinatura do usuário — NÃO `api.anthropic.com` paga. Por isso `ENABLE_APP_SANDBOX = NO` no `project.pbxproj` (sandbox bloqueia `Process` de executar binários fora do bundle). Single-user, local-first, sem distribuição → trade-off aceito.
@@ -25,6 +25,8 @@ App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-
 
 ## Invariantes que NÃO podem quebrar
 
+> Os itens 2 e 3 abaixo têm validação mecânica em [.swiftlint.yml](./.swiftlint.yml) (`no_double_for_money`, `no_substr_occurred_at`). Os demais dependem de revisão humana.
+
 1. **Sinal do `amount` é sempre magnitude positiva.** O sinal (entrada/saída) vem do `CategoryKind` da categoria. Importadores normalizam via `abs()` antes de inserir. Quebrar isso quebra todas as agregações do dashboard.
 2. **Dinheiro em `Decimal`** no Swift, **`Int64` centavos** no banco. NUNCA `Double`. Conversões via `Converters.decimalToCents`/`centsToDecimal`.
 3. **Datas em ISO8601 UTC** no banco (`Converters.iso8601` com `.withFractionalSeconds`). Comparação por "dia" usa **`Calendar` local + janela em SQL**, nunca `SUBSTR(occurred_at, 1, 10)` (quebra perto da meia-noite por causa do UTC).
@@ -35,12 +37,13 @@ App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-
 
 ## Convenções de código
 
-- Tipos `PascalCase`, funções `camelCase`, tabelas/colunas `snake_case`.
-- Views pequenas (~150 linhas máx). `@State` local pra estado puramente de visualização; `@Observable` Store pra dados do banco.
+> Estilo mecânico (indentação, imports, naming, `Double` pra dinheiro, `ObservableObject`, `TODO` sem fase etc.) é codificado em [.swiftformat](./.swiftformat) + [.swiftlint.yml](./.swiftlint.yml). SwiftLint roda como build phase do Xcode — violações aparecem direto no build. Rode `/format` quando quiser normalizar layout. Esta seção só lista o que **não** dá pra deixar pra ferramenta.
+
+- Views pequenas (~150 linhas é o alvo). `@State` local pra estado puramente de visualização; `@Observable` Store pra dados do banco. Tabelas/colunas SQL em `snake_case`.
 - `async/await` exclusivamente (Combine só pra código legado, que não tem aqui).
 - `#Preview` macro em toda View nova.
 - Erros com `enum` por domínio (`DatabaseError`, `ImportError`, etc.) + `LocalizedError` em PT-BR.
-- Comentários explicam **por quê**, nunca **o quê**. TODOs com fase: `// TODO(fase-5): ...`.
+- Comentários explicam **por quê**, nunca **o quê**.
 - Cada arquivo que usa `log.<categoria>.info(...)` precisa `import OSLog` explícito (interpolation da Apple só fica visível no módulo importado).
 
 ## Sub-decisões PowerSync (fáceis de quebrar sem saber)

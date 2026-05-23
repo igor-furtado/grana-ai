@@ -1,0 +1,126 @@
+# SwiftLint - Grana AI
+# Instalar: brew install swiftlint
+# Rodar:    swiftlint
+# Auto-fix: swiftlint --fix
+#
+# Filosofia atual: limites de tamanho (file/type/function/line/complexity) estão FROUXOS
+# de propósito. O código existente já passou desses limites em vários pontos e refatorar
+# tudo agora seria muito impacto. As custom rules (invariantes do projeto) continuam
+# severas. Apertar os limites de tamanho fica pra um pass dedicado depois.
+
+included:
+  - GranaAi
+  - GranaAiTests
+
+excluded:
+  - .build
+  - DerivedData
+  - Pods
+  - GranaAi/Resources
+
+# ---- Limites de tamanho (frouxos por enquanto) ----
+line_length:
+  warning: 150
+  error: 1000              # erro só pra absurdo; prompts da IA têm linhas longas legítimas
+  ignores_comments: true
+  ignores_urls: true
+  ignores_interpolated_strings: true
+
+type_body_length:
+  warning: 600
+  error: 1000
+
+file_length:
+  warning: 900
+  error: 1500
+
+function_body_length:
+  warning: 120
+  error: 250
+
+cyclomatic_complexity:
+  warning: 20
+  error: 30
+
+identifier_name:
+  min_length: 1
+  max_length:
+    warning: 60
+    error: 80
+  excluded:
+    - id
+
+# ---- Regras opt-in ----
+opt_in_rules:
+  - force_unwrapping
+  # empty_count removido: dá falso positivo em propriedades chamadas `count`
+  # que não são Array.count (ex: WeekdayTotal.count = nº de ocorrências).
+  - empty_string
+  - explicit_init
+  - first_where
+  - last_where
+  - sorted_first_last
+  - contains_over_first_not_nil
+  - redundant_nil_coalescing
+  - toggle_bool
+  - closure_spacing
+  - operator_usage_whitespace
+  - vertical_whitespace_closing_braces
+  - vertical_whitespace_opening_braces
+  - implicit_return
+  - prefer_self_type_over_type_of_self
+  - prefer_zero_over_explicit_init
+  - convenience_type
+  - fatal_error_message
+  - overridden_super_call
+
+# ---- Regras desligadas ----
+disabled_rules:
+  - todo                       # TODO(fase-N) é convenção do projeto, validada por custom rule abaixo
+  - trailing_comma             # SwiftFormat já cuida
+  - nesting                    # Aninhamento de tipos é livre — pattern comum em ViewModels/Stores
+  - function_parameter_count   # Inits de models têm muitos params; é intencional
+  - orphaned_doc_comment       # /// solto antes de extensions/extensions vazias é OK
+  - large_tuple                # Helpers de teste usam tuplas 3+ membros pra fixtures
+
+# Excluir tests de regras que não fazem sentido lá
+force_unwrapping:
+  excluded:
+    - GranaAiTests
+
+# ---- Regras customizadas (invariantes do Grana AI — NÃO afrouxar) ----
+custom_rules:
+  no_double_for_money:
+    name: "Dinheiro com Double"
+    # Só pega declarações (let/var nome: Double), não argumentos de chamada (foo(value: Double(x))).
+    # `value` e `total` ficaram fora porque colidiam com APIs SwiftUI (ProgressView, etc.) — risco
+    # baixo de serem nomes de propriedade monetária de fato.
+    regex: '(?:let|var)\s+(amount|balance|price|cost|initialBalance|cents|fee|subtotal|grandTotal)\s*:\s*Double\b'
+    message: "Dinheiro é Decimal no Swift, Int64 (centavos) no banco. Nunca Double. Ver CLAUDE.md."
+    severity: error
+
+  no_observable_object:
+    name: "ObservableObject proibido"
+    regex: ':\s*ObservableObject\b'
+    message: "Use @Observable em vez de ObservableObject. Ver CLAUDE.md."
+    severity: error
+
+  no_substr_occurred_at:
+    name: "SUBSTR em data UTC"
+    regex: 'SUBSTR\s*\(\s*occurred_at'
+    message: "SUBSTR(occurred_at, 1, 10) quebra perto da meia-noite (banco é UTC). Use janela com Calendar local. Ver CLAUDE.md."
+    severity: error
+
+  no_raw_print:
+    name: "print proibido"
+    regex: '^\s*print\('
+    message: "Use Logger (OSLog): log.<categoria>.info(\"...\"). Ver CLAUDE.md."
+    severity: warning
+
+  todo_needs_phase:
+    name: "TODO sem fase"
+    regex: '//\s*TODO(?!\(fase-)'
+    message: "TODOs devem ter fase: // TODO(fase-N): ..."
+    severity: warning
+
+reporter: "xcode"
