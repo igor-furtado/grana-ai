@@ -24,6 +24,9 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
         rawValue
     }
 
+    /// Ordem é **parte do contrato de UI**: os 9 primeiros itens nesta
+    /// ordem ganham atalho `⌘1..⌘9` (ver `ContentView.sectionShortcuts`).
+    /// Reordenar aqui muda os atalhos do usuário silenciosamente.
     static let groups: [SidebarGroup] = [
         SidebarGroup(title: nil, items: [.dashboard, .summary, .transactions, .creditCards, .accounts]),
         SidebarGroup(title: "Economias", items: [.planning, .savings, .investments]),
@@ -94,7 +97,33 @@ struct ContentView: View {
     /// sidebar força `.environment(\.colorScheme, .dark)` no próprio escopo.
     @Environment(\.colorScheme) private var currentScheme
 
-    @State private var selection: AppSection = .dashboard
+    /// Restaurado entre sessões via `@SceneStorage` — abrir o app cai na
+    /// última seção visitada (UX padrão macOS). `rawValue: String` é o que o
+    /// SceneStorage persiste; reconstruímos o `AppSection` no getter abaixo.
+    /// Default `.dashboard` cobre o primeiro lançamento + casos de raw value
+    /// inválido (ex: enum mudou entre versões).
+    @SceneStorage("ContentView.selection") private var selectionRaw: String = AppSection.dashboard.rawValue
+
+    private var selection: AppSection {
+        get { AppSection(rawValue: selectionRaw) ?? .dashboard }
+        nonmutating set { selectionRaw = newValue.rawValue }
+    }
+
+    /// Atalhos ⌘1..⌘9 mapeados pelas primeiras 9 seções na ordem visual da
+    /// sidebar. Segue convenção do macOS (Safari, Mail, Notes usam ⌘1..⌘N
+    /// pra alternar entre seções/abas/contas). As seções restantes
+    /// (Categorização, Categorias, Instituições, Avançado) ficam sem
+    /// atalho — são mais acessadas via clique, e ⌘0 colide com "tamanho
+    /// real" em vários contextos macOS.
+    private static let sectionShortcuts: [AppSection: KeyboardShortcut] = {
+        let ordered = AppSection.groups.flatMap(\.items).prefix(9)
+        let keys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        return Dictionary(
+            uniqueKeysWithValues: zip(ordered, keys).map {
+                ($0, KeyboardShortcut($1, modifiers: .command))
+            }
+        )
+    }()
 
     var body: some View {
         NavigationSplitView {
@@ -121,6 +150,11 @@ struct ContentView: View {
         }
         .navigationTitle("Grana AI")
         .preferredColorScheme(themeOverride)
+        // Mínimo global da janela. A tela mais "gulosa" hoje é Cartões
+        // (sidebar interna 240 + detalhe 520 = 760), somado à sidebar do
+        // app (200), exige ~960. Arredondado pra 1000 dá folga; 640 de
+        // altura mostra ~12 linhas de transação confortavelmente.
+        .frame(minWidth: 1000, minHeight: 640)
         // Toasts globais de erro. Plugado aqui (raiz) pra cobrir qualquer
         // tela. Stores e services reportam via `ErrorCenter.shared.report(_:)`.
         .errorToastOverlay()
@@ -148,16 +182,25 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(AppSection.groups) { group in
                         if let header = group.title {
+                            // Leading 38 = 10 (padding interno da row) + 18 (ícone) + 10
+                            // (spacing) — alinha o header com o **texto** das rows, padrão
+                            // macOS. Antes (10pt) caía em cima do canto arredondado da
+                            // janela em larguras pequenas e o primeiro caractere sumia.
                             Text(header)
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(Color.white.opacity(0.45))
-                                .padding(.horizontal, 10)
+                                .padding(.leading, 38)
+                                .padding(.trailing, 10)
                                 .padding(.top, 18)
                                 .padding(.bottom, 4)
                         }
 
                         ForEach(group.items) { section in
-                            SidebarRow(section: section, isSelected: selection == section) {
+                            SidebarRow(
+                                section: section,
+                                isSelected: selection == section,
+                                shortcut: Self.sectionShortcuts[section]
+                            ) {
                                 selection = section
                             }
                         }
@@ -176,6 +219,10 @@ struct ContentView: View {
         // resto do app, mas a sidebar precisa permanecer escura).
         .background(Color.sidebarBackground)
         .frame(minWidth: 200)
+        // Sem isso o `NavigationSplitView` escolhe um ideal próprio (~250pt),
+        // comendo espaço do detail. Fixar `ideal = min` faz a sidebar abrir
+        // no tamanho mínimo; o usuário ainda pode arrastar pra alargar até 280.
+        .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 280)
         // Força colorScheme dark aqui pra que o toggle nativo de sidebar (e
         // qualquer outro control herdado do sistema) renderize com ícones
         // claros, visíveis contra o fundo escuro fixo.
@@ -244,6 +291,7 @@ struct ContentView: View {
 private struct SidebarRow: View {
     let section: AppSection
     let isSelected: Bool
+    let shortcut: KeyboardShortcut?
     let action: () -> Void
 
     @State private var isHovering = false
@@ -272,9 +320,27 @@ private struct SidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // `keyboardShortcut(_:)` aceita `KeyboardShortcut?` — passar nil é no-op,
+        // então itens sem atalho (10+ na sidebar) ficam sem registrar nada.
+        .keyboardShortcut(shortcut)
         .onHover { isHovering = $0 }
+        .help(helpText)
         .accessibilityLabel(section.title)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// Tooltip com o nome da seção + o atalho (quando há). Faz o usuário
+    /// descobrir ⌘1..⌘9 ao passar o mouse, já que não aparecem na menu bar.
+    /// Renderiza modificadores na ordem canônica do macOS (⌃⌥⇧⌘) pra
+    /// suportar atalhos compostos futuros (ex: `⌘⇧I`) sem rewrite.
+    private var helpText: String {
+        guard let shortcut else { return section.title }
+        var glyphs = ""
+        if shortcut.modifiers.contains(.control) { glyphs += "⌃" }
+        if shortcut.modifiers.contains(.option) { glyphs += "⌥" }
+        if shortcut.modifiers.contains(.shift) { glyphs += "⇧" }
+        if shortcut.modifiers.contains(.command) { glyphs += "⌘" }
+        return "\(section.title) (\(glyphs)\(shortcut.key.character.uppercased()))"
     }
 
     private var rowBackground: Color {

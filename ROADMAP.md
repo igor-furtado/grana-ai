@@ -162,6 +162,16 @@ Catálogo de visualizações vistas em apps concorrentes (Mint, YNAB, Monarch, C
 
 ---
 
+## Polimento HIG (pós-MVP)
+
+Itens de conformidade com Apple Human Interface Guidelines mapeados durante o desenvolvimento mas não bloqueantes pro MVP single-user. Implementar conforme o app for ganhando tração e o atrito justificar o investimento.
+
+- **Atalhos de teclado no menu bar** — hoje `⌘1..⌘9` funcionam globalmente via `.keyboardShortcut(_:)` nos `SidebarRow` Buttons (ver `ContentView.swift`), mas não aparecem no menu "View" porque `selection` é `@State` local da `ContentView`. Pra exibi-los em "View → Switch to Dashboard ⌘1" (padrão Apple), refatorar `selection` pra um `@Observable` compartilhado (ex: `NavigationCoordinator`) e adicionar `Commands { CommandMenu("View") { ... } }` em `GranaAiApp.swift`. Ganho: descobribilidade (Help → Search anuncia os atalhos), uniformidade com apps nativos. Custo: lift de estado + 1 enum scene com 9 botões.
+- **Sidebar nativa via `List(selection:)`** — sidebar custom (ver `ContentView.sidebar`) usa `Button + onMoveCommand` em vez de `List` por causa do override visual de seleção (que vinha do `AccentColor` global). VoiceOver perde "row N of M" e drag-to-reorder gratuito. Vale revisitar quando o AccentColor virar pasta separada de "accent de seleção da sidebar" (`SidebarSelectionColor` no asset catalog) — aí dá pra voltar pro `List` nativo sem comprometer o look.
+- **Atalhos extras** — `⌘N` (nova transação), `⌘F` (busca em transações), `⌘⇧I` (importar), `⌘,` (preferências/Avançado). Pareados com o item de menu bar acima.
+
+---
+
 ## Como trabalhar com Claude Code em cada fase
 
 1. Abrir nova sessão do Claude Code na pasta do projeto.

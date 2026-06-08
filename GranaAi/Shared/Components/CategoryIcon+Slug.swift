@@ -9,10 +9,6 @@ import Foundation
 /// **Por que não derivar do nome:** se um dia o usuário renomear
 /// "Compras Pessoais" pra "Roupas e Acessórios", o ícone tem que continuar
 /// resolvendo. O slug é o anchor estável; o nome é display.
-///
-/// **Por que dicionário privado em vez de switch no enum:** evita poluir
-/// `CategoryIcon` com 16 strings hard-coded e mantém a responsabilidade
-/// "qual slug usa qual ícone?" isolada deste arquivo.
 extension CategoryIcon {
     static func forSlug(_ slug: String) -> CategoryIcon? {
         slugToIcon[slug]
@@ -20,30 +16,32 @@ extension CategoryIcon {
 
     private static let slugToIcon: [String: CategoryIcon] = [
         // Receitas
-        "renda-e-pagamentos": .dollarSign,
+        "renda-e-pagamentos": .income,
 
         // Despesas
-        "compras": .shoppingBag,
-        "mobilidade": .car,
+        "alimentacao": .food,
+        "moradia": .housing,
+        "exercicios": .exercise,
+        "danca": .dance,
+        "compras": .shopping,
+        "conectividade": .connectivity,
+        "cuidados-pessoais": .personalCare,
+        "educacao": .education,
+        "entretenimento": .entertainment,
+        "festas": .party,
+        "impostos": .taxes,
+        "investimentos": .investments,
+        "mobilidade": .mobility,
         "moto": .motorcycle,
-        "viagem": .airplane,
-        "lazer": .users,
-        "atividades-e-aulas": .dumbbell,
-        "cuidados-pessoais": .scissors,
-        "alimentacao": .utensils,
-        "apartamento": .home,
-        "streaming-e-apps": .playCircle,
-        "comunicacao": .antenna,
-        "servicos-profissionais": .briefcase,
-        "trabalho": .laptop,
-        "educacao": .graduationCap,
-        "saude": .heart,
-        "investimentos": .trendingUp,
-        "impostos": .fileText,
-        "saques": .banknote,
-        "nao-classificado": .helpCircle,
+        "nao-classificado": .unclassified,
+        "saques": .withdrawal,
+        "saude": .health,
+        "servicos-profissionais": .professional,
+        "streaming-e-apps": .streaming,
+        "trabalho": .work,
+        "viagem": .travel,
 
         // Transferências
-        "transferencias": .arrowRightLeft,
+        "transferencias": .transfer,
     ]
 }

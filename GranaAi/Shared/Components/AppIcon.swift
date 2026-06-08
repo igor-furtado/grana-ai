@@ -51,8 +51,10 @@ enum AppIcon {
     case inbox
     case chart
     case categoryRankingEmpty
+    case categoryPlaceholder
     case calendar
     case institution
+    case inspectorToggle
 
     // MARK: - Tema
 
@@ -90,8 +92,10 @@ enum AppIcon {
         case .inbox: "tray"
         case .chart: "chart.bar"
         case .categoryRankingEmpty: "chart.bar.fill"
+        case .categoryPlaceholder: "tag"
         case .calendar: "calendar"
         case .institution: "building.columns"
+        case .inspectorToggle: "sidebar.right"
         // Tema
         case .themeLight: "sun.max"
         case .themeDark: "moon"

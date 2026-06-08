@@ -45,77 +45,65 @@ enum CategoryKind: String, Codable, CaseIterable {
 
 /// Ícone visual da categoria raiz.
 ///
-/// **Raw values em camelCase** espelham os nomes do `CategoryIcon` do projeto
-/// Flutter (Lucide icons) — facilita migração futura de dados entre os dois.
-/// Mapeamento pra SF Symbols (nativo Apple) fica em `systemImage`.
+/// **Nomes semânticos por categoria** (não pelo SF Symbol em si): facilita
+/// trocar o glyph no futuro sem renomear a case (ex: trocar `dumbbell.fill`
+/// por outro símbolo em `.exercise` muda só o `systemImage`, sem propagar
+/// pra `CategoryIcon+Slug.swift` nem pro raw value persistido).
 ///
-/// **Por que enum tipado em vez de String solta:**
-/// - Compilador valida que só nomes conhecidos são usados.
-/// - O mapeamento Lucide→SF Symbol fica em UM lugar (aqui).
-/// - Trocar a biblioteca de ícones no futuro = mudar só o switch.
+/// Renderização HIG-padrão é `.symbolRenderingMode(.hierarchical)` com
+/// `.foregroundStyle(color.gradient)` — Apple usa esse pattern desde
+/// macOS Sequoia em Music, Photos, Reminders, etc.
 enum CategoryIcon: String, Codable, CaseIterable {
-    case dollarSign
-    case shoppingBag
-    case car
-    case monitor
-    case utensils
-    case zap
-    case creditCard
-    case heart
-    case shield
-    case trendingUp
-    case fileText
-    case banknote
-    case helpCircle
-    case dice
-    case arrowRightLeft
-    case airplane
-    case graduationCap
-    case briefcase
-    case calendarClock
-    case gamepad
-    case home
+    case income
+    case food
+    case housing
+    case exercise
+    case dance
+    case shopping
+    case connectivity
+    case personalCare
+    case taxes
+    case investments
+    case entertainment
+    case party
+    case mobility
     case motorcycle
-    case users
-    case user
-    case dumbbell
-    case laptop
-    case playCircle
-    case antenna
-    case scissors
+    case unclassified
+    case withdrawal
+    case health
+    case professional
+    case streaming
+    case work
+    case travel
+    case transfer
+    case education
 
     /// Nome do SF Symbol correspondente, pra usar em `Image(systemName:)`.
     var systemImage: String {
         switch self {
-        case .dollarSign: "dollarsign.circle.fill"
-        case .shoppingBag: "bag.fill"
-        case .car: "car.fill"
-        case .monitor: "tv.fill"
-        case .utensils: "fork.knife"
-        case .zap: "bolt.fill"
-        case .creditCard: "creditcard.fill"
-        case .heart: "heart.fill"
-        case .shield: "shield.fill"
-        case .trendingUp: "chart.line.uptrend.xyaxis"
-        case .fileText: "doc.text.fill"
-        case .banknote: "banknote.fill"
-        case .helpCircle: "questionmark.circle.fill"
-        case .dice: "dice.fill"
-        case .arrowRightLeft: "arrow.left.arrow.right"
-        case .airplane: "airplane"
-        case .graduationCap: "graduationcap.fill"
-        case .briefcase: "briefcase.fill"
-        case .calendarClock: "calendar.badge.clock"
-        case .gamepad: "gamecontroller.fill"
-        case .home: "house.fill"
-        case .motorcycle: "scooter"
-        case .users: "person.2.fill"
-        case .user: "person.fill"
-        case .dumbbell: "dumbbell.fill"
-        case .laptop: "laptopcomputer"
-        case .playCircle: "play.circle.fill"
-        case .antenna: "antenna.radiowaves.left.and.right"
-        case .scissors: "scissors"
+        case .income: "brazilianrealsign.circle.fill"
+        case .food: "fork.knife"
+        case .housing: "house.fill"
+        case .exercise: "dumbbell.fill"
+        case .dance: "figure.socialdance"
+        case .shopping: "cart.fill"
+        case .connectivity: "network"
+        case .personalCare: "scissors"
+        case .taxes: "creditcard.fill"
+        case .investments: "chart.line.uptrend.xyaxis"
+        case .entertainment: "theatermasks.fill"
+        case .party: "party.popper.fill"
+        case .mobility: "car.fill"
+        case .motorcycle: "motorcycle.fill"
+        case .unclassified: "questionmark.circle.fill"
+        case .withdrawal: "banknote.fill"
+        case .health: "heart.fill"
+        case .professional: "figure.walk.suitcase.rolling"
+        case .streaming: "play.rectangle.fill"
+        case .work: "desktopcomputer"
+        case .travel: "airplane"
+        case .transfer: "repeat.circle.fill"
+        case .education: "graduationcap.fill"
         }
     }
 }

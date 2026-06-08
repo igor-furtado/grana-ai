@@ -55,6 +55,7 @@ struct TransactionsView: View {
                     } label: {
                         Label("Importar OFX", systemImage: AppIcon.importFile.systemImage)
                     }
+                    .help("Importar extrato OFX")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -62,6 +63,7 @@ struct TransactionsView: View {
                     } label: {
                         Label("Adicionar", systemImage: AppIcon.add.systemImage)
                     }
+                    .help("Nova transação")
                 }
             }
             .sheet(isPresented: $showingForm) {

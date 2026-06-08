@@ -45,7 +45,7 @@ struct CategoryBarChart: View {
                 x: .value("Total", plottable(item.total)),
                 y: .value("Categoria", item.categoryName)
             )
-            .foregroundStyle(item.icon?.color ?? .brandPrimary.opacity(0.5))
+            .foregroundStyle((item.icon?.color ?? .brandPrimary.opacity(0.5)).gradient)
             .cornerRadius(4)
         }
         // Domain explícito na ordem do array (que já chega desc do
@@ -100,12 +100,12 @@ struct CategoryBarChart: View {
 #Preview {
     CategoryBarChart(totals: [
         // Ordem desc reproduzindo o que o repository devolveria.
-        CategoryTotal(categoryId: UUID(), categoryName: "Alimentação e Supermercado", icon: .utensils, total: 3200),
-        CategoryTotal(categoryId: UUID(), categoryName: "Transporte e Viagem", icon: .car, total: 1850),
-        CategoryTotal(categoryId: UUID(), categoryName: "Contas e Serviços", icon: .zap, total: 1240),
-        CategoryTotal(categoryId: UUID(), categoryName: "Entretenimento e Lazer", icon: .monitor, total: 820),
-        CategoryTotal(categoryId: UUID(), categoryName: "Saúde e Medicina", icon: .heart, total: 540),
-        CategoryTotal(categoryId: UUID(), categoryName: "Compras Pessoais", icon: .shoppingBag, total: 320),
+        CategoryTotal(categoryId: UUID(), categoryName: "Alimentação e Supermercado", icon: .food, total: 3200),
+        CategoryTotal(categoryId: UUID(), categoryName: "Transporte e Viagem", icon: .mobility, total: 1850),
+        CategoryTotal(categoryId: UUID(), categoryName: "Contas e Serviços", icon: .housing, total: 1240),
+        CategoryTotal(categoryId: UUID(), categoryName: "Entretenimento e Lazer", icon: .streaming, total: 820),
+        CategoryTotal(categoryId: UUID(), categoryName: "Saúde e Medicina", icon: .health, total: 540),
+        CategoryTotal(categoryId: UUID(), categoryName: "Compras Pessoais", icon: .shopping, total: 320),
     ])
     .frame(width: 900, height: 320)
     .padding()

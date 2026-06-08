@@ -51,6 +51,7 @@ struct AccountsView: View {
                     Label("Nova conta", systemImage: AppIcon.add.systemImage)
                 }
                 .disabled(formMode != nil)
+                .help("Adicionar nova conta")
             }
             // Toggle só aparece quando existe pelo menos uma conta arquivada.
             // Sem isso o controle ficava sempre visível mesmo no estado vazio

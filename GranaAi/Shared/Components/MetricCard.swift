@@ -14,31 +14,34 @@ struct MetricCard: View {
     var placeholder: Bool = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                if let icon {
-                    Image(systemName: icon.systemImage)
+        // `GroupBox` é o container HIG-padrão pra agrupamentos visuais
+        // discretos (material backdrop, corner radius do sistema). O sinal
+        // de "kind" (income/expense/transfer) vive no ícone tingido com
+        // `accent` — sem mais tint de fundo, que perdemos junto.
+        GroupBox {
+            VStack(alignment: .leading, spacing: Spacing.sm) {
+                HStack(spacing: Spacing.xs) {
+                    if let icon {
+                        Image(systemName: icon.systemImage)
+                            .font(.callout)
+                            .foregroundStyle(accent)
+                    }
+                    Text(title)
                         .font(.callout)
-                        .foregroundStyle(accent)
+                        .foregroundStyle(.secondary)
                 }
-                Text(title)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
 
-            Text(placeholder ? "—" : value.formatted(.currency(code: "BRL")))
-                // `monospacedDigit()` alinha os números entre cards com
-                // largura visualmente igual — sem ele, o "1" ocuparia menos
-                // espaço que o "8" e os valores ficariam visualmente desalinhados.
-                .font(.title2.weight(.semibold).monospacedDigit())
-                .foregroundStyle(placeholder ? Color.secondary : .primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                Text(placeholder ? "—" : value.formatted(.currency(code: "BRL")))
+                    // `monospacedDigit()` alinha os números entre cards com
+                    // largura visualmente igual — sem ele, o "1" ocuparia menos
+                    // espaço que o "8" e os valores ficariam visualmente desalinhados.
+                    .font(.title2.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(placeholder ? Color.secondary : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(accent.opacity(0.10))
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 

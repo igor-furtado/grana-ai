@@ -51,6 +51,7 @@ struct CreditCardsView: View {
                     Label("Novo cartão", systemImage: AppIcon.add.systemImage)
                 }
                 .disabled(formMode != nil)
+                .help("Adicionar novo cartão")
             }
             if hasArchivedCard {
                 ToolbarItem(placement: .secondaryAction) {

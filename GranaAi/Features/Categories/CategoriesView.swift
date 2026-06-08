@@ -5,20 +5,27 @@ import SwiftUI
 /// Inspeção read-only da taxonomia de categorias (raízes + subcategorias).
 ///
 /// Categorias hoje são **seed estático** — usuário não cria nem edita. Esta
-/// tela existe pra visibilidade: ver o que foi cadastrado, qual ícone/cor
-/// tem cada raiz, e quais subs caem sob ela. Quando o roadmap permitir
-/// edição, esta vira a tela de CRUD.
+/// tela existe pra visibilidade: ver o que foi cadastrado, qual ícone tem
+/// cada raiz, e quais subs caem sob ela. Quando o roadmap permitir edição,
+/// esta vira a tela de CRUD.
 ///
-/// **Decisão visual:** uma seção/tabela por `CategoryKind` (Receitas,
-/// Despesas, Transferências). Separar por tipo é mais útil pro usuário do
-/// que uma tabela única — financeiro mentaliza "o que gasto" separado de
-/// "o que recebo". Cor do header espelha o token usado em transações
-/// (`.income` / `.expense` / `.transfer`), mantendo coerência cromática
-/// com o Dashboard e a lista de transactions.
+/// **Decisão visual:** layout em dois painéis inspirado no app "SF Symbols"
+/// da Apple. À esquerda, grid de cards uniformes (ícone destacado + nome) —
+/// um item por categoria raiz, seccionados por `CategoryKind`. À direita,
+/// inspector exibindo detalhes da categoria selecionada: ícone grande,
+/// nome, kind e lista de subcategorias. Cards uniformes mantêm o ritmo
+/// visual; subs ficam no inspector pra evitar cards de alturas variáveis.
+///
+/// Cor da categoria foi propositalmente omitida — decisão pendente sobre
+/// como representá-la entra em outra iteração.
 struct CategoriesView: View {
     @Environment(AppEnvironment.self) private var environment
     @State private var categories: [Category] = []
     @State private var loadError: Error?
+    @State private var selectedId: UUID?
+    /// Persiste entre sessões — usuário que ocultou o inspector não quer
+    /// vê-lo aparecer de novo na próxima vez que abre o app.
+    @SceneStorage("CategoriesView.inspector") private var inspectorPresented: Bool = true
 
     var body: some View {
         Group {
@@ -31,12 +38,30 @@ struct CategoriesView: View {
             } else if categories.isEmpty {
                 ProgressView()
             } else {
-                grouped
+                grid
+            }
+        }
+        .inspector(isPresented: $inspectorPresented) {
+            inspector
+                .inspectorColumnWidth(min: 220, ideal: 280, max: 360)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    inspectorPresented.toggle()
+                } label: {
+                    Label("Painel de detalhes", systemImage: AppIcon.inspectorToggle.systemImage)
+                }
+                .help(inspectorPresented ? "Ocultar painel de detalhes" : "Mostrar painel de detalhes")
+                .keyboardShortcut("i", modifiers: [.command, .option])
             }
         }
         .navigationTitle("Categorias")
         .navigationSubtitle(categoriesSubtitle)
         .task { await watch() }
+        .onChange(of: rootIds) { _, ids in
+            reconcileSelection(rootIds: ids)
+        }
     }
 
     private var categoriesSubtitle: String {
@@ -45,132 +70,124 @@ struct CategoriesView: View {
         return "\(roots) categorias raiz · \(categories.count) totais"
     }
 
+    /// IDs estáveis das raízes pra reconciliação de seleção (`onChange`).
+    /// Mapear `category.id` em vez de `category` evita recomputar quando
+    /// só um campo muda — só o conjunto de raízes importa pra seleção.
+    private var rootIds: [UUID] {
+        categories.filter { $0.parentId == nil }.map(\.id)
+    }
+
     @ViewBuilder
-    private var grouped: some View {
-        // Um único pass sobre `categories` agrupando por kind, em vez de
-        // três `filter` separados nas 3 chamadas de buildRows. Vale pouco
-        // pra ~163 categorias do seed, mas evita degradação se o roadmap
-        // permitir o usuário criar categorias custom.
+    private var grid: some View {
+        // Um único pass agrupando por kind, em vez de três `filter` separados.
         let byKind = Dictionary(grouping: categories, by: \.kind)
-        let income = makeBucket(from: byKind[.income] ?? [])
-        let expense = makeBucket(from: byKind[.expense] ?? [])
-        let transfer = makeBucket(from: byKind[.transfer] ?? [])
+        let sections: [(CategoryKind, String, Color)] = [
+            (.income, "Receitas", .income),
+            (.expense, "Despesas", .expense),
+            (.transfer, "Transferências", .transfer),
+        ]
 
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                kindBlock("Receitas", bucket: income, color: .income)
-                kindBlock("Despesas", bucket: expense, color: .expense)
-                kindBlock("Transferências", bucket: transfer, color: .transfer)
+            LazyVStack(alignment: .leading, spacing: Spacing.xxxl) {
+                ForEach(sections, id: \.0) { kind, title, accent in
+                    let groups = makeGroups(from: byKind[kind] ?? [])
+                    if !groups.isEmpty {
+                        kindSection(title: title, accent: accent, groups: groups)
+                    }
+                }
             }
-            .padding()
+            .padding(Spacing.xl)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    /// Bloco "header + tabela" pra um kind. Construído com `VStack` de
-    /// `HStack`s em vez de `Table` nativa: `Table` é virtualizada e não
-    /// declara intrinsic height — embedded num `ScrollView` ela só renderiza
-    /// se receber `.frame(height:)` explícita, o que exigia estimar altura
-    /// linha por linha (frágil; sobrava placeholder cinza). `VStack` tem
-    /// intrinsic size real, shrink-wrappa sozinho.
-    ///
-    /// Trade-off: perdemos resize de coluna e header clicável que `Table`
-    /// dá de graça. Pra uma tela read-only de inspeção isso não custa nada.
-    private func kindBlock(_ title: String, bucket: KindBucket, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // `bucket.rootCount` é calculado uma vez em `makeBucket`,
-            // não recomputado a cada render.
-            kindHeader(title, count: bucket.rootCount, color: color)
+    /// Seção de um kind: cabeçalho com bolinha de cor + título + contagem,
+    /// e um `LazyVGrid` adaptativo de cards uniformes.
+    private func kindSection(title: String, accent: Color, groups: [CategoryGroup]) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.lg) {
+            HStack(spacing: Spacing.sm) {
+                Circle()
+                    .fill(accent)
+                    .frame(width: 10, height: 10)
+                Text(title)
+                    .font(.title2.weight(.semibold))
+                Text("(\(groups.count))")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
 
-            VStack(spacing: 0) {
-                tableHeader
-                Divider()
-                ForEach(Array(bucket.rows.enumerated()), id: \.element.id) { index, row in
-                    tableRow(row, striped: !index.isMultiple(of: 2))
+            LazyVGrid(columns: Self.gridColumns, alignment: .leading, spacing: Spacing.md) {
+                ForEach(groups) { group in
+                    CategoryCard(
+                        group: group,
+                        isSelected: selectedId == group.id,
+                        onTap: { selectedId = group.id }
+                    )
                 }
             }
-            .background(Color.brandPrimary.opacity(0.04))
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
-            )
         }
     }
 
-    private var tableHeader: some View {
-        HStack(spacing: 0) {
-            Text("Ícone")
-                .frame(width: Self.iconColumnWidth, alignment: .leading)
-            Text("Categoria")
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Cor")
-                .frame(width: Self.colorColumnWidth, alignment: .leading)
+    private static let gridColumns: [GridItem] = [
+        GridItem(.adaptive(minimum: 150), spacing: Spacing.md, alignment: .top),
+    ]
+
+    @ViewBuilder
+    private var inspector: some View {
+        if let group = selectedGroup {
+            CategoryInspector(group: group)
+        } else {
+            inspectorPlaceholder
         }
-        .font(.caption.weight(.medium))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, Self.rowHorizontalPadding)
-        .padding(.vertical, 8)
     }
 
-    private func tableRow(_ row: CategoryRow, striped: Bool) -> some View {
-        HStack(spacing: 0) {
-            IconCell(row: row)
-                .frame(width: Self.iconColumnWidth, alignment: .leading)
-
-            NameCell(row: row)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            ColorSwatch(row: row)
-                .frame(width: Self.colorColumnWidth, alignment: .leading)
-        }
-        .padding(.horizontal, Self.rowHorizontalPadding)
-        .padding(.vertical, 4)
-        .background(striped ? Color.primary.opacity(0.03) : Color.clear)
-    }
-
-    private func kindHeader(_ title: String, count: Int, color: Color) -> some View {
-        HStack(spacing: 8) {
-            Circle()
-                .fill(color)
-                .frame(width: 10, height: 10)
-            Text(title)
-                .font(.title2.weight(.semibold))
-            Text("(\(count))")
+    private var inspectorPlaceholder: some View {
+        VStack(spacing: Spacing.md) {
+            Image(systemName: AppIcon.categoryPlaceholder.systemImage)
+                .font(.system(size: 32))
+                .foregroundStyle(.tertiary)
+            Text("Selecione uma categoria")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private static let iconColumnWidth: CGFloat = 56
-    private static let colorColumnWidth: CGFloat = 80
-    private static let rowHorizontalPadding: CGFloat = 12
+    /// `CategoryGroup` referente à seleção atual. Reusa `makeGroups` pra
+    /// manter uma única fonte de verdade pra "como se monta um grupo"
+    /// (filtragem de raiz + ordenação das subs). Recomputa quando categorias
+    /// ou seleção mudam — barato, lista pequena (~30 raízes no seed).
+    private var selectedGroup: CategoryGroup? {
+        guard let selectedId else { return nil }
+        return makeGroups(from: categories).first { $0.id == selectedId }
+    }
 
-    /// Achata a hierarquia raiz→subs (já filtradas por kind pelo caller)
-    /// numa lista linear: cada raiz vem seguida das próprias subs
-    /// alfabéticas. Devolve `KindBucket` pra entregar a `rootCount`
-    /// já calculada — evita o consumidor refazer o filter.
-    private func makeBucket(from inKind: [Category]) -> KindBucket {
+    /// Achata a hierarquia raiz→subs (já filtradas por kind pelo caller) numa
+    /// lista de `CategoryGroup`. Pré-agrupar subs por `parentId` evita O(n²).
+    private func makeGroups(from inKind: [Category]) -> [CategoryGroup] {
         let roots = inKind
             .filter { $0.parentId == nil }
             .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
 
-        // Agrupar subs por parentId pra evitar O(n²) ao montar a lista.
         let subsByParent = Dictionary(
             grouping: inKind.filter { $0.parentId != nil },
             by: { $0.parentId! }
         )
 
-        var out: [CategoryRow] = []
-        for root in roots {
+        return roots.map { root in
             let subs = (subsByParent[root.id] ?? [])
                 .sorted { $0.name.localizedCompare($1.name) == .orderedAscending }
-            out.append(CategoryRow(category: root, parent: nil, subCount: subs.count))
-            for sub in subs {
-                out.append(CategoryRow(category: sub, parent: root))
-            }
+            return CategoryGroup(root: root, subs: subs)
         }
-        return KindBucket(rows: out, rootCount: roots.count)
+    }
+
+    /// Mantém uma seleção válida: se nada está selecionado (primeiro load) ou
+    /// se a categoria selecionada saiu do conjunto, escolhe a primeira raiz.
+    private func reconcileSelection(rootIds: [UUID]) {
+        if let selectedId, rootIds.contains(selectedId) {
+            return
+        }
+        selectedId = rootIds.first
     }
 
     /// Stream reativa do banco. Usa `watch` (não `getAll`) pra refletir
@@ -189,108 +206,184 @@ struct CategoriesView: View {
     }
 }
 
-/// Tudo que `kindBlock`/`kindSection` precisam pra renderizar uma seção
-/// de kind: a lista achatada de rows + a quantidade de raízes (mostrada no
-/// header como "Despesas (14)"). Empacotar evita o consumidor recontar
-/// raízes a cada render.
-private struct KindBucket {
-    let rows: [CategoryRow]
-    let rootCount: Int
+/// Raiz + subcategorias dela (já ordenadas alfabeticamente). Encapsula pra
+/// evitar consumidores recomputarem/ordenarem subs a cada render.
+private struct CategoryGroup: Identifiable {
+    let root: Category
+    let subs: [Category]
+
+    var id: UUID { root.id }
 }
 
-/// Linha achatada: a categoria + seu pai resolvido (nil pra raiz). Manter
-/// o `parent` no row evita um lookup `categories.first { $0.id == ... }`
-/// pra cada célula renderizada.
-///
-/// `subCount` só é preenchido pras raízes (sub sempre = 0). Calculado em
-/// `buildRows` no mesmo loop que monta a lista — evita um segundo pass na
-/// hora de renderizar a `NameCell`.
-private struct CategoryRow: Identifiable {
-    let category: Category
-    let parent: Category?
-    let subCount: Int
+/// Card uniforme de uma categoria raiz. Altura fixa pra manter ritmo visual
+/// da grid — subs vivem no inspector lateral, não no card. Ícone domina
+/// (~36pt), nome em peso médio abaixo, centralizado. Sem cor da categoria
+/// por ora (decisão pendente). Estado selecionado ganha borda accent.
+private struct CategoryCard: View {
+    let group: CategoryGroup
+    let isSelected: Bool
+    let onTap: () -> Void
 
-    init(category: Category, parent: Category?, subCount: Int = 0) {
-        self.category = category
-        self.parent = parent
-        self.subCount = subCount
-    }
-
-    var id: UUID {
-        category.id
-    }
-
-    var isRoot: Bool {
-        parent == nil
-    }
-
-    /// Ícone "efetivo": se for raiz, usa o próprio; se for sub, herda do pai.
-    var effectiveIcon: CategoryIcon? {
-        category.icon ?? parent?.icon
-    }
-}
-
-/// Ícone tingido pela cor da categoria. Sub fica com opacity reduzida pra
-/// indicar visualmente que herda do pai (sem precisar de indentação).
-private struct IconCell: View {
-    let row: CategoryRow
+    private static let cardHeight: CGFloat = 124
+    /// Corner radius pareado ao default visual do `GroupBox` no macOS (~8pt
+    /// hoje). Mantemos em constante pra que o overlay de seleção case com a
+    /// curva da caixa — se a Apple mudar o radius, ajusta aqui.
+    private static let selectionCornerRadius: CGFloat = 8
 
     var body: some View {
-        if let icon = row.effectiveIcon {
+        // `Button` em vez de `onTapGesture`: HIG quer área clicável como botão
+        // (focus ring nativo, Space/Enter, VoiceOver). `GroupBox` dentro do
+        // botão dá o agrupamento visual padrão do sistema; seleção é
+        // sinalizada por borda accent overlay (mesmo padrão usado pelo app
+        // SF Symbols pra tile selecionada).
+        Button(action: onTap) {
+            GroupBox {
+                VStack(spacing: Spacing.md) {
+                    iconView
+                        .frame(maxWidth: .infinity)
+
+                    Text(group.root.name)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: Self.cardHeight)
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: Self.selectionCornerRadius, style: .continuous)
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .opacity(isSelected ? 1 : 0)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(group.root.name)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    @ViewBuilder
+    private var iconView: some View {
+        if let icon = group.root.icon {
             Image(systemName: icon.systemImage)
-                .foregroundStyle(icon.color.opacity(row.isRoot ? 1.0 : 0.55))
-                .font(.title3)
+                .font(.system(size: 30, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(icon.color.gradient)
         } else {
-            Color.clear
-                .frame(width: 22, height: 22)
+            Image(systemName: AppIcon.warning.systemImage)
+                .font(.system(size: 30, weight: .regular))
+                .foregroundStyle(.tertiary)
         }
     }
 }
 
-/// Nome da categoria. Raiz em destaque (title3 + semibold), sub em estilo
-/// mais discreto. Raiz com subs ganha `(N)` discreto à direita pra dar
-/// noção rápida de quão "grande" é o grupo.
-private struct NameCell: View {
-    let row: CategoryRow
+/// Painel direito de detalhes. Espelha a estrutura do inspector do app SF
+/// Symbols: preview grande do ícone no topo, nome, e seções de metadados
+/// abaixo — aqui, kind + lista de subcategorias.
+private struct CategoryInspector: View {
+    let group: CategoryGroup
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(row.category.name)
-                .font(row.isRoot ? .title3 : .body)
-                .fontWeight(row.isRoot ? .semibold : .regular)
-                .foregroundStyle(.primary.opacity(row.isRoot ? 1.0 : 0.75))
-                .lineLimit(1)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Spacing.xl) {
+                iconHero
 
-            if row.isRoot && row.subCount > 0 {
-                Text("(\(row.subCount))")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .center, spacing: Spacing.xs) {
+                    Text(group.root.name)
+                        .font(.title3.weight(.semibold))
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+
+                    kindBadge
+                        .frame(maxWidth: .infinity)
+                }
+
+                Divider()
+
+                subsSection
+            }
+            .padding(Spacing.xl)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var iconHero: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.primary.opacity(0.06))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.primary.opacity(0.08), lineWidth: 0.5)
+                )
+
+            if let icon = group.root.icon {
+                Image(systemName: icon.systemImage)
+                    .font(.system(size: 56, weight: .regular))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(icon.color.gradient)
+            } else {
+                Image(systemName: AppIcon.warning.systemImage)
+                    .font(.system(size: 56, weight: .regular))
+                    .foregroundStyle(.tertiary)
             }
         }
+        .frame(height: 160)
+        .frame(maxWidth: .infinity)
     }
-}
 
-/// Badge retangular preenchido com a cor da categoria, com borda fina pra
-/// separar visualmente do fundo da row (importante em tons claros como o
-/// amarelo da paleta). Sub aparece com a mesma cor mas opacity reduzida,
-/// pareando o tratamento do `IconCell`.
-private struct ColorSwatch: View {
-    let row: CategoryRow
+    @ViewBuilder
+    private var kindBadge: some View {
+        let (label, color) = kindMeta
+        HStack(spacing: Spacing.xs) {
+            Circle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+            Text(label)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+    }
 
-    private static let cornerRadius: CGFloat = 4
+    private var kindMeta: (String, Color) {
+        switch group.root.kind {
+        case .income: ("Receita", .income)
+        case .expense: ("Despesa", .expense)
+        case .transfer: ("Transferência", .transfer)
+        }
+    }
 
-    var body: some View {
-        if let icon = row.effectiveIcon {
-            RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                .fill(icon.color.opacity(row.isRoot ? 1.0 : 0.55))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
-                        .stroke(Color.primary.opacity(0.25), lineWidth: 0.5)
-                )
-                .frame(width: 44, height: 18)
-        } else {
-            Color.clear
-                .frame(width: 44, height: 18)
+    /// Usa `GroupBox` em vez de `RoundedRectangle` manual: dá agrupamento
+    /// visual padrão do sistema (label + material backdrop), encaixa bem
+    /// dentro do pane do `.inspector()` (que Apple desenhou pra hospedar
+    /// exatamente esse tipo de bloco). Mesmo container é usado por
+    /// `MetricCard` e pelo `CategoryCard` deste arquivo — sinal do "kind"
+    /// migrou de tint de fundo pra accent no ícone.
+    private var subsSection: some View {
+        GroupBox {
+            if group.subs.isEmpty {
+                Text("Sem subcategorias cadastradas")
+                    .font(.subheadline)
+                    .foregroundStyle(.tertiary)
+                    .italic()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(alignment: .leading, spacing: Spacing.sm) {
+                    ForEach(group.subs) { sub in
+                        Text(sub.name)
+                            .font(.subheadline)
+                            .foregroundStyle(.primary.opacity(0.85))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: Spacing.xs) {
+                Text("Subcategorias")
+                Text("(\(group.subs.count))")
+                    .foregroundStyle(.tertiary)
+            }
         }
     }
 }
@@ -300,5 +393,5 @@ private struct ColorSwatch: View {
         CategoriesView()
             .environment(AppEnvironment())
     }
-    .frame(width: 760, height: 700)
+    .frame(width: 1000, height: 760)
 }

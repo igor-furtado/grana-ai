@@ -160,7 +160,8 @@ struct CategoryIconBubble: View {
             .overlay {
                 Image(systemName: icon.systemImage)
                     .font(.system(size: size * 0.45))
-                    .foregroundStyle(icon.color)
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(icon.color.gradient)
             }
     }
 }

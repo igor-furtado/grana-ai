@@ -150,7 +150,7 @@ struct AggregateQueriesTests {
         #expect(result.count == 3)
         #expect(result[0].categoryName == "Alimentação")
         #expect(result[0].total == 300)
-        #expect(result[0].icon == .utensils)
+        #expect(result[0].icon == .food)
         #expect(result[1].categoryName == "Lazer")
         #expect(result[1].total == 150)
         #expect(result[2].categoryName == "Transporte")

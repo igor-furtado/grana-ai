@@ -86,18 +86,37 @@ nonisolated enum CategorySeedData {
         ]),
 
         CategorySeedDefinition(
-            slug: "lazer",
-            name: "Lazer",
+            slug: "entretenimento",
+            name: "Entretenimento",
+            kind: .expense,
+            subcategories: [
+                "Cinema",
+                "Teatro",
+                "Parques e Diversões",
+            ]
+        ),
+
+        CategorySeedDefinition(
+            slug: "festas",
+            name: "Festas",
             kind: .expense,
             subcategories: [
                 "Bares",
                 "Baladas e Boates",
-                "Bailes",
                 "Festas e Eventos",
                 "Shows e Festivais",
-                "Cinema",
-                "Teatro",
-                "Parques e Diversões",
+            ]
+        ),
+
+        CategorySeedDefinition(
+            slug: "danca",
+            name: "Dança",
+            kind: .expense,
+            subcategories: [
+                "Escola de Dança",
+                "Bailes",
+                "Workshops",
+                "Congressos",
             ]
         ),
 
@@ -131,7 +150,7 @@ nonisolated enum CategorySeedData {
             ]
         ),
 
-        CategorySeedDefinition(slug: "apartamento", name: "Apartamento", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "moradia", name: "Moradia", kind: .expense, subcategories: [
             "Aluguel",
             "Entrada e Encargos",
             "Condomínio",
@@ -156,15 +175,16 @@ nonisolated enum CategorySeedData {
             "Jogos",
         ]),
 
-        CategorySeedDefinition(slug: "comunicacao", name: "Comunicação", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "conectividade", name: "Conectividade", kind: .expense, subcategories: [
             "Internet Banda Larga",
             "Celular",
         ]),
 
-        CategorySeedDefinition(slug: "atividades-e-aulas", name: "Atividades e Aulas", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "exercicios", name: "Exercícios", kind: .expense, subcategories: [
             "Academia",
             "Personal Trainer",
-            "Escola de Dança",
+            "Crossfit",
+            "Pilates",
         ]),
 
         CategorySeedDefinition(

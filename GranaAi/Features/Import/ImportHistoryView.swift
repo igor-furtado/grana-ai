@@ -35,6 +35,7 @@ struct ImportHistoryView: View {
                     } label: {
                         Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
                     }
+                    .help("Importar extrato bancário")
                 }
             }
         }

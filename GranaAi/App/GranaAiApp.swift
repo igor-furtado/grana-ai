@@ -38,5 +38,10 @@ struct GranaAiApp: App {
                     }
                 }
         }
+        // Tamanho default na primeira abertura — gabarito do app. Mínimo
+        // efetivo vem do `.frame(minWidth:minHeight:)` no `ContentView`;
+        // `.windowResizability(.contentSize)` faz o AppKit respeitar isso.
+        .defaultSize(width: 1280, height: 820)
+        .windowResizability(.contentSize)
     }
 }

@@ -1,46 +1,52 @@
 import SwiftUI
 
-/// Cor associada a cada ícone de categoria raiz. Usada no donut chart e em
-/// badges/cards no dashboard. Mantida em extension separada (não no model)
-/// porque `Color` é do SwiftUI e o model deve ser livre de UIKit/SwiftUI.
+/// Cor associada a cada ícone de categoria raiz. Match semântico com o
+/// **glyph**, não com o `CategoryKind` — `heart.fill` é vermelho, `airplane`
+/// é teal, `bus` é amarelo, etc. Caso ambíguo (ícones de figura humana,
+/// ícones genéricos), pesa-se a "vibe" típica da atividade.
 ///
-/// **Paleta:** tons dessaturados/mid-tone que combinam com a identidade
-/// graphite + gold do app. Ícones semânticos (dinheiro/receita, comida/
-/// despesa, transferência) reusam os tokens do Theme; o restante usa
-/// literais inline pra manter 13+ cores distinguíveis no donut sem
-/// criar 13 `.colorset` separados.
+/// **Renderização canônica** (HIG-aceita):
+///
+/// ```swift
+/// Image(systemName: icon.systemImage)
+///     .symbolRenderingMode(.hierarchical)
+///     .foregroundStyle(icon.color.gradient)
+/// ```
+///
+/// `.hierarchical` divide o glyph em layers com opacity decrescente; o
+/// `.gradient` no `Color` aplica um subtle dark-to-light por cima. É o
+/// mesmo combo que Music, Photos, Reminders no macOS Sequoia/Tahoe usam.
+///
+/// **Paleta:** mistura `Color.<system>` quando o sistema tem um match
+/// natural (vermelho pra coração, verde pra dinheiro) e literais inline
+/// quando precisamos diferenciar entre dois ícones que cairiam na mesma
+/// cor do sistema (ex: dança × cuidados pessoais, ambos rosados).
 extension CategoryIcon {
     var color: Color {
         switch self {
-        case .dollarSign: .income
-        case .shoppingBag: Color(red: 0.722, green: 0.408, blue: 0.435) // dusty rose
-        case .car: Color(red: 0.741, green: 0.471, blue: 0.310) // terracotta laranja
-        case .monitor: Color(red: 0.553, green: 0.451, blue: 0.643) // muted purple
-        case .utensils: .expense
-        case .zap: Color(red: 0.788, green: 0.620, blue: 0.290) // ochre/amber
-        case .creditCard: Color(red: 0.388, green: 0.404, blue: 0.620) // indigo dust
-        case .heart: Color(red: 0.737, green: 0.435, blue: 0.541) // rose
-        case .shield: .transfer
-        case .trendingUp: Color(red: 0.408, green: 0.671, blue: 0.557) // mint sage
-        case .fileText: Color(red: 0.510, green: 0.435, blue: 0.357) // warm taupe
-        case .banknote: Color(red: 0.275, green: 0.529, blue: 0.553) // teal
-        case .helpCircle: Color(red: 0.561, green: 0.522, blue: 0.494) // warm gray
-        case .dice: Color(red: 0.396, green: 0.580, blue: 0.620) // dusty cyan
-        case .arrowRightLeft: .transfer
-        case .airplane: Color(red: 0.486, green: 0.561, blue: 0.741) // dusty blue
-        case .graduationCap: Color(red: 0.620, green: 0.580, blue: 0.380) // olive/khaki
-        case .briefcase: Color(red: 0.435, green: 0.502, blue: 0.580) // slate azulado
-        case .calendarClock: Color(red: 0.690, green: 0.349, blue: 0.580) // orquídea/magenta
-        case .gamepad: Color(red: 0.490, green: 0.404, blue: 0.682) // violeta
-        case .home: Color(red: 0.706, green: 0.518, blue: 0.388) // argila/areia
-        case .motorcycle: Color(red: 0.749, green: 0.349, blue: 0.302) // vermelho queimado
-        case .users: Color(red: 0.851, green: 0.510, blue: 0.435) // coral
-        case .user: Color(red: 0.604, green: 0.553, blue: 0.741) // lavanda
-        case .dumbbell: Color(red: 0.502, green: 0.706, blue: 0.310) // verde lima
-        case .laptop: Color(red: 0.318, green: 0.357, blue: 0.439) // grafite azulado
-        case .playCircle: Color(red: 0.243, green: 0.553, blue: 0.831) // azul royal
-        case .antenna: Color(red: 0.353, green: 0.706, blue: 0.659) // turquesa
-        case .scissors: Color(red: 0.847, green: 0.467, blue: 0.580) // rosa cobre
+        case .income: Color(red: 0.15, green: 0.55, blue: 0.30) // money green (cédula/dollar bill)
+        case .food: .orange
+        case .housing: .brown
+        case .exercise: Color(red: 0.95, green: 0.40, blue: 0.10) // fire / energia (Apple Fitness rings)
+        case .dance: Color(red: 0.88, green: 0.30, blue: 0.55) // magenta vivo
+        case .shopping: Color(red: 0.85, green: 0.25, blue: 0.30) // scarlet (retail energy)
+        case .connectivity: .cyan
+        case .personalCare: Color(red: 0.95, green: 0.65, blue: 0.78) // rose pastel
+        case .taxes: .gray
+        case .investments: .mint
+        case .entertainment: Color(red: 0.55, green: 0.20, blue: 0.30) // wine/burgundy (cortina de teatro)
+        case .party: Color(red: 0.95, green: 0.30, blue: 0.65) // hot pink (confetti vibe)
+        case .mobility: .yellow
+        case .motorcycle: Color(red: 0.40, green: 0.50, blue: 0.25) // verde musgo (moto IRL)
+        case .unclassified: Color(red: 0.60, green: 0.60, blue: 0.65) // gray neutro
+        case .withdrawal: Color(red: 0.45, green: 0.65, blue: 0.45) // verde oliva
+        case .health: .red
+        case .professional: Color(red: 0.30, green: 0.40, blue: 0.55) // navy slate
+        case .streaming: .indigo
+        case .work: Color(red: 0.45, green: 0.48, blue: 0.55) // slate gray (ferramenta profissional)
+        case .travel: .teal
+        case .transfer: Color(red: 0.40, green: 0.55, blue: 0.85) // steel blue
+        case .education: Color(red: 0.55, green: 0.40, blue: 0.75) // violeta acadêmico
         }
     }
 }
