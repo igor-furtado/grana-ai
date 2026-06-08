@@ -14,13 +14,11 @@ struct ImportView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var store: ImportStore?
     @State private var fileImporterShown = false
-    /// Escopo: ciclo de vida desta instância da sheet. Garante que o file
-    /// picker abre automaticamente só uma vez por abertura da modal — se o
-    /// usuário cancelar o picker, o idle state fica disponível pra reabrir
-    /// manualmente. Ao fechar e reabrir a modal, o `ImportView` é remontado e
-    /// o flag reseta naturalmente, fazendo o picker abrir de novo na próxima
-    /// sessão (comportamento desejado).
-    @State private var pickerAutoTriggeredThisSession = false
+    /// Marcada como `true` no callback do `fileImporter` quando o usuário
+    /// efetivamente escolhe um arquivo (ou bate num erro real). Permite
+    /// distinguir cancelamento do picker (binding flipa pra false sem
+    /// callback) de seleção bem-sucedida, e fechar a sheet no primeiro caso.
+    @State private var fileWasPicked = false
 
     var body: some View {
         NavigationStack {
@@ -35,6 +33,37 @@ struct ImportView: View {
                 }
             }
             .navigationTitle("Importar extrato")
+            .fileImporter(
+                isPresented: $fileImporterShown,
+                allowedContentTypes: [.data],
+                allowsMultipleSelection: false
+            ) { result in
+                switch result {
+                case let .success(urls):
+                    if let url = urls.first {
+                        fileWasPicked = true
+                        Task { await store?.loadFile(url: url) }
+                    }
+                case let .failure(err):
+                    fileWasPicked = true
+                    store?.reportFileImportFailure(err)
+                }
+            }
+            .onChange(of: fileImporterShown) { _, isShown in
+                if isShown {
+                    fileWasPicked = false
+                    return
+                }
+                // Picker fechou. Se não houve seleção, é cancelamento — fecha
+                // a sheet, já que o botão que abriu também dispara o picker.
+                // Delay curto pra dar tempo do callback do fileImporter rodar
+                // antes da gente decidir (ordem entre callback e binding flip
+                // não é garantida no SwiftUI).
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(80))
+                    if !fileWasPicked { dismiss() }
+                }
+            }
         }
         // Sheet sem cap de altura crescia além da janela em telas pequenas.
         // Limita o tamanho mantendo um ideal confortável.
@@ -85,12 +114,12 @@ struct ImportView: View {
     private func phaseContent(store: ImportStore) -> some View {
         switch store.phase {
         case .idle:
-            IdleStepView(fileImporterShown: $fileImporterShown, store: store)
-                .task {
-                    guard !pickerAutoTriggeredThisSession else { return }
-                    pickerAutoTriggeredThisSession = true
-                    fileImporterShown = true
-                }
+            // Sem UI dedicada: o `.fileImporter` no nível da sheet cobre a
+            // tela. Se o usuário cancelar o picker, o `onChange` fecha a
+            // sheet — então esse ProgressView é só um placeholder transitório.
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task { fileImporterShown = true }
         case let .loading(progress):
             VStack(spacing: 12) {
                 ProgressView()
@@ -181,40 +210,6 @@ private struct CategorizingStepView: View {
             Text(message).foregroundStyle(.secondary)
         case .ready, .failed:
             EmptyView()
-        }
-    }
-}
-
-// MARK: - Idle (file picker)
-
-private struct IdleStepView: View {
-    @Binding var fileImporterShown: Bool
-    let store: ImportStore
-
-    var body: some View {
-        ContentUnavailableView {
-            Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
-        } description: {
-            Text(
-                "Selecione um arquivo **OFX** (extrato bancário) ou **CSV** (fatura de cartão Inter). Você precisa ter a conta de destino cadastrada antes — em OFX o app tenta pré-selecionar a conta certa pela identidade bancária, mas você sempre pode trocar no preview."
-            )
-        } actions: {
-            Button("Escolher arquivo") { fileImporterShown = true }
-                .buttonStyle(.borderedProminent)
-        }
-        .fileImporter(
-            isPresented: $fileImporterShown,
-            allowedContentTypes: [.data],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case let .success(urls):
-                if let url = urls.first {
-                    Task { await store.loadFile(url: url) }
-                }
-            case let .failure(err):
-                store.reportFileImportFailure(err)
-            }
         }
     }
 }
@@ -358,7 +353,12 @@ private struct AccountInfoCard: View {
     }
 
     private func label(for account: Account) -> String {
-        Account.displayName(for: account, institutions: store.institutions)
+        Account.displayName(
+            for: account,
+            institutions: store.institutions,
+            bankAccounts: store.bankDetails,
+            creditCards: store.creditCards
+        )
     }
 
     @ViewBuilder
@@ -588,8 +588,8 @@ private struct CSVReviewStepView: View {
                     store: store,
                     accounts: creditCardAccounts
                 )
-                if let skipped = resolution?.skippedNegativeCount, skipped > 0 {
-                    skippedBanner(count: skipped)
+                if let skipped = resolution?.skippedNegatives, !skipped.isEmpty {
+                    skippedBanner(rows: skipped)
                 }
             }
 
@@ -624,18 +624,41 @@ private struct CSVReviewStepView: View {
         return resolution.accountId == nil ? "Escolha a conta-cartão de destino" : nil
     }
 
-    private func skippedBanner(count: Int) -> some View {
-        Form {
+    private func skippedBanner(rows: [InterCreditCardCSVReader.SkippedRow]) -> some View {
+        let count = rows.count
+        return Form {
             Section {
-                Label {
-                    Text(
-                        "\(count) \(count == 1 ? "linha ignorada" : "linhas ignoradas") (valores negativos: pagamentos da fatura anterior + estornos). Pagamentos serão registrados como transferência no extrato bancário."
-                    )
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                } icon: {
-                    Image(systemName: "info.circle")
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(rows) { row in
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(row.date, format: .dateTime.day().month().year())
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: 90, alignment: .leading)
+                                Text(row.description)
+                                    .font(.callout)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                                Spacer()
+                                Text(row.amount, format: .currency(code: "BRL"))
+                                    .font(.callout.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.top, 6)
+                } label: {
+                    Label {
+                        Text(
+                            "\(count) \(count == 1 ? "linha ignorada" : "linhas ignoradas") (valores negativos: pagamentos da fatura anterior + estornos). Pagamentos serão registrados como transferência no extrato bancário."
+                        )
+                        .font(.callout)
                         .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: "info.circle")
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
         }
@@ -676,8 +699,13 @@ private struct CSVAccountInfoCard: View {
                 )) {
                     Text("Selecione…").tag(UUID?.none)
                     ForEach(accounts) { account in
-                        Text(Account.displayName(for: account, institutions: store.institutions))
-                            .tag(UUID?.some(account.id))
+                        Text(Account.displayName(
+                            for: account,
+                            institutions: store.institutions,
+                            bankAccounts: store.bankDetails,
+                            creditCards: store.creditCards
+                        ))
+                        .tag(UUID?.some(account.id))
                     }
                 }
             } header: {

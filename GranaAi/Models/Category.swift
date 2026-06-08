@@ -70,6 +70,19 @@ enum CategoryIcon: String, Codable, CaseIterable {
     case dice
     case arrowRightLeft
     case airplane
+    case graduationCap
+    case briefcase
+    case calendarClock
+    case gamepad
+    case home
+    case motorcycle
+    case users
+    case user
+    case dumbbell
+    case laptop
+    case playCircle
+    case antenna
+    case scissors
 
     /// Nome do SF Symbol correspondente, pra usar em `Image(systemName:)`.
     var systemImage: String {
@@ -90,6 +103,19 @@ enum CategoryIcon: String, Codable, CaseIterable {
         case .dice: "dice.fill"
         case .arrowRightLeft: "arrow.left.arrow.right"
         case .airplane: "airplane"
+        case .graduationCap: "graduationcap.fill"
+        case .briefcase: "briefcase.fill"
+        case .calendarClock: "calendar.badge.clock"
+        case .gamepad: "gamecontroller.fill"
+        case .home: "house.fill"
+        case .motorcycle: "scooter"
+        case .users: "person.2.fill"
+        case .user: "person.fill"
+        case .dumbbell: "dumbbell.fill"
+        case .laptop: "laptopcomputer"
+        case .playCircle: "play.circle.fill"
+        case .antenna: "antenna.radiowaves.left.and.right"
+        case .scissors: "scissors"
         }
     }
 }

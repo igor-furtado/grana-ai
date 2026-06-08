@@ -104,6 +104,16 @@ enum InstitutionKind: String, Codable, CaseIterable, Sendable {
         }
     }
 
+    /// Cor de texto/ícone ideal pra sobrepor `brandColor`. Default branco
+    /// porque a maioria das marcas usa cores escuras saturadas; exceção BB
+    /// (amarelo claro) onde branco fica ilegível.
+    var onBrandColor: Color {
+        switch self {
+        case .bb: .black
+        default: .white
+        }
+    }
+
     /// Resolve `InstitutionKind` a partir do código FEBRABAN. Retorna `.other`
     /// pra códigos desconhecidos.
     static func fromCode(_ code: String) -> InstitutionKind {

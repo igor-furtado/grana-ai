@@ -6,6 +6,12 @@ import SwiftUI
 /// **Modo "novo" vs "edição":** o init aceita `Transaction?` — `nil` significa
 /// novo registro. O título do sheet e o botão "Salvar" adaptam o
 /// comportamento sem precisar de duas Views diferentes.
+///
+/// **Pagamento de fatura (Fase 4.7):** quando a categoria é transferência e
+/// o destino é uma conta-cartão, aparece uma section com picker de Fatura
+/// (sugere a Fatura cujo saldo restante mais se aproxima do valor da
+/// transferência). DisclosureGroup "Aplicar em mais de uma fatura" expõe o
+/// modo split, distribuindo o valor entre N Faturas.
 struct TransactionFormView: View {
     @Environment(TransactionStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -30,6 +36,19 @@ struct TransactionFormView: View {
     @State private var notes: String = ""
     @State private var saveError: String?
 
+    // MARK: - Statement payment (Fase 4.7)
+
+    /// Fatura selecionada no modo simples (1 transferência → 1 Fatura).
+    /// `nil` quando não há cartão de destino ou usuário ainda não escolheu.
+    @State private var selectedStatementId: UUID?
+    /// Toggle do DisclosureGroup. Quando true, `splitAmountsCents` vira a
+    /// fonte da verdade; `selectedStatementId` é ignorado.
+    @State private var splitMode: Bool = false
+    /// Valores aplicados por Statement no modo split (em centavos).
+    /// Statements ausentes do dict = 0 aplicado. Entries com valor 0 são
+    /// filtradas no save.
+    @State private var splitAmountsCents: [UUID: Int] = [:]
+
     init(existing: Transaction? = nil) {
         self.existing = existing
     }
@@ -48,6 +67,9 @@ struct TransactionFormView: View {
 
                 LabeledContent("Valor") {
                     CurrencyField(cents: $amountCents)
+                }
+                .onChange(of: amountCents) { _, _ in
+                    autoSelectClosestStatementIfNeeded()
                 }
 
                 // Sem opção "Selecione" — o usuário escolhe da lista direto.
@@ -84,6 +106,7 @@ struct TransactionFormView: View {
                         // preserva o destino porque `oldValue == nil` nesse caso.
                         if selectedCategoryKind != .transfer {
                             destinationAccountId = nil
+                            resetStatementPayment()
                         }
                     }
                 }
@@ -110,6 +133,14 @@ struct TransactionFormView: View {
                             Text(store.displayName(for: account)).tag(UUID?.some(account.id))
                         }
                     }
+                    .onChange(of: destinationAccountId) { _, _ in
+                        resetStatementPayment()
+                        autoSelectClosestStatementIfNeeded()
+                    }
+                }
+
+                if shouldShowStatementPicker {
+                    statementPaymentSection
                 }
 
                 // Dois DatePickers separados pro mesmo Date — cada um só edita
@@ -177,6 +208,97 @@ struct TransactionFormView: View {
         }
     }
 
+    // MARK: - Statement payment UI (Fase 4.7)
+
+    private var shouldShowStatementPicker: Bool {
+        isPayingCreditCard && !openStatementsForDestination.isEmpty
+    }
+
+    private var statementPaymentSection: some View {
+        Section {
+            if !splitMode {
+                Picker("Aplicar à fatura", selection: $selectedStatementId) {
+                    Text("(nenhuma)").tag(UUID?.none)
+                    ForEach(openStatementsForDestination) { statement in
+                        Text(statementPickerLabel(statement))
+                            .tag(UUID?.some(statement.id))
+                    }
+                }
+            }
+
+            DisclosureGroup(isExpanded: $splitMode) {
+                ForEach(openStatementsForDestination) { statement in
+                    LabeledContent(statementPickerLabel(statement)) {
+                        CurrencyField(cents: Binding(
+                            get: { splitAmountsCents[statement.id] ?? 0 },
+                            set: { splitAmountsCents[statement.id] = $0 }
+                        ))
+                    }
+                }
+                splitSummary
+            } label: {
+                Text("Aplicar em mais de uma fatura")
+                    .font(.callout)
+            }
+            .onChange(of: splitMode) { _, expanded in
+                // Ao abrir o split, popula com a seleção atual no valor
+                // cheio — usuário começa de algum lugar coerente em vez de
+                // todos zerados.
+                if expanded, splitAmountsCents.isEmpty,
+                   let id = selectedStatementId
+                {
+                    splitAmountsCents[id] = amountCents
+                }
+                // Ao fechar, descarta os valores de split (volta pro modo
+                // simples com `selectedStatementId` que estava).
+                if !expanded {
+                    splitAmountsCents = [:]
+                }
+            }
+        } header: {
+            Text("Pagamento da fatura")
+        } footer: {
+            footerText
+        }
+    }
+
+    private var splitSummary: some View {
+        let totalCents = splitAmountsCents.values.reduce(0, +)
+        let transferCents = amountCents
+        let totalDecimal = Decimal(totalCents) / 100
+        let transferDecimal = Decimal(transferCents) / 100
+        let isExact = totalCents == transferCents
+        let isOver = totalCents > transferCents
+        return HStack {
+            Text("Total aplicado")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text("\(totalDecimal.formatted(.currency(code: "BRL"))) de \(transferDecimal.formatted(.currency(code: "BRL")))")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(isOver ? .danger : (isExact ? .success : .secondary))
+        }
+    }
+
+    /// "Fatura 05/2026 · Faltam R$ X,XX de R$ Y,YY". Mostra `closing_date`
+    /// formatado (mês/ano da fatura) + saldo restante pra o usuário escolher
+    /// a Fatura certa de bate-pronto.
+    private func statementPickerLabel(_ statement: Statement) -> String {
+        let monthYear = statement.closingDate.formatted(.dateTime.month().year())
+        let remaining = store.remainingAmount(of: statement)
+        let total = statement.totalAmount
+        let remainingStr = remaining.formatted(.currency(code: "BRL"))
+        let totalStr = total.formatted(.currency(code: "BRL"))
+        return "Fatura \(monthYear) · Faltam \(remainingStr) de \(totalStr)"
+    }
+
+    private var footerText: Text {
+        if splitMode {
+            return Text("Distribua o valor da transferência entre as Faturas. A soma não precisa cobrir o total, mas não pode passar.")
+        }
+        return Text("A transferência vai aplicar o valor cheio à Fatura selecionada. Ative o modo split pra dividir entre várias.")
+    }
+
     // MARK: - Save
 
     private var canSave: Bool {
@@ -193,6 +315,12 @@ struct TransactionFormView: View {
            dest == accountId
         {
             return false
+        }
+        // Em split mode, soma não pode exceder o valor da transferência —
+        // pagar mais que se transferiu é incoerente.
+        if splitMode, shouldShowStatementPicker {
+            let totalSplit = splitAmountsCents.values.reduce(0, +)
+            if totalSplit > amountCents { return false }
         }
         return true
     }
@@ -220,6 +348,44 @@ struct TransactionFormView: View {
         }
     }
 
+    private var isPayingCreditCard: Bool {
+        guard selectedCategoryKind == .transfer,
+              let dest = destinationAccountId,
+              let account = store.account(for: dest)
+        else { return false }
+        return account.type == .creditCard
+    }
+
+    private var openStatementsForDestination: [Statement] {
+        guard let dest = destinationAccountId else { return [] }
+        return store.openStatements(for: dest)
+    }
+
+    /// Limpa estado de pagamento de fatura (split e single). Chamado quando
+    /// destination muda ou categoria deixa de ser transfer — evita carregar
+    /// estado stale entre alternâncias.
+    private func resetStatementPayment() {
+        selectedStatementId = nil
+        splitMode = false
+        splitAmountsCents = [:]
+    }
+
+    /// Auto-sugere a Fatura cujo saldo restante mais se aproxima do valor da
+    /// transferência. Roda quando o destino muda, quando o valor da
+    /// transferência muda, ou quando o stream de statements chega no momento
+    /// certo. Só age em modo simples (split é controlado manualmente) e só
+    /// quando ainda não há seleção (não sobrescreve escolha do usuário).
+    private func autoSelectClosestStatementIfNeeded() {
+        guard !splitMode, isPayingCreditCard, selectedStatementId == nil else { return }
+        let target = Decimal(amountCents) / 100
+        let closest = openStatementsForDestination.min(by: { lhs, rhs in
+            let lhsDiff = (store.remainingAmount(of: lhs) - target).magnitude
+            let rhsDiff = (store.remainingAmount(of: rhs) - target).magnitude
+            return lhsDiff < rhsDiff
+        })
+        selectedStatementId = closest?.id
+    }
+
     private func loadExisting() {
         guard let existing else {
             // Defaults em "novo": primeira conta + primeira categoria raiz.
@@ -236,6 +402,24 @@ struct TransactionFormView: View {
         subcategoryId = existing.subcategoryId
         destinationAccountId = existing.destinationAccountId
         notes = existing.notes ?? ""
+
+        // Carregar payments existentes pra preservar a alocação na edição.
+        // `store.statementPayments` é streamado — em race, fica vazio e o
+        // form começa "limpo"; usuário re-escolhe no save.
+        let existingPayments = store.statementPayments.filter { $0.transactionId == existing.id }
+        switch existingPayments.count {
+        case 0:
+            break // nada a fazer
+        case 1:
+            selectedStatementId = existingPayments[0].statementId
+        default:
+            splitMode = true
+            splitAmountsCents = Dictionary(
+                uniqueKeysWithValues: existingPayments.map { payment in
+                    (payment.statementId, Int(truncatingIfNeeded: Converters.decimalToCents(payment.appliedAmount)))
+                }
+            )
+        }
     }
 
     private func save() async {
@@ -251,6 +435,11 @@ struct TransactionFormView: View {
             ? destinationAccountId
             : nil
 
+        // Build allocations pro hook de StatementPayment. Vazio quando não é
+        // pagamento de fatura — replacePayments aceita array vazio e apaga
+        // payments antigos (necessário se usuário re-categorizou).
+        let allocations: [UUID: Decimal] = buildAllocationsForSave()
+
         do {
             if let existing {
                 var updated = existing
@@ -262,7 +451,7 @@ struct TransactionFormView: View {
                 updated.description = description
                 updated.notes = notesValue
                 updated.destinationAccountId = resolvedDestination
-                try await store.update(updated)
+                try await store.update(updated, statementAllocations: allocations)
             } else {
                 try await store.add(
                     accountId: accountId,
@@ -272,7 +461,8 @@ struct TransactionFormView: View {
                     occurredAt: occurredAt,
                     description: description,
                     notes: notesValue,
-                    destinationAccountId: resolvedDestination
+                    destinationAccountId: resolvedDestination,
+                    statementAllocations: allocations
                 )
             }
             dismiss()
@@ -280,6 +470,22 @@ struct TransactionFormView: View {
             saveError = error.localizedDescription
             ErrorCenter.shared.report(error, title: "Falha ao salvar transação")
         }
+    }
+
+    private func buildAllocationsForSave() -> [UUID: Decimal] {
+        guard isPayingCreditCard else { return [:] }
+        if splitMode {
+            // Filtra zerados pra não criar StatementPayment com applied = 0.
+            return splitAmountsCents
+                .filter { $0.value > 0 }
+                .reduce(into: [UUID: Decimal]()) { dict, entry in
+                    dict[entry.key] = Decimal(entry.value) / 100
+                }
+        }
+        if let id = selectedStatementId {
+            return [id: Decimal(amountCents) / 100]
+        }
+        return [:]
     }
 }
 

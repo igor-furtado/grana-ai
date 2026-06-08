@@ -28,6 +28,19 @@ extension CategoryIcon {
         case .dice: Color(red: 0.396, green: 0.580, blue: 0.620) // dusty cyan
         case .arrowRightLeft: .transfer
         case .airplane: Color(red: 0.486, green: 0.561, blue: 0.741) // dusty blue
+        case .graduationCap: Color(red: 0.620, green: 0.580, blue: 0.380) // olive/khaki
+        case .briefcase: Color(red: 0.435, green: 0.502, blue: 0.580) // slate azulado
+        case .calendarClock: Color(red: 0.690, green: 0.349, blue: 0.580) // orquídea/magenta
+        case .gamepad: Color(red: 0.490, green: 0.404, blue: 0.682) // violeta
+        case .home: Color(red: 0.706, green: 0.518, blue: 0.388) // argila/areia
+        case .motorcycle: Color(red: 0.749, green: 0.349, blue: 0.302) // vermelho queimado
+        case .users: Color(red: 0.851, green: 0.510, blue: 0.435) // coral
+        case .user: Color(red: 0.604, green: 0.553, blue: 0.741) // lavanda
+        case .dumbbell: Color(red: 0.502, green: 0.706, blue: 0.310) // verde lima
+        case .laptop: Color(red: 0.318, green: 0.357, blue: 0.439) // grafite azulado
+        case .playCircle: Color(red: 0.243, green: 0.553, blue: 0.831) // azul royal
+        case .antenna: Color(red: 0.353, green: 0.706, blue: 0.659) // turquesa
+        case .scissors: Color(red: 0.847, green: 0.467, blue: 0.580) // rosa cobre
         }
     }
 }

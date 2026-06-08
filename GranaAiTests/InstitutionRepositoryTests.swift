@@ -54,27 +54,51 @@ struct AccountRepositoryBankIdentityTests {
         )
     }
 
-    @Test("Match exato por institution + branch + account")
+    /// Cria uma conta corrente com `BankAccountDetails`. A Fase 4.6 dividiu o
+    /// schema e o `findByBankIdentity` agora faz JOIN com `bank_accounts` —
+    /// inserir só a Account não é suficiente.
+    private func makeCheckingAccount(
+        in repo: AccountRepository,
+        accountId: UUID = UUID(),
+        institutionId: UUID,
+        branchId: String?,
+        accountNumber: String
+    ) async throws {
+        let now = Date()
+        let account = Account(
+            id: accountId,
+            type: .checking,
+            initialBalance: 0,
+            archived: false,
+            institutionId: institutionId,
+            currency: "BRL",
+            createdAt: now,
+            updatedAt: now
+        )
+        let details = BankAccountDetails(
+            accountId: accountId,
+            branchId: branchId,
+            accountNumber: accountNumber,
+            createdAt: now,
+            updatedAt: now
+        )
+        try await repo.insert(account, bankDetails: details)
+    }
+
+    @Test("Match exato por institution + branch + account_number")
     func exactMatch() async throws {
         let db = makeDatabase()
         let repo = AccountRepository(db: db)
 
         let instId = UUID()
-        let now = Date()
-        let account = Account(
-            id: UUID(),
-            name: "Inter principal",
-            type: .checking,
-            initialBalance: 0,
-            archived: false,
+        let accountId = UUID()
+        try await makeCheckingAccount(
+            in: repo,
+            accountId: accountId,
             institutionId: instId,
             branchId: "0001-9",
-            accountNumber: "310013887",
-            currency: "BRL",
-            createdAt: now,
-            updatedAt: now
+            accountNumber: "310013887"
         )
-        try await repo.insert(account)
 
         let found = try await repo.findByBankIdentity(
             institutionId: instId,
@@ -82,7 +106,7 @@ struct AccountRepositoryBankIdentityTests {
             accountNumber: "310013887"
         )
         try #require(found != nil)
-        #expect(found?.id == account.id)
+        #expect(found?.id == accountId)
 
         try await db.close()
     }
@@ -93,13 +117,10 @@ struct AccountRepositoryBankIdentityTests {
         let repo = AccountRepository(db: db)
 
         let instId = UUID()
-        let now = Date()
-        try await repo.insert(Account(
-            id: UUID(), name: "X", type: .checking, initialBalance: 0,
-            archived: false, institutionId: instId, branchId: "0001",
-            accountNumber: "111", currency: "BRL",
-            createdAt: now, updatedAt: now
-        ))
+        try await makeCheckingAccount(
+            in: repo, institutionId: instId,
+            branchId: "0001", accountNumber: "111"
+        )
 
         let found = try await repo.findByBankIdentity(
             institutionId: instId, branchId: "0001", accountNumber: "222"
@@ -115,25 +136,24 @@ struct AccountRepositoryBankIdentityTests {
         let repo = AccountRepository(db: db)
 
         let instId = UUID()
-        let now = Date()
-        try await repo.insert(Account(
-            id: UUID(), name: "X", type: .checking, initialBalance: 0,
-            archived: false, institutionId: instId,
-            branchId: nil, accountNumber: "333", currency: "BRL",
-            createdAt: now, updatedAt: now
-        ))
+        try await makeCheckingAccount(
+            in: repo, institutionId: instId,
+            branchId: nil, accountNumber: "333"
+        )
 
         let found = try await repo.findByBankIdentity(
             institutionId: instId, branchId: nil, accountNumber: "333"
         )
         try #require(found != nil)
-        #expect(found?.accountNumber == "333")
+
+        let details = try await repo.bankDetails(for: found!.id)
+        #expect(details?.accountNumber == "333")
 
         try await db.close()
     }
 }
 
-@Suite("TransactionRepository.insertMultipleBatches + findByExternalId")
+@Suite("TransactionRepository.findByExternalId")
 struct TransactionRepositoryOFXTests {
     private func makeDatabase() -> any PowerSyncDatabaseProtocol {
         PowerSyncDatabase(
@@ -141,74 +161,6 @@ struct TransactionRepositoryOFXTests {
             dbFilename: ":memory:",
             logger: DefaultLogger()
         )
-    }
-
-    @Test("insertMultipleBatches grava instituições, contas e batches atomicamente")
-    func multiBatchAtomic() async throws {
-        let db = makeDatabase()
-        let txRepo = TransactionRepository(db: db)
-        let acctRepo = AccountRepository(db: db)
-        let instRepo = InstitutionRepository(db: db)
-        let batchRepo = ImportBatchRepository(db: db)
-
-        let categoryId = UUID()
-        let instId = UUID()
-        let accountId1 = UUID()
-        let accountId2 = UUID()
-        let now = Date()
-
-        let institution = Institution(
-            id: instId, code: "077", name: "Inter", kind: .inter,
-            createdAt: now, updatedAt: now
-        )
-        let acc1 = Account(
-            id: accountId1, name: "Conta 1", type: .checking, initialBalance: 0,
-            archived: false, institutionId: instId, branchId: "0001", accountNumber: "111",
-            currency: "BRL", createdAt: now, updatedAt: now
-        )
-        let acc2 = Account(
-            id: accountId2, name: "Conta 2", type: .savings, initialBalance: 0,
-            archived: false, institutionId: instId, branchId: "0001", accountNumber: "222",
-            currency: "BRL", createdAt: now, updatedAt: now
-        )
-
-        let batch1 = ImportBatch(
-            id: UUID(), sourceFilename: "f.ofx", sourceKind: .ofx,
-            templateId: nil, accountId: accountId1, rowCount: 1,
-            importedAt: now, createdAt: now, updatedAt: now
-        )
-        let tx1 = GranaAi.Transaction(
-            id: UUID(), accountId: accountId1, categoryId: categoryId,
-            subcategoryId: nil, amount: 10, occurredAt: now,
-            description: "t1", notes: nil,
-            importBatchId: batch1.id, externalId: "FIT-1",
-            createdAt: now, updatedAt: now
-        )
-        let batch2 = ImportBatch(
-            id: UUID(), sourceFilename: "f.ofx", sourceKind: .ofx,
-            templateId: nil, accountId: accountId2, rowCount: 1,
-            importedAt: now, createdAt: now, updatedAt: now
-        )
-        let tx2 = GranaAi.Transaction(
-            id: UUID(), accountId: accountId2, categoryId: categoryId,
-            subcategoryId: nil, amount: -20, occurredAt: now,
-            description: "t2", notes: nil,
-            importBatchId: batch2.id, externalId: "FIT-2",
-            createdAt: now, updatedAt: now
-        )
-
-        try await txRepo.insertMultipleBatches(
-            institutions: [institution],
-            accounts: [acc1, acc2],
-            batchesWithTransactions: [(batch1, [tx1]), (batch2, [tx2])]
-        )
-
-        #expect(try await instRepo.findByCode("077") != nil)
-        #expect(try await acctRepo.getAll().count == 2)
-        #expect(try await batchRepo.getAll().count == 2)
-        #expect(try await txRepo.getAll().count == 2)
-
-        try await db.close()
     }
 
     @Test("findByExternalId acha duplicata exata FITID + conta")

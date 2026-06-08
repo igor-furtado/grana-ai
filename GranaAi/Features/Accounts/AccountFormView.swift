@@ -6,12 +6,21 @@ import SwiftUI
 /// create/edit (Mail, Reminders, Notes) — dá foco total e mantém o tamanho
 /// dos campos consistente.
 ///
+/// **Seções condicionais por tipo.** O picker de tipo dispara a aparição da
+/// seção apropriada (banco vs cartão). Submit escreve `accounts` + tabela-irmã
+/// (`bank_accounts` ou `credit_cards`) numa única `writeTransaction`.
+///
 /// **Sem campo "Nome".** O nome amigável é derivado em runtime via
-/// `Account.displayName(for:institutions:)`.
+/// `Account.displayName(for:institutions:bankAccounts:creditCards:)`.
 struct AccountFormView: View {
     @Environment(AccountStore.self) private var store
 
     let existing: Account?
+    /// Quando a tela que abriu o form tem intenção específica (ex: tela de
+    /// Cartões só cria cartões), passa o tipo travado aqui. O picker de tipo
+    /// some e `type` fica fixo. Em edição, esse parâmetro é ignorado (usa o
+    /// tipo do `existing`).
+    let lockedType: AccountType?
     let onCancel: () -> Void
     let onSaved: () -> Void
 
@@ -19,19 +28,30 @@ struct AccountFormView: View {
     @State private var balanceCents: Int = 0
     @State private var balanceIsNegative: Bool = false
     @State private var institutionId: UUID?
+    @State private var currency: String = "BRL"
+
+    // Bank fields
     @State private var branchId: String = ""
     @State private var accountNumber: String = ""
+
+    // Credit card fields
     @State private var cardLastFour: String = ""
-    @State private var currency: String = "BRL"
+    @State private var creditLimitCents: Int = 0
+    @State private var hasCreditLimit: Bool = false
+    @State private var statementClosingDay: Int = 1
+    @State private var paymentDueDay: Int = 10
+
     @State private var saveError: String?
     @State private var isSaving: Bool = false
 
     init(
         existing: Account? = nil,
+        lockedType: AccountType? = nil,
         onCancel: @escaping () -> Void,
         onSaved: @escaping () -> Void
     ) {
         self.existing = existing
+        self.lockedType = lockedType
         self.onCancel = onCancel
         self.onSaved = onSaved
     }
@@ -42,8 +62,9 @@ struct AccountFormView: View {
                 identitySection
                 if type == .creditCard {
                     cardDetailsSection
+                    cardCycleSection
                 }
-                if usesBankIdentity {
+                if type == .checking {
                     bankIdentitySection
                 }
                 balanceSection
@@ -52,7 +73,7 @@ struct AccountFormView: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(existing == nil ? "Nova conta" : "Editar conta")
+            .navigationTitle(navigationTitle)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancelar", action: onCancel)
@@ -65,7 +86,7 @@ struct AccountFormView: View {
                 }
             }
         }
-        .frame(minWidth: 520, idealWidth: 520, maxWidth: 520, minHeight: 480)
+        .frame(minWidth: 520, idealWidth: 520, maxWidth: 520, minHeight: 520)
         .onAppear(perform: loadExisting)
         // Race: o stream de instituições pode emitir antes ou depois do
         // `onAppear`. Tentamos no `loadExisting` e também aqui — quem chegar
@@ -90,27 +111,36 @@ struct AccountFormView: View {
 
     private var identitySection: some View {
         Section {
-            Picker("Tipo", selection: $type) {
-                ForEach(AccountType.allCases, id: \.rawValue) { t in
-                    Text(t.displayName).tag(t)
+            // Picker de tipo só aparece quando a tela invocadora não travou.
+            // Tela genérica de Contas → mostra. Cartões → esconde (fixo em
+            // creditCard). Edição → esconde (tipo de uma conta existente não
+            // muda na prática).
+            if lockedType == nil, existing == nil {
+                Picker("Tipo", selection: $type) {
+                    ForEach(AccountType.allCases, id: \.rawValue) { t in
+                        Text(t.displayName).tag(t)
+                    }
                 }
-            }
-            .onChange(of: type) { _, newValue in
-                // Limpa campos que pertencem ao tipo "saída" pra evitar que
-                // valores digitados num modo vazem visualmente quando o
-                // usuário alterna. O save também filtra por tipo (cinto +
-                // suspensório), mas zerar aqui mantém a UX previsível.
-                if newValue == .creditCard {
-                    branchId = ""
-                    accountNumber = ""
-                } else {
-                    cardLastFour = ""
-                }
-                // Default de saldo: cartão começa "negativo" (dívida da fatura) e
-                // banco começa positivo. Só aplica quando o usuário ainda não
-                // digitou um valor — preserva input explícito se já tiver algo.
-                if balanceCents == 0 {
-                    balanceIsNegative = (newValue == .creditCard)
+                .onChange(of: type) { _, newValue in
+                    // Limpa campos que pertencem ao tipo "saída" pra evitar que
+                    // valores digitados num modo vazem visualmente quando o
+                    // usuário alterna. O save também filtra por tipo (cinto +
+                    // suspensório), mas zerar aqui mantém a UX previsível.
+                    if newValue == .creditCard {
+                        branchId = ""
+                        accountNumber = ""
+                    } else {
+                        cardLastFour = ""
+                        creditLimitCents = 0
+                        hasCreditLimit = false
+                    }
+                    // Default de saldo: cartão começa "negativo" (dívida da
+                    // fatura) e banco começa positivo. Só aplica quando o
+                    // usuário ainda não digitou um valor — preserva input
+                    // explícito se já tiver algo.
+                    if balanceCents == 0 {
+                        balanceIsNegative = (newValue == .creditCard)
+                    }
                 }
             }
 
@@ -125,6 +155,16 @@ struct AccountFormView: View {
         }
     }
 
+    private var navigationTitle: String {
+        if let existing {
+            return existing.type == .creditCard ? "Editar cartão" : "Editar conta"
+        }
+        switch lockedType ?? type {
+        case .creditCard: return "Novo cartão"
+        case .checking: return "Nova conta"
+        }
+    }
+
     private var cardDetailsSection: some View {
         Section {
             TextField("Últimos 4 dígitos", text: $cardLastFour, prompt: Text("Ex: 1234"))
@@ -135,6 +175,12 @@ struct AccountFormView: View {
                     let digits = newValue.filter(\.isNumber)
                     cardLastFour = String(digits.prefix(4))
                 }
+            Toggle("Informar limite de crédito", isOn: $hasCreditLimit)
+            if hasCreditLimit {
+                LabeledContent("Limite") {
+                    CurrencyField(cents: $creditLimitCents)
+                }
+            }
         } header: {
             Text("Detalhes do cartão")
         } footer: {
@@ -143,9 +189,30 @@ struct AccountFormView: View {
                     .foregroundStyle(.danger)
             } else {
                 Text(
-                    "Obrigatório. Aparece no nome da conta como “••••\(cardLastFour.isEmpty ? "1234" : cardLastFour)” — distingue cartões diferentes do mesmo emissor."
+                    "Last4 aparece no nome da conta como “••••\(cardLastFour.isEmpty ? "1234" : cardLastFour)” — distingue cartões diferentes do mesmo emissor. Limite é opcional."
                 )
             }
+        }
+    }
+
+    private var cardCycleSection: some View {
+        Section {
+            Picker("Dia de fechamento", selection: $statementClosingDay) {
+                ForEach(1 ... 31, id: \.self) { day in
+                    Text("\(day)").tag(day)
+                }
+            }
+            Picker("Dia de vencimento", selection: $paymentDueDay) {
+                ForEach(1 ... 31, id: \.self) { day in
+                    Text("\(day)").tag(day)
+                }
+            }
+        } header: {
+            Text("Ciclo da fatura")
+        } footer: {
+            Text(
+                "Dia do mês em que a fatura fecha (consolida compras do ciclo) e dia em que ela vence. Necessários pra agrupar compras na fatura correta a partir da Fase 4.7."
+            )
         }
     }
 
@@ -191,10 +258,6 @@ struct AccountFormView: View {
 
     // MARK: - Lógica
 
-    private var usesBankIdentity: Bool {
-        type != .creditCard
-    }
-
     private var balanceFooterText: String {
         switch type {
         case .creditCard:
@@ -213,12 +276,16 @@ struct AccountFormView: View {
     private var canSave: Bool {
         // Banco sempre obrigatório (display name depende dele).
         guard institutionId != nil else { return false }
-        // Cartão: last4 obrigatório (4 dígitos) — distingue múltiplos cartões
-        // do mesmo emissor.
-        if type == .creditCard, cardLastFour.count != 4 { return false }
-        // Banco/Poupança/Corretora: agência + número obrigatórios — distinguem
-        // contas do mesmo banco e habilitam o auto-detect no import OFX.
-        if usesBankIdentity {
+
+        switch type {
+        case .creditCard:
+            // Last4 obrigatório (4 dígitos) — distingue múltiplos cartões do
+            // mesmo emissor. Ciclo (fechamento + vencimento) já tem default
+            // válido via picker, sem possibilidade de input inválido.
+            if cardLastFour.count != 4 { return false }
+        case .checking:
+            // Agência + número obrigatórios — distinguem contas do mesmo
+            // banco e habilitam o auto-detect no import OFX.
             let branch = branchId.trimmingCharacters(in: .whitespaces)
             let number = accountNumber.trimmingCharacters(in: .whitespaces)
             if branch.isEmpty || number.isEmpty { return false }
@@ -228,6 +295,16 @@ struct AccountFormView: View {
 
     private func loadExisting() {
         guard let existing else {
+            // Em "novo", aplica o tipo travado pela tela invocadora (se
+            // houver). Sem lockedType, mantém o default `.checking` do
+            // @State. Saldo negativo só flipa pra true automaticamente quando
+            // o tipo travado é cartão (espelha o `onChange` do picker).
+            if let lockedType {
+                type = lockedType
+                if lockedType == .creditCard, balanceCents == 0 {
+                    balanceIsNegative = true
+                }
+            }
             applyDefaultInstitutionIfNeeded()
             return
         }
@@ -236,10 +313,21 @@ struct AccountFormView: View {
         balanceIsNegative = cents < 0
         balanceCents = abs(cents)
         institutionId = existing.institutionId
-        branchId = existing.branchId ?? ""
-        accountNumber = existing.accountNumber ?? ""
-        cardLastFour = existing.cardLastFour ?? ""
         currency = existing.currency
+
+        if let bank = store.bankDetails(for: existing.id) {
+            branchId = bank.branchId ?? ""
+            accountNumber = bank.accountNumber
+        }
+        if let card = store.creditCard(for: existing.id) {
+            cardLastFour = card.cardLastFour
+            statementClosingDay = card.statementClosingDay
+            paymentDueDay = card.paymentDueDay
+            if let limit = card.creditLimit {
+                hasCreditLimit = true
+                creditLimitCents = Int(truncatingIfNeeded: Converters.decimalToCents(limit))
+            }
+        }
     }
 
     private func save() async {
@@ -249,10 +337,26 @@ struct AccountFormView: View {
         let magnitude = Decimal(balanceCents) / 100
         let amount = balanceIsNegative ? -magnitude : magnitude
 
-        let branch = usesBankIdentity && !branchId.trimmingCharacters(in: .whitespaces).isEmpty ? branchId : nil
-        let number = usesBankIdentity && !accountNumber.trimmingCharacters(in: .whitespaces)
-            .isEmpty ? accountNumber : nil
-        let last4 = type == .creditCard && !cardLastFour.isEmpty ? cardLastFour : nil
+        let bank: BankAccountDetailsInput? = {
+            guard type == .checking else { return nil }
+            let branch = branchId.trimmingCharacters(in: .whitespaces)
+            let number = accountNumber.trimmingCharacters(in: .whitespaces)
+            return BankAccountDetailsInput(
+                branchId: branch.isEmpty ? nil : branch,
+                accountNumber: number
+            )
+        }()
+
+        let card: CreditCardDetailsInput? = {
+            guard type == .creditCard else { return nil }
+            let limit: Decimal? = hasCreditLimit ? Decimal(creditLimitCents) / 100 : nil
+            return CreditCardDetailsInput(
+                cardLastFour: cardLastFour,
+                creditLimit: limit,
+                statementClosingDay: statementClosingDay,
+                paymentDueDay: paymentDueDay
+            )
+        }()
 
         do {
             if let existing {
@@ -260,20 +364,16 @@ struct AccountFormView: View {
                 updated.type = type
                 updated.initialBalance = amount
                 updated.institutionId = institutionId
-                updated.branchId = branch
-                updated.accountNumber = number
-                updated.cardLastFour = last4
                 updated.currency = currency
-                try await store.update(updated)
+                try await store.update(updated, bankDetails: bank, creditCardDetails: card)
             } else {
                 try await store.create(
                     type: type,
                     initialBalance: amount,
                     institutionId: institutionId,
-                    branchId: branch,
-                    accountNumber: number,
-                    cardLastFour: last4,
-                    currency: currency
+                    currency: currency,
+                    bankDetails: bank,
+                    creditCardDetails: card
                 )
             }
             onSaved()
@@ -300,8 +400,6 @@ struct AccountFormView: View {
         initialBalance: 1500.00,
         archived: false,
         institutionId: nil,
-        branchId: "0001-9",
-        accountNumber: "310013887",
         currency: "BRL",
         createdAt: Date(),
         updatedAt: Date()

@@ -30,6 +30,13 @@ struct Transaction: Identifiable, Codable, Hashable {
     /// fica neutra de saldo (ex: importações antigas). Não é exposto pela IA;
     /// usuário preenche manualmente ao categorizar como Transferência.
     var destinationAccountId: UUID?
+    /// Fase 4.7: vínculo "esta compra entrou nesta fatura". Só preenchido
+    /// quando `accountId` aponta pra conta-cartão — invariante validada no
+    /// `TransactionRepository.insert/update` (PowerSync não tem NOT NULL).
+    /// O resolver de janela cria/encontra a Statement lazy no insert.
+    /// **Distinto de `StatementPayment`**: aqui é compra→fatura; lá é
+    /// transferência→fatura paga.
+    var statementId: UUID?
     let createdAt: Date
     var updatedAt: Date
 
@@ -45,6 +52,7 @@ struct Transaction: Identifiable, Codable, Hashable {
         importBatchId: UUID? = nil,
         externalId: String? = nil,
         destinationAccountId: UUID? = nil,
+        statementId: UUID? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -59,6 +67,7 @@ struct Transaction: Identifiable, Codable, Hashable {
         self.importBatchId = importBatchId
         self.externalId = externalId
         self.destinationAccountId = destinationAccountId
+        self.statementId = statementId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

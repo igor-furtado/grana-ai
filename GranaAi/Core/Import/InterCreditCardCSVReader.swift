@@ -22,12 +22,12 @@ import Foundation
 /// com valor negativo é pulada**. Conta quantas foram puladas pra reportar
 /// na UI.
 struct InterCreditCardCSVReader {
-    /// Resultado da leitura: linhas válidas (todas positivas) + contagem de
-    /// linhas negativas puladas + ano/mês inferido da maior data do arquivo
-    /// (usado pro batch tag, não pra filtro).
+    /// Resultado da leitura: linhas válidas (todas positivas) + linhas
+    /// negativas puladas (preservadas pra auditoria na UI) + ano/mês inferido
+    /// da maior data do arquivo (usado pro batch tag, não pra filtro).
     struct Statement {
         let rows: [Row]
-        let skippedNegativeCount: Int
+        let skippedNegatives: [SkippedRow]
     }
 
     struct Row: Hashable {
@@ -41,6 +41,17 @@ struct InterCreditCardCSVReader {
         /// no `external_id` sintético pra distinguir parcelas do mesmo mês.
         let tipo: String
         /// Magnitude positiva (decimal). Negativos foram filtrados antes.
+        let amount: Decimal
+    }
+
+    /// Linha negativa pulada na importação. Guarda só o suficiente pro
+    /// usuário identificar a linha no CSV original (pagamento da fatura
+    /// anterior, estorno etc.). `amount` mantém o sinal negativo original
+    /// pra exibição.
+    struct SkippedRow: Hashable, Identifiable {
+        let id = UUID()
+        let date: Date
+        let description: String
         let amount: Decimal
     }
 
@@ -65,7 +76,7 @@ struct InterCreditCardCSVReader {
         try Self.validateHeader(header)
 
         var parsed: [Row] = []
-        var skippedNegative = 0
+        var skippedNegatives: [SkippedRow] = []
         // O índice "humano" do erro começa em 1 contando o header — assim
         // a mensagem "Linha N: data inválida" corresponde ao que o usuário
         // vê abrindo o CSV em outro programa.
@@ -90,7 +101,11 @@ struct InterCreditCardCSVReader {
             }
 
             if amount < 0 {
-                skippedNegative += 1
+                skippedNegatives.append(SkippedRow(
+                    date: date,
+                    description: description,
+                    amount: amount
+                ))
                 continue
             }
 
@@ -107,7 +122,7 @@ struct InterCreditCardCSVReader {
             throw ImportError.noValidRows
         }
 
-        return Statement(rows: parsed, skippedNegativeCount: skippedNegative)
+        return Statement(rows: parsed, skippedNegatives: skippedNegatives)
     }
 
     // MARK: - Encoding (mojibake double-decode)

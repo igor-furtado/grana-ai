@@ -245,17 +245,17 @@ struct AccountSumTests {
 
         let now = Date()
         try await accounts.insert(Account(
-            id: UUID(), name: "Carteira", type: .wallet,
+            id: UUID(), type: .checking,
             initialBalance: 100, archived: false,
             createdAt: now, updatedAt: now
         ))
         try await accounts.insert(Account(
-            id: UUID(), name: "Conta Corrente", type: .checking,
+            id: UUID(), type: .checking,
             initialBalance: 500, archived: false,
             createdAt: now, updatedAt: now
         ))
         try await accounts.insert(Account(
-            id: UUID(), name: "Conta Antiga", type: .checking,
+            id: UUID(), type: .checking,
             initialBalance: 9999, archived: true, // arquivada — NÃO entra
             createdAt: now, updatedAt: now
         ))

@@ -149,8 +149,7 @@ struct SeedTests {
         try await accounts.insert(
             Account(
                 id: UUID(),
-                name: "Carteira",
-                type: .wallet,
+                type: .checking,
                 initialBalance: 0,
                 archived: false,
                 createdAt: now,
@@ -160,7 +159,7 @@ struct SeedTests {
 
         let fetched = try await accounts.getAll()
         #expect(fetched.count == 1)
-        #expect(fetched.first?.name == "Carteira")
+        #expect(fetched.first?.type == .checking)
 
         try await powerSyncDb.close()
     }

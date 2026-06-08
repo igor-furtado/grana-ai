@@ -40,11 +40,21 @@ let appSchema = Schema(tables: [
             // conta de destino e subtrai da `account_id`. NULL pra qualquer
             // transação que não é transferência.
             .text("destination_account_id"),
+            // Fase 4.7: vínculo "esta compra entrou nesta fatura". Só
+            // preenchido pra transações em conta-cartão (invariante do
+            // TransactionRepository — PowerSync não tem NOT NULL). Distinto
+            // de `statement_payments` (transferência → fatura paga).
+            .text("statement_id"), // nullable
             .text("created_at"),
             .text("updated_at"),
         ]
     ),
 
+    // `accounts` é o **primitivo financeiro** — só carrega o que é universal
+    // entre todos os tipos. A partir da Fase 4.6, campos específicos por tipo
+    // vivem em tabelas-irmãs 1:1 (`bank_accounts` pra `checking`, `credit_cards`
+    // pra `creditCard`), evitando que esta tabela vire god class à medida que
+    // novos tipos forem introduzidos (poupança, corretora, etc.).
     Table(
         name: "accounts",
         columns: [
@@ -58,12 +68,77 @@ let appSchema = Schema(tables: [
             // bloqueia o save sem instituição. Mappers leem como opcional
             // só pra tolerar contas legadas pré-Fase 4.5.
             .text("institution_id"),
-            .text("branch_id"), // nullable — agência
-            .text("account_number"), // nullable — número da conta no banco
-            // Fase 4.5: últimos 4 dígitos do cartão de crédito. Só populado
-            // quando `type = creditCard`. Convenção PCI — nunca o PAN completo.
-            .text("card_last_four"), // nullable
             .text("currency"), // ISO 4217 (default "BRL" preenchido pelo Repository)
+            .text("created_at"),
+            .text("updated_at"),
+        ]
+    ),
+
+    // Fase 4.6: detalhes específicos de conta bancária (1:1 com `accounts`
+    // onde `type = checking`). `account_id` é a chave estrangeira **e** chave
+    // primária lógica — só pode existir uma linha por Account. Habilita o
+    // auto-detect de OFX via tripla `institution_id + branch_id + account_number`.
+    Table(
+        name: "bank_accounts",
+        columns: [
+            .text("account_id"),
+            .text("branch_id"), // nullable — agência (alguns OFX não trazem)
+            .text("account_number"), // número da conta no banco
+            .text("created_at"),
+            .text("updated_at"),
+        ]
+    ),
+
+    // Fase 4.6: detalhes específicos de cartão de crédito (1:1 com `accounts`
+    // onde `type = creditCard`). `account_id` é a chave estrangeira lógica.
+    // `card_last_four` segue convenção PCI — nunca o PAN completo.
+    // `statement_closing_day` (1-31) e `payment_due_day` (1-31) alimentam o
+    // resolver de janela de Fatura na Fase 4.7.
+    Table(
+        name: "credit_cards",
+        columns: [
+            .text("account_id"),
+            .text("card_last_four"), // 4 dígitos
+            .integer("credit_limit_cents"), // nullable — usuário pode não saber/quer
+            .integer("statement_closing_day"), // 1-31
+            .integer("payment_due_day"), // 1-31
+            .text("created_at"),
+            .text("updated_at"),
+        ]
+    ),
+
+    // Fase 4.7: Fatura (Statement) de cartão. Uma linha por ciclo de
+    // fechamento de uma conta-cartão. Criada **lazy** pelo
+    // TransactionRepository quando uma transação de cartão entra e ainda
+    // não há Statement cobrindo sua data. `closing_date`/`due_date` são
+    // snapshot imutável — não mudam se o usuário editar
+    // `statement_closing_day` na `credit_cards` depois. `paid_at` é cache
+    // denormalizado, setado quando `SUM(statement_payments.applied_amount_cents) >= total_amount_cents`.
+    Table(
+        name: "statements",
+        columns: [
+            .text("account_id"), // FK pra `accounts` (type=creditCard)
+            .text("closing_date"), // ISO8601 — dia que a fatura fecha
+            .text("due_date"), // ISO8601 — dia que vence
+            .integer("total_amount_cents"), // recalculado a cada write em transactions
+            .text("paid_at"), // nullable — cache; setado quando saldo é coberto
+            .text("source_filename"), // nullable — preenchido em CSV import
+            .text("created_at"),
+            .text("updated_at"),
+        ]
+    ),
+
+    // Fase 4.7: junction N:N entre Statements e transferências que pagam
+    // elas. Cobre 2 casos: (a) múltiplas transferências pagando a mesma
+    // fatura (adiantamento); (b) 1 transferência fatiada entre Faturas
+    // (split). Toda escrita aqui recalcula `statements.paid_at` da fatura
+    // afetada na mesma writeTransaction.
+    Table(
+        name: "statement_payments",
+        columns: [
+            .text("statement_id"), // FK pra `statements`
+            .text("transaction_id"), // FK pra `transactions` (a transferência)
+            .integer("applied_amount_cents"), // quanto desta transferência foi aplicado
             .text("created_at"),
             .text("updated_at"),
         ]

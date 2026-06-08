@@ -18,6 +18,7 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
     case categorization
     case categories
     case institutions
+    case advanced
 
     var id: String {
         rawValue
@@ -27,7 +28,7 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
         SidebarGroup(title: nil, items: [.dashboard, .summary, .transactions, .creditCards, .accounts]),
         SidebarGroup(title: "Economias", items: [.planning, .savings, .investments]),
         SidebarGroup(title: "Facilidades", items: [.import, .categorization]),
-        SidebarGroup(title: "Ajustes", items: [.categories, .institutions]),
+        SidebarGroup(title: "Ajustes", items: [.categories, .institutions, .advanced]),
     ]
 
     var title: String {
@@ -44,6 +45,7 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
         case .categorization: "Categorização"
         case .categories: "Categorias"
         case .institutions: "Instituições"
+        case .advanced: "Avançado"
         }
     }
 
@@ -61,6 +63,7 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
         case .categorization: "sparkles"
         case .categories: "tag"
         case .institutions: "building.columns"
+        case .advanced: "wrench.and.screwdriver"
         }
     }
 }
@@ -102,7 +105,7 @@ struct ContentView: View {
                 case .dashboard: DashboardView()
                 case .summary: placeholder(for: .summary)
                 case .transactions: TransactionsView()
-                case .creditCards: placeholder(for: .creditCards)
+                case .creditCards: CreditCardsView()
                 case .accounts: AccountsView()
                 case .planning: placeholder(for: .planning)
                 case .savings: placeholder(for: .savings)
@@ -111,6 +114,7 @@ struct ContentView: View {
                 case .categorization: CategorizationSettingsView()
                 case .categories: CategoriesView()
                 case .institutions: SupportedInstitutionsView()
+                case .advanced: AdvancedSettingsView()
                 }
             }
             .tint(.brandSecondary)

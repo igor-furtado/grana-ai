@@ -1,15 +1,15 @@
 import Foundation
 import SwiftUI
 
-/// Lista de contas em grid de cards. Reativa via `AccountStore.start()` —
-/// saldos, contas e instituições streamam em paralelo e a UI re-renderiza
+/// Lista de contas correntes em grid de cards. Reativa via `AccountStore.start()`
+/// — saldos, contas e instituições streamam em paralelo e a UI re-renderiza
 /// via `@Observable`. Create/edit acontecem em **sheet modal**
 /// (`.sheet(item:)`) — padrão idiomático macOS pra esse tipo de fluxo.
 ///
-/// Diferença pro Finest: aqui distinguimos **Conta** (livre, criada pelo
-/// usuário) de **Banco** (catálogo fixo via `InstitutionKind`). O card de
-/// uma conta puxa logo + cor da Institution associada — a identidade
-/// visual não é editável por conta.
+/// **Filtra cartões fora.** A partir da Fase 4.6, cartões vivem na tela
+/// dedicada `CreditCardsView` (entrada própria na sidebar). Esta tela cuida
+/// apenas de `type == .checking`. O form é o mesmo `AccountFormView`, invocado
+/// com `lockedType: .checking` pra esconder o picker de tipo.
 struct AccountsView: View {
     @Environment(AppEnvironment.self) private var environment
     @State private var store: AccountStore?
@@ -76,6 +76,7 @@ struct AccountsView: View {
         .sheet(item: $formMode) { mode in
             AccountFormView(
                 existing: editingAccount(from: mode),
+                lockedType: .checking,
                 onCancel: { formMode = nil },
                 onSaved: { formMode = nil }
             )
@@ -91,10 +92,11 @@ struct AccountsView: View {
         return "\(count) contas cadastradas"
     }
 
-    /// `true` quando pelo menos uma conta está arquivada. Gateia a exibição
-    /// do toggle "Mostrar arquivadas" — esconde quando não há nada arquivado.
+    /// `true` quando pelo menos uma conta corrente está arquivada. Gateia a
+    /// exibição do toggle "Mostrar arquivadas" — esconde quando não há nada
+    /// arquivado no escopo desta tela.
     private var hasArchivedAccount: Bool {
-        store?.accounts.contains(where: \.archived) ?? false
+        store?.accounts.contains { $0.type == .checking && $0.archived } ?? false
     }
 
     @ViewBuilder
@@ -132,7 +134,7 @@ struct AccountsView: View {
             Text("Nenhuma conta cadastrada")
                 .font(.title3.weight(.semibold))
             Text(
-                "Cadastre as contas e cartões que você usa (Inter, Nubank, XP, etc.) para vincular transações e organizar suas movimentações."
+                "Cadastre as contas correntes que você usa (Inter, Nubank, XP, etc.) para vincular transações e organizar suas movimentações. Cartões de crédito têm tela própria."
             )
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -167,7 +169,10 @@ struct AccountsView: View {
     }
 
     private func visible(store: AccountStore) -> [Account] {
-        store.accounts.filter { showArchived ? true : !$0.archived }
+        store.accounts.filter { account in
+            guard account.type == .checking else { return false }
+            return showArchived ? true : !account.archived
+        }
     }
 
     private func editingAccount(from mode: FormMode) -> Account? {

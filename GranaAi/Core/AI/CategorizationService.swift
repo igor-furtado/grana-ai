@@ -124,9 +124,18 @@ final class CategorizationService: Sendable {
         async let allCategoriesTask = categories.getAll()
         async let allAccountsTask = accounts.getAll()
         async let allInstitutionsTask = institutions.getAll()
+        async let allBankDetailsTask = accounts.getAllBankDetails()
+        async let allCreditCardsTask = accounts.getAllCreditCardDetails()
         async let recentCorrectionsTask = corrections.recent(limit: fewShotLimit)
-        let (allCategories, allAccounts, allInstitutions, fewShotCorrections) =
-            try await (allCategoriesTask, allAccountsTask, allInstitutionsTask, recentCorrectionsTask)
+        let (allCategories, allAccounts, allInstitutions, allBankDetails, allCreditCards, fewShotCorrections) =
+            try await (
+                allCategoriesTask,
+                allAccountsTask,
+                allInstitutionsTask,
+                allBankDetailsTask,
+                allCreditCardsTask,
+                recentCorrectionsTask
+            )
 
         let institutionNamesById: [UUID: String] = Dictionary(
             uniqueKeysWithValues: allInstitutions.map { ($0.id, $0.name) }
@@ -135,7 +144,12 @@ final class CategorizationService: Sendable {
             .filter { !$0.archived }
             .map { account in
                 CategorizationPrompt.OwnAccountInfo(
-                    name: Account.displayName(for: account, institutions: allInstitutions),
+                    name: Account.displayName(
+                        for: account,
+                        institutions: allInstitutions,
+                        bankAccounts: allBankDetails,
+                        creditCards: allCreditCards
+                    ),
                     typeDisplay: account.type.displayName,
                     institutionName: account.institutionId.flatMap { institutionNamesById[$0] }
                 )
@@ -149,7 +163,12 @@ final class CategorizationService: Sendable {
         // `type.displayName` de novo — economiza tokens e evita ruído.
         let accountContextById: [UUID: String] = Dictionary(
             uniqueKeysWithValues: allAccounts.map { acc in
-                (acc.id, Account.displayName(for: acc, institutions: allInstitutions))
+                (acc.id, Account.displayName(
+                    for: acc,
+                    institutions: allInstitutions,
+                    bankAccounts: allBankDetails,
+                    creditCards: allCreditCards
+                ))
             }
         )
 

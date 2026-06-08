@@ -1,28 +1,21 @@
 import Foundation
 
-/// Conta onde o dinheiro reside.
+/// Conta onde o dinheiro reside (ou onde existe dívida, no caso de cartão).
 ///
-/// A partir da Fase 4.5 não há mais campo `name` — a conta é identificada pela
-/// combinação `institution + tipo + dados específicos do tipo` (número/agência
-/// pra bancos, últimos 4 dígitos pra cartão). O nome amigável usado pela UI é
-/// derivado em runtime via `AccountStore.displayName(for:)`.
+/// A partir da Fase 4.6, `Account` é o **primitivo financeiro puro** — só
+/// carrega o que é universal entre tipos. Campos específicos vivem em modelos
+/// irmãos 1:1: `BankAccountDetails` (agência + número) pra contas correntes,
+/// `CreditCardDetails` (last4, limite, dia de fechamento, vencimento) pra
+/// cartões. CRUD sempre escreve `Account` + sibling na mesma `writeTransaction`.
 ///
-/// **Campos opcionais por tipo:**
-/// - `branchId` / `accountNumber`: para contas bancárias (checking/savings/brokerage).
-///   Obrigatórios na prática se quiser importar OFX (auto-detect usa a tripla),
-///   mas o schema do PowerSync não enforce isso.
-/// - `cardLastFour`: só pra `creditCard`. 4 dígitos. Convenção PCI (nunca o
-///   número completo).
+/// O nome amigável usado pela UI é derivado em runtime via
+/// `Account.displayName(for:institutions:creditCards:)`.
 struct Account: Identifiable, Codable, Hashable {
     let id: UUID
     var type: AccountType
     var initialBalance: Decimal
     var archived: Bool
     var institutionId: UUID?
-    var branchId: String?
-    var accountNumber: String?
-    /// Últimos 4 dígitos do cartão de crédito. NULL pra qualquer outro tipo.
-    var cardLastFour: String?
     /// ISO 4217. "BRL" cobre o MVP. Multi-moeda fica fora.
     var currency: String
     let createdAt: Date
@@ -34,9 +27,6 @@ struct Account: Identifiable, Codable, Hashable {
         initialBalance: Decimal,
         archived: Bool,
         institutionId: UUID? = nil,
-        branchId: String? = nil,
-        accountNumber: String? = nil,
-        cardLastFour: String? = nil,
         currency: String = "BRL",
         createdAt: Date,
         updatedAt: Date
@@ -46,9 +36,6 @@ struct Account: Identifiable, Codable, Hashable {
         self.initialBalance = initialBalance
         self.archived = archived
         self.institutionId = institutionId
-        self.branchId = branchId
-        self.accountNumber = accountNumber
-        self.cardLastFour = cardLastFour
         self.currency = currency
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -78,21 +65,53 @@ enum AccountType: String, Codable, CaseIterable {
     }
 }
 
+/// Detalhes específicos de uma conta bancária (`Account.type == .checking`).
+/// 1:1 com `Account` via `accountId`. Habilita o auto-detect de OFX e o
+/// sufixo do display name (`Inter Corrente · 310013887`).
+struct BankAccountDetails: Codable, Hashable {
+    let accountId: UUID
+    var branchId: String?
+    var accountNumber: String
+    let createdAt: Date
+    var updatedAt: Date
+}
+
+/// Detalhes específicos de cartão de crédito (`Account.type == .creditCard`).
+/// 1:1 com `Account` via `accountId`. `statementClosingDay` e `paymentDueDay`
+/// alimentam o resolver de janela de Fatura (Fase 4.7+).
+struct CreditCardDetails: Codable, Hashable {
+    let accountId: UUID
+    var cardLastFour: String
+    /// Limite total em `Decimal` (magnitude positiva). Opcional — usuário pode
+    /// não saber ou não querer informar; UI cai em "—" nesse caso.
+    var creditLimit: Decimal?
+    /// Dia do mês (1–31) em que a fatura fecha.
+    var statementClosingDay: Int
+    /// Dia do mês (1–31) em que a fatura vence.
+    var paymentDueDay: Int
+    let createdAt: Date
+    var updatedAt: Date
+}
+
 extension Account {
     /// Compõe o nome amigável da conta a partir de `instituição + tipo +
-    /// identificador específico` (número da conta pra banco/corretora,
-    /// `••••last4` pra cartão). Caller passa o array de instituições
-    /// disponível no escopo — evita acoplar o model a um store ou container.
+    /// identificador específico` (número da conta pra banco, `••••last4` pra
+    /// cartão). Caller passa os arrays de instituições e cartões disponíveis
+    /// no escopo — evita acoplar o model a um store ou container.
     ///
     /// **Exemplos:**
     /// - `Inter Corrente · 310013887`
     /// - `Inter Cartão · ••••1234`
-    /// - `XP Corretora · 9876543`
     ///
-    /// Quando os campos opcionais estão vazios, o sufixo correspondente é
-    /// omitido (não vira pontuação solta). Quando a instituição não está
-    /// disponível (caso degenerado), cai pro nome do tipo só.
-    static func displayName(for account: Account, institutions: [Institution]) -> String {
+    /// Quando o detail correspondente não está disponível (caso de race com o
+    /// stream ainda emitindo), o sufixo é omitido. Quando a instituição não
+    /// está disponível (caso degenerado), cai pro nome do tipo só.
+    static func displayName(
+        for account: Account,
+        institutions: [Institution],
+        bankAccounts: [BankAccountDetails] = [],
+        creditCards: [CreditCardDetails] = []
+    ) -> String {
         let institutionName = account.institutionId.flatMap { id in
             institutions.first { $0.id == id }?.name
         }
@@ -101,20 +120,32 @@ extension Account {
             .compactMap { $0 }
             .joined(separator: " ")
 
-        if let suffix = identifierSuffix(for: account) {
+        if let suffix = identifierSuffix(
+            for: account,
+            bankAccounts: bankAccounts,
+            creditCards: creditCards
+        ) {
             return "\(prefix) · \(suffix)"
         }
         return prefix
     }
 
-    private static func identifierSuffix(for account: Account) -> String? {
+    private static func identifierSuffix(
+        for account: Account,
+        bankAccounts: [BankAccountDetails],
+        creditCards: [CreditCardDetails]
+    ) -> String? {
         switch account.type {
         case .creditCard:
-            guard let last4 = account.cardLastFour, !last4.isEmpty else { return nil }
-            return "••••\(last4)"
+            guard let details = creditCards.first(where: { $0.accountId == account.id }),
+                  !details.cardLastFour.isEmpty
+            else { return nil }
+            return "••••\(details.cardLastFour)"
         case .checking:
-            guard let number = account.accountNumber, !number.isEmpty else { return nil }
-            return number
+            guard let details = bankAccounts.first(where: { $0.accountId == account.id }),
+                  !details.accountNumber.isEmpty
+            else { return nil }
+            return details.accountNumber
         }
     }
 }

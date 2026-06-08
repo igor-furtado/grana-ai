@@ -15,7 +15,7 @@ struct ImportHistoryView: View {
         Group {
             if let store {
                 content(store: store)
-                    .task { await store.loadInitialData() }
+                    .task { await store.start() }
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -132,7 +132,12 @@ struct ImportHistoryView: View {
 
     private func accountDisplayName(for batch: ImportBatch, store: ImportStore) -> String? {
         guard let account = store.account(for: batch.accountId) else { return nil }
-        return Account.displayName(for: account, institutions: store.institutions)
+        return Account.displayName(
+            for: account,
+            institutions: store.institutions,
+            bankAccounts: store.bankDetails,
+            creditCards: store.creditCards
+        )
     }
 
     /// Bucketing por janela de tempo relativa, ordenado do mais recente pro

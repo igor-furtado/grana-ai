@@ -9,9 +9,108 @@ import PowerSync
 /// barato, e robusto a casos de banco apagado/recriado (ex: trocar de máquina,
 /// reset durante desenvolvimento). Idempotente por design.
 enum Seed {
+    /// Resultado de uma sincronização aditiva contra `CategorySeedData`.
+    /// Usado pela UI ("Sincronizar categorias padrão") pra dar feedback do
+    /// que efetivamente foi inserido — diferenciando "tudo já estava lá"
+    /// de "entraram X coisas novas".
+    struct SyncResult: Sendable {
+        let rootsAdded: Int
+        let subcategoriesAdded: Int
+
+        var didChange: Bool { rootsAdded > 0 || subcategoriesAdded > 0 }
+    }
+
     static func runIfNeeded(container: AppContainer) async throws {
         try await seedInstitutionsIfEmpty(container: container)
         try await seedCategoriesIfEmpty(container: container)
+    }
+
+    /// Sincroniza o banco existente com `CategorySeedData` de forma **aditiva**:
+    /// insere roots cujo `slug` ainda não existe e subcategorias cujo `name`
+    /// ainda não existe sob a root correspondente. **Nunca remove nem renomeia
+    /// nada** — categorias órfãs do seed seguem intactas porque podem ter
+    /// transações apontando pra elas.
+    ///
+    /// Idempotente por design: rodar de novo após mudar nada vira no-op.
+    /// Diferente de `seedCategoriesIfEmpty` que só roda no primeiro boot, esta
+    /// é destinada a aplicar mudanças do seed em bancos já populados.
+    static func syncFromSeedData(container: AppContainer) async throws -> SyncResult {
+        let existingRoots = try await container.categories.getRootCategories()
+        let rootsBySlug: [String: Category] = Dictionary(
+            uniqueKeysWithValues: existingRoots.compactMap { root in
+                root.slug.map { ($0, root) }
+            }
+        )
+
+        // Subcategorias por parentId (snapshot pra não bater no banco N vezes).
+        var subsByParent: [UUID: Set<String>] = [:]
+        for root in existingRoots {
+            let subs = try await container.categories.getSubcategoriesOf(parentId: root.id)
+            subsByParent[root.id] = Set(subs.map { $0.name })
+        }
+
+        // Snapshots locais (Sendable) consumidos dentro do closure @Sendable.
+        let rootIdBySlug: [String: UUID] = rootsBySlug.mapValues { $0.id }
+        let result: SyncResult = try await container.db.writeTransaction { tx in
+            let nowString = Converters.dateToString(Date())
+            let insertSQL = """
+            INSERT INTO categories
+                (id, parent_id, name, kind, slug, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """
+
+            var rootsAdded = 0
+            var subsAdded = 0
+
+            for definition in CategorySeedData.categories {
+                let parentId: UUID
+                let existingSubs: Set<String>
+
+                if let existingId = rootIdBySlug[definition.slug] {
+                    parentId = existingId
+                    existingSubs = subsByParent[existingId] ?? []
+                } else {
+                    parentId = UUID()
+                    try tx.execute(
+                        sql: insertSQL,
+                        parameters: [
+                            parentId.uuidString,
+                            nil,
+                            definition.name,
+                            definition.kind.rawValue,
+                            definition.slug,
+                            nowString,
+                        ]
+                    )
+                    rootsAdded += 1
+                    existingSubs = []
+                }
+
+                for subName in definition.subcategories where !existingSubs.contains(subName) {
+                    try tx.execute(
+                        sql: insertSQL,
+                        parameters: [
+                            UUID().uuidString,
+                            parentId.uuidString,
+                            subName,
+                            definition.kind.rawValue,
+                            nil,
+                            nowString,
+                        ]
+                    )
+                    subsAdded += 1
+                }
+            }
+
+            return SyncResult(rootsAdded: rootsAdded, subcategoriesAdded: subsAdded)
+        }
+
+        if result.didChange {
+            log.database
+                .info("Seed sync: \(result.rootsAdded) raízes + \(result.subcategoriesAdded) subcategorias inseridas")
+        }
+
+        return result
     }
 
     /// Pré-cadastra todas as instituições "ricamente suportadas" — qualquer

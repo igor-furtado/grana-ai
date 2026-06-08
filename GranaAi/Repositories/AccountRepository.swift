@@ -8,78 +8,122 @@ final class AccountRepository: Sendable {
         self.db = db
     }
 
-    func insert(_ account: Account) async throws {
-        try await db.execute(
-            sql: """
-            INSERT INTO accounts
-                (id, type, initial_balance_cents, archived,
-                 institution_id, branch_id, account_number, card_last_four,
-                 currency, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            parameters: [
-                account.id.uuidString,
-                account.type.rawValue,
-                Converters.decimalToCents(account.initialBalance),
-                account.archived ? 1 : 0,
-                account.institutionId?.uuidString,
-                account.branchId,
-                account.accountNumber,
-                account.cardLastFour,
-                account.currency,
-                Converters.dateToString(account.createdAt),
-                Converters.dateToString(account.updatedAt),
-            ]
-        )
+    // MARK: - Insert / Update / Delete
+
+    /// Cria a `Account` + a tabela-irmã correspondente ao tipo numa única
+    /// `writeTransaction`. A invariante "type=checking ↔ bank_accounts" e
+    /// "type=creditCard ↔ credit_cards" não está no schema (PowerSync não tem
+    /// constraints), então é responsabilidade do caller passar o `details` do
+    /// tipo certo. Caller passa nil pra criar Account sem details (raro;
+    /// só faz sentido durante testes ou seed).
+    func insert(
+        _ account: Account,
+        bankDetails: BankAccountDetails? = nil,
+        creditCardDetails: CreditCardDetails? = nil
+    ) async throws {
+        try await db.writeTransaction { tx in
+            try tx.execute(
+                sql: Self.insertAccountSQL,
+                parameters: Self.insertAccountParams(account)
+            )
+            if let bankDetails {
+                try tx.execute(
+                    sql: Self.insertBankSQL,
+                    parameters: Self.insertBankParams(bankDetails)
+                )
+            }
+            if let creditCardDetails {
+                try tx.execute(
+                    sql: Self.insertCardSQL,
+                    parameters: Self.insertCardParams(creditCardDetails)
+                )
+            }
+        }
     }
 
-    func update(_ account: Account) async throws {
-        try await db.execute(
-            sql: """
-            UPDATE accounts SET
-                type = ?, initial_balance_cents = ?, archived = ?,
-                institution_id = ?, branch_id = ?, account_number = ?,
-                card_last_four = ?, currency = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            parameters: [
-                account.type.rawValue,
-                Converters.decimalToCents(account.initialBalance),
-                account.archived ? 1 : 0,
-                account.institutionId?.uuidString,
-                account.branchId,
-                account.accountNumber,
-                account.cardLastFour,
-                account.currency,
-                Converters.dateToString(account.updatedAt),
-                account.id.uuidString,
-            ]
-        )
+    /// Atualiza a `Account` + a tabela-irmã correspondente. `details` é
+    /// upsert (delete-then-insert) pra cobrir o caso raro de tipo mudar de
+    /// `checking → creditCard` (ou vice-versa) — primeiro apaga details
+    /// antigos dos dois tipos, depois insere o novo.
+    func update(
+        _ account: Account,
+        bankDetails: BankAccountDetails? = nil,
+        creditCardDetails: CreditCardDetails? = nil
+    ) async throws {
+        try await db.writeTransaction { tx in
+            try tx.execute(
+                sql: Self.updateAccountSQL,
+                parameters: Self.updateAccountParams(account)
+            )
+
+            // Upsert via delete-then-insert. Cobre o caso de mudar de tipo
+            // (raro mas possível na UI). PowerSync não tem ON CONFLICT
+            // genérico aqui — duas linhas seriam ambíguas, e o schema
+            // tampouco impede.
+            try tx.execute(
+                sql: "DELETE FROM bank_accounts WHERE account_id = ?",
+                parameters: [account.id.uuidString]
+            )
+            try tx.execute(
+                sql: "DELETE FROM credit_cards WHERE account_id = ?",
+                parameters: [account.id.uuidString]
+            )
+
+            if let bankDetails {
+                try tx.execute(
+                    sql: Self.insertBankSQL,
+                    parameters: Self.insertBankParams(bankDetails)
+                )
+            }
+            if let creditCardDetails {
+                try tx.execute(
+                    sql: Self.insertCardSQL,
+                    parameters: Self.insertCardParams(creditCardDetails)
+                )
+            }
+        }
     }
 
+    /// DELETE em cascata: apaga `bank_accounts` e `credit_cards` da conta
+    /// junto, mesmo que só um esteja presente (delete IS NULL-safe via match
+    /// pelo `account_id`).
     func delete(id: UUID) async throws {
-        try await db.execute(
-            sql: "DELETE FROM accounts WHERE id = ?",
-            parameters: [id.uuidString]
-        )
+        try await db.writeTransaction { tx in
+            try tx.execute(
+                sql: "DELETE FROM bank_accounts WHERE account_id = ?",
+                parameters: [id.uuidString]
+            )
+            try tx.execute(
+                sql: "DELETE FROM credit_cards WHERE account_id = ?",
+                parameters: [id.uuidString]
+            )
+            try tx.execute(
+                sql: "DELETE FROM accounts WHERE id = ?",
+                parameters: [id.uuidString]
+            )
+        }
     }
+
+    // MARK: - Queries
 
     /// Identidade bancária: usa a tripla (instituição, agência, número) pra
-    /// localizar uma conta existente quando um OFX traz dados de banco. Se
-    /// achar, o auto-create do importer reusa em vez de duplicar.
+    /// localizar uma conta existente quando um OFX traz dados de banco. Faz
+    /// JOIN com `bank_accounts` (a partir da Fase 4.6, os campos saíram de
+    /// `accounts` pra cá). Retorna `nil` se qualquer parte não bater.
     func findByBankIdentity(
         institutionId: UUID,
         branchId: String?,
         accountNumber: String
     ) async throws -> Account? {
         // Comparação de `branch_id` precisa ser `IS NULL`-safe — alguns OFX
-        // não trazem agência. Usamos `(branch_id = ? OR (branch_id IS NULL AND ? IS NULL))`.
+        // não trazem agência. Usamos `(b.branch_id = ? OR (b.branch_id IS NULL AND ? IS NULL))`.
         try await db.getOptional(
             sql: """
-            SELECT * FROM accounts
-            WHERE institution_id = ?
-              AND account_number = ?
-              AND (branch_id = ? OR (branch_id IS NULL AND ? IS NULL))
+            SELECT a.* FROM accounts a
+            JOIN bank_accounts b ON b.account_id = a.id
+            WHERE a.institution_id = ?
+              AND b.account_number = ?
+              AND (b.branch_id = ? OR (b.branch_id IS NULL AND ? IS NULL))
             LIMIT 1
             """,
             parameters: [
@@ -96,11 +140,42 @@ final class AccountRepository: Sendable {
         try await db.getAll(
             sql: """
             SELECT * FROM accounts
-            ORDER BY type ASC, institution_id ASC, branch_id ASC,
-                     account_number ASC, card_last_four ASC
+            ORDER BY type ASC, institution_id ASC, created_at ASC
             """,
             parameters: [],
             mapper: Self.mapAccount
+        )
+    }
+
+    func getAllBankDetails() async throws -> [BankAccountDetails] {
+        try await db.getAll(
+            sql: "SELECT * FROM bank_accounts",
+            parameters: [],
+            mapper: Self.mapBankDetails
+        )
+    }
+
+    func getAllCreditCardDetails() async throws -> [CreditCardDetails] {
+        try await db.getAll(
+            sql: "SELECT * FROM credit_cards",
+            parameters: [],
+            mapper: Self.mapCardDetails
+        )
+    }
+
+    func bankDetails(for accountId: UUID) async throws -> BankAccountDetails? {
+        try await db.getOptional(
+            sql: "SELECT * FROM bank_accounts WHERE account_id = ? LIMIT 1",
+            parameters: [accountId.uuidString],
+            mapper: Self.mapBankDetails
+        )
+    }
+
+    func creditCardDetails(for accountId: UUID) async throws -> CreditCardDetails? {
+        try await db.getOptional(
+            sql: "SELECT * FROM credit_cards WHERE account_id = ? LIMIT 1",
+            parameters: [accountId.uuidString],
+            mapper: Self.mapCardDetails
         )
     }
 
@@ -123,15 +198,32 @@ final class AccountRepository: Sendable {
         return Converters.centsToDecimal(cents)
     }
 
+    // MARK: - Streams
+
     func watchAll() throws -> AsyncThrowingStream<[Account], Error> {
         try db.watch(
             sql: """
             SELECT * FROM accounts
-            ORDER BY type ASC, institution_id ASC, branch_id ASC,
-                     account_number ASC, card_last_four ASC
+            ORDER BY type ASC, institution_id ASC, created_at ASC
             """,
             parameters: [],
             mapper: Self.mapAccount
+        )
+    }
+
+    func watchAllBankDetails() throws -> AsyncThrowingStream<[BankAccountDetails], Error> {
+        try db.watch(
+            sql: "SELECT * FROM bank_accounts",
+            parameters: [],
+            mapper: Self.mapBankDetails
+        )
+    }
+
+    func watchAllCreditCardDetails() throws -> AsyncThrowingStream<[CreditCardDetails], Error> {
+        try db.watch(
+            sql: "SELECT * FROM credit_cards",
+            parameters: [],
+            mapper: Self.mapCardDetails
         )
     }
 
@@ -206,6 +298,84 @@ final class AccountRepository: Sendable {
         }
     }
 
+    // MARK: - SQL constants
+
+    private nonisolated static let insertAccountSQL = """
+    INSERT INTO accounts
+        (id, type, initial_balance_cents, archived,
+         institution_id, currency, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+
+    private nonisolated static let updateAccountSQL = """
+    UPDATE accounts SET
+        type = ?, initial_balance_cents = ?, archived = ?,
+        institution_id = ?, currency = ?, updated_at = ?
+    WHERE id = ?
+    """
+
+    private nonisolated static let insertBankSQL = """
+    INSERT INTO bank_accounts
+        (id, account_id, branch_id, account_number, created_at, updated_at)
+    VALUES (uuid(), ?, ?, ?, ?, ?)
+    """
+
+    private nonisolated static let insertCardSQL = """
+    INSERT INTO credit_cards
+        (id, account_id, card_last_four, credit_limit_cents,
+         statement_closing_day, payment_due_day, created_at, updated_at)
+    VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?)
+    """
+
+    private nonisolated static func insertAccountParams(_ account: Account) -> [(any Sendable)?] {
+        [
+            account.id.uuidString,
+            account.type.rawValue,
+            Converters.decimalToCents(account.initialBalance),
+            account.archived ? 1 : 0,
+            account.institutionId?.uuidString,
+            account.currency,
+            Converters.dateToString(account.createdAt),
+            Converters.dateToString(account.updatedAt),
+        ]
+    }
+
+    private nonisolated static func updateAccountParams(_ account: Account) -> [(any Sendable)?] {
+        [
+            account.type.rawValue,
+            Converters.decimalToCents(account.initialBalance),
+            account.archived ? 1 : 0,
+            account.institutionId?.uuidString,
+            account.currency,
+            Converters.dateToString(account.updatedAt),
+            account.id.uuidString,
+        ]
+    }
+
+    private nonisolated static func insertBankParams(_ details: BankAccountDetails) -> [(any Sendable)?] {
+        [
+            details.accountId.uuidString,
+            details.branchId,
+            details.accountNumber,
+            Converters.dateToString(details.createdAt),
+            Converters.dateToString(details.updatedAt),
+        ]
+    }
+
+    private nonisolated static func insertCardParams(_ details: CreditCardDetails) -> [(any Sendable)?] {
+        [
+            details.accountId.uuidString,
+            details.cardLastFour,
+            details.creditLimit.map { Converters.decimalToCents($0) },
+            Int64(details.statementClosingDay),
+            Int64(details.paymentDueDay),
+            Converters.dateToString(details.createdAt),
+            Converters.dateToString(details.updatedAt),
+        ]
+    }
+
+    // MARK: - Mappers
+
     private nonisolated static func mapBalanceRow(_ cursor: SqlCursor) throws -> (UUID, Decimal) {
         let idString = try cursor.getString(name: "account_id")
         guard let id = UUID(uuidString: idString) else {
@@ -246,9 +416,6 @@ final class AccountRepository: Sendable {
             throw DatabaseError.invalidDate(column: "updated_at", value: updatedAtString)
         }
 
-        // `currency` veio depois do schema da Fase 1: contas legadas (criadas
-        // antes desta fase) podem não ter o valor. Default "BRL" cobre isso
-        // sem precisar de migration.
         let currency = try (cursor.getStringOptional(name: "currency")) ?? "BRL"
 
         return try Account(
@@ -259,10 +426,60 @@ final class AccountRepository: Sendable {
             ),
             archived: (cursor.getInt64(name: "archived")) != 0,
             institutionId: institutionId,
-            branchId: cursor.getStringOptional(name: "branch_id"),
-            accountNumber: cursor.getStringOptional(name: "account_number"),
-            cardLastFour: cursor.getStringOptional(name: "card_last_four"),
             currency: currency,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
+    private nonisolated static func mapBankDetails(_ cursor: SqlCursor) throws -> BankAccountDetails {
+        let accountIdStr = try cursor.getString(name: "account_id")
+        guard let accountId = UUID(uuidString: accountIdStr) else {
+            throw DatabaseError.invalidUUID(column: "account_id", value: accountIdStr)
+        }
+
+        let createdAtStr = try cursor.getString(name: "created_at")
+        guard let createdAt = Converters.stringToDate(createdAtStr) else {
+            throw DatabaseError.invalidDate(column: "created_at", value: createdAtStr)
+        }
+        let updatedAtStr = try cursor.getString(name: "updated_at")
+        guard let updatedAt = Converters.stringToDate(updatedAtStr) else {
+            throw DatabaseError.invalidDate(column: "updated_at", value: updatedAtStr)
+        }
+
+        return try BankAccountDetails(
+            accountId: accountId,
+            branchId: cursor.getStringOptional(name: "branch_id"),
+            accountNumber: cursor.getString(name: "account_number"),
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
+    private nonisolated static func mapCardDetails(_ cursor: SqlCursor) throws -> CreditCardDetails {
+        let accountIdStr = try cursor.getString(name: "account_id")
+        guard let accountId = UUID(uuidString: accountIdStr) else {
+            throw DatabaseError.invalidUUID(column: "account_id", value: accountIdStr)
+        }
+
+        let createdAtStr = try cursor.getString(name: "created_at")
+        guard let createdAt = Converters.stringToDate(createdAtStr) else {
+            throw DatabaseError.invalidDate(column: "created_at", value: createdAtStr)
+        }
+        let updatedAtStr = try cursor.getString(name: "updated_at")
+        guard let updatedAt = Converters.stringToDate(updatedAtStr) else {
+            throw DatabaseError.invalidDate(column: "updated_at", value: updatedAtStr)
+        }
+
+        let limit: Decimal? = try cursor.getInt64Optional(name: "credit_limit_cents")
+            .map { Converters.centsToDecimal($0) }
+
+        return try CreditCardDetails(
+            accountId: accountId,
+            cardLastFour: cursor.getString(name: "card_last_four"),
+            creditLimit: limit,
+            statementClosingDay: Int(cursor.getInt64(name: "statement_closing_day")),
+            paymentDueDay: Int(cursor.getInt64(name: "payment_due_day")),
             createdAt: createdAt,
             updatedAt: updatedAt
         )

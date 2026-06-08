@@ -71,6 +71,11 @@ final class ImportStore {
     private(set) var batches: [ImportBatch] = []
     private(set) var accounts: [Account] = []
     private(set) var institutions: [Institution] = []
+    /// Details das tabelas-irmãs de Account — necessários pra montar o display
+    /// name com sufixo (número da conta / ••••last4) nos pickers e cabeçalhos
+    /// do preview. Fase 4.6+.
+    private(set) var bankDetails: [BankAccountDetails] = []
+    private(set) var creditCards: [CreditCardDetails] = []
     /// Carregadas no `loadInitialData` pra alimentar os pickers de
     /// categoria/subcategoria do preview OFX sem chamar o repo a cada View.
     private(set) var categories: [Category] = []
@@ -144,12 +149,92 @@ final class ImportStore {
 
     // MARK: - Bootstrap
 
+    /// Snapshot one-shot pros dados que o **wizard** (`ImportView`) precisa
+    /// resolvidos *antes* de montar os pickers e processar o arquivo — ex:
+    /// `loadCSV` lê `accounts` sincronamente pra pré-selecionar a conta-cartão.
+    /// Por isso aqui é `getAll` sequencial (garante populado ao retornar), não
+    /// stream. A tela de histórico usa `start()` em vez disso.
     func loadInitialData() async {
         do {
             accounts = try await container.accounts.getAll()
             institutions = try await container.institutions.getAll()
+            bankDetails = try await container.accounts.getAllBankDetails()
+            creditCards = try await container.accounts.getAllCreditCardDetails()
             categories = try await container.categories.getAll()
             batches = try await container.importBatches.getAll()
+        } catch {
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    /// Abre os watch streams que alimentam a tela de Histórico de Importações
+    /// (`ImportHistoryView`). Diferente de `loadInitialData()`, aqui a lista de
+    /// lotes + os lookups (conta/instituição/details, pra nome e logo de cada
+    /// card) ficam **reativos**: concluir uma importação no wizard — que roda
+    /// numa instância separada do store — ou desfazer um lote reflete na hora,
+    /// sem refresh manual.
+    ///
+    /// Pattern idêntico a `AccountStore.start()`; o `.task` da View cancela os
+    /// streams ao sair.
+    func start() async {
+        async let b: Void = streamBatches()
+        async let a: Void = streamAccounts()
+        async let i: Void = streamInstitutions()
+        async let bd: Void = streamBankDetails()
+        async let cd: Void = streamCreditCards()
+        _ = await (b, a, i, bd, cd)
+    }
+
+    private func streamBatches() async {
+        do {
+            for try await rows in try container.importBatches.watchAll() {
+                batches = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    private func streamAccounts() async {
+        do {
+            for try await rows in try container.accounts.watchAll() {
+                accounts = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    private func streamInstitutions() async {
+        do {
+            for try await rows in try container.institutions.watchAll() {
+                institutions = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    private func streamBankDetails() async {
+        do {
+            for try await rows in try container.accounts.watchAllBankDetails() {
+                bankDetails = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    private func streamCreditCards() async {
+        do {
+            for try await rows in try container.accounts.watchAllCreditCardDetails() {
+                creditCards = rows
+            }
+        } catch is CancellationError {
         } catch {
             ErrorCenter.shared.report(error)
         }
@@ -443,7 +528,7 @@ final class ImportStore {
             sourceFilename: url.lastPathComponent,
             accountId: initialAccountId,
             rows: rows,
-            skippedNegativeCount: statement.skippedNegativeCount
+            skippedNegatives: statement.skippedNegatives
         )
 
         if let accId = initialAccountId {
@@ -780,10 +865,12 @@ struct CSVStatementResolution: Equatable {
     let sourceFilename: String
     var accountId: UUID?
     var rows: [CSVPreviewRow]
-    /// Quantas linhas com valor negativo (pagamentos da fatura anterior +
-    /// estornos) foram puladas no parse. Reportado na UI pra o usuário
-    /// saber que houve filtro.
-    let skippedNegativeCount: Int
+    /// Linhas com valor negativo (pagamentos da fatura anterior + estornos)
+    /// puladas no parse. Reportadas na UI num disclosure pra o usuário
+    /// auditar o que foi filtrado.
+    let skippedNegatives: [InterCreditCardCSVReader.SkippedRow]
+
+    var skippedNegativeCount: Int { skippedNegatives.count }
 
     var selectedCount: Int {
         rows.filter(\.selected).count

@@ -20,8 +20,24 @@ import PowerSync
 /// dados pra ativar o sync.
 final class AppContainer {
     /// Nome do arquivo SQLite. O PowerSync coloca isso em
-    /// `Application Support/<bundleId>/<dbFilename>` por padrão.
+    /// `Application Support/databases/<dbFilename>` por padrão (subpasta fixa
+    /// do SDK, não derivada do bundleId — `deleteDatabaseFiles()` depende disso).
     static let dbFilename = "grana_ai.sqlite"
+
+    /// Versão do schema **lógico** do app (não confundir com a versão do
+    /// SQLite/PowerSync). Toda mudança *incompatível* (remoção de coluna,
+    /// renomeação, divisão de tabela) deve bumpar este número junto com a
+    /// edição do `appSchema`. No próximo boot, `setup()` detecta a divergência
+    /// com a versão salva em `UserDefaults` e **apaga o banco local** antes de
+    /// recriar — migração destrutiva, viável enquanto não há sync.
+    ///
+    /// Histórico:
+    /// - v1: schema inicial (Fase 0–4.5).
+    /// - v2 (Fase 4.6): `accounts` perde `branch_id`, `account_number`,
+    ///   `card_last_four`. Nascem `bank_accounts` e `credit_cards` 1:1.
+    static let schemaVersion = 2
+
+    private static let schemaVersionDefaultsKey = "GranaAi.schemaVersion"
 
     /// Acesso interno (Repositories). Mantido `internal` (default) — Views
     /// não devem importar isso.
@@ -40,6 +56,7 @@ final class AppContainer {
     lazy var accounts: AccountRepository = .init(db: db)
     lazy var categories: CategoryRepository = .init(db: db)
     lazy var institutions: InstitutionRepository = .init(db: db)
+    lazy var statements: StatementRepository = .init(db: db)
     lazy var importBatches: ImportBatchRepository = .init(db: db)
     lazy var categorizationCache: CategorizationCacheRepository = .init(
         db: db
@@ -78,6 +95,8 @@ final class AppContainer {
     /// PowerSync recria as views, sem perda de dados locais (desde que
     /// colunas removidas não sejam o que o app procura).
     static func setup() -> AppContainer {
+        wipeDatabaseIfSchemaChanged()
+
         let database = PowerSyncDatabase(
             schema: appSchema,
             dbFilename: dbFilename,
@@ -92,6 +111,70 @@ final class AppContainer {
 
         log.database.info("PowerSyncDatabase inicializado em modo local-only (\(dbFilename))")
         return AppContainer(db: database)
+    }
+
+    /// Compara a versão de schema esperada (em `schemaVersion`) com a salva no
+    /// `UserDefaults`. Se divergir (ou se não existir), apaga o arquivo do
+    /// banco antes de o PowerSync abrir — força um boot limpo com o schema
+    /// novo. Salva a versão nova depois pra próxima vez não disparar.
+    ///
+    /// **Por que destrutivo:** estamos pré-Fase 5 (sem sync), e mudanças
+    /// estruturais como divisão de tabelas (`accounts` → `accounts` +
+    /// `bank_accounts` + `credit_cards`) não casam com a abordagem do PowerSync
+    /// (views sobre tabelas internas; remover/renomear coluna deixa dados
+    /// órfãos). Re-importar é o caminho aceito — confirmado na decisão da
+    /// Fase 4.6.
+    private static func wipeDatabaseIfSchemaChanged() {
+        let stored = UserDefaults.standard.integer(forKey: schemaVersionDefaultsKey)
+        // Default `0` quando a chave nunca existiu (first install). Como
+        // `schemaVersion` começou em `1` e bumpou pra `2`, qualquer instalação
+        // pré-versionamento (que carrega dados do schema antigo) cai aqui e
+        // toma o wipe. Single-user app, aceitável.
+        guard stored != schemaVersion else { return }
+
+        log.database.notice(
+            "Schema mudou (\(stored) → \(schemaVersion)). Apagando banco local."
+        )
+        deleteDatabaseFiles()
+        UserDefaults.standard.set(schemaVersion, forKey: schemaVersionDefaultsKey)
+    }
+
+    /// Apaga o `.sqlite` e seus side-files (`-wal`, `-shm`). PowerSync coloca
+    /// tudo dentro de `Application Support/databases/` (subpasta fixa do SDK,
+    /// não derivada do bundleId). Se o diretório não existir (primeira
+    /// execução), os removes são no-op.
+    private static func deleteDatabaseFiles() {
+        let fm = FileManager.default
+        guard let appSupport = try? fm.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: false
+        ) else {
+            log.database.error("Não foi possível resolver diretório do banco pra wipe.")
+            return
+        }
+
+        let dir = appSupport.appendingPathComponent("databases", isDirectory: true)
+        for suffix in ["", "-wal", "-shm"] {
+            let url = dir.appendingPathComponent(dbFilename + suffix)
+            try? fm.removeItem(at: url)
+        }
+    }
+
+    /// Apaga o banco local do disco por solicitação explícita do usuário (ação
+    /// "Apagar banco de dados" em Ajustes → Avançado). Espelha o que o
+    /// `wipeDatabaseIfSchemaChanged` faz no boot, mas em runtime e disparado
+    /// pela UI.
+    ///
+    /// **Caller obrigatoriamente encerra o app em seguida** (`NSApp.terminate`)
+    /// — o PowerSync mantém handles abertos enquanto o processo vive, então
+    /// apagar com a app rodando deixa o estado em memória inconsistente. O OS
+    /// libera os handles no exit, e o próximo boot recria do zero pelo
+    /// `Seed.runIfNeeded`.
+    static func wipeLocalDatabase() {
+        log.database.notice("Apagando banco local por solicitação do usuário.")
+        deleteDatabaseFiles()
     }
 
     /// Usado apenas pelo fallback de `AppEnvironment` quando o setup real

@@ -28,7 +28,21 @@ final class TransactionStore {
     /// nome do banco como prefixo). Tabela pequena e estática — overhead do
     /// stream é desprezível.
     private(set) var institutions: [Institution] = []
+    /// A partir da Fase 4.6 o sufixo do display name (número da conta /
+    /// ••••last4) vive nas tabelas-irmãs `bank_accounts` e `credit_cards`.
+    /// Streamamos junto pra não precisar de query síncrona toda vez que a
+    /// lista re-renderiza.
+    private(set) var bankDetails: [BankAccountDetails] = []
+    private(set) var creditCards: [CreditCardDetails] = []
     private(set) var categories: [Category] = []
+    /// Fatura de cartão (Fase 4.7). Streamada pra que a UI da transação
+    /// possa mostrar a qual Fatura aquela compra pertence sem fazer round
+    /// trip ao banco. Tabela pequena (12 por cartão por ano) — cabe em
+    /// memória sem stress.
+    private(set) var statements: [Statement] = []
+    /// Junction transferência → fatura paga. Permite ver na UI da
+    /// transferência quais Faturas ela está pagando.
+    private(set) var statementPayments: [StatementPayment] = []
     private(set) var isLoading = false
     var lastError: Error?
 
@@ -60,8 +74,12 @@ final class TransactionStore {
         async let t: Void = streamTransactions()
         async let a: Void = streamAccounts()
         async let i: Void = streamInstitutions()
+        async let bd: Void = streamBankDetails()
+        async let cd: Void = streamCreditCards()
+        async let s: Void = streamStatements()
+        async let sp: Void = streamStatementPayments()
         async let c: Void = streamCategories()
-        _ = await (t, a, i, c)
+        _ = await (t, a, i, bd, cd, s, sp, c)
     }
 
     private func streamTransactions() async {
@@ -104,6 +122,54 @@ final class TransactionStore {
         }
     }
 
+    private func streamBankDetails() async {
+        do {
+            for try await rows in try container.accounts.watchAllBankDetails() {
+                bankDetails = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            lastError = error
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    private func streamCreditCards() async {
+        do {
+            for try await rows in try container.accounts.watchAllCreditCardDetails() {
+                creditCards = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            lastError = error
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    private func streamStatements() async {
+        do {
+            for try await rows in try container.statements.watchAll() {
+                statements = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            lastError = error
+            ErrorCenter.shared.report(error)
+        }
+    }
+
+    private func streamStatementPayments() async {
+        do {
+            for try await rows in try container.statements.watchAllPayments() {
+                statementPayments = rows
+            }
+        } catch is CancellationError {
+        } catch {
+            lastError = error
+            ErrorCenter.shared.report(error)
+        }
+    }
+
     private func streamCategories() async {
         do {
             let stream = try container.categories.watchAll()
@@ -121,6 +187,11 @@ final class TransactionStore {
 
     /// Cria uma transação nova. A UI só passa os campos do formulário;
     /// o store preenche id, createdAt e updatedAt.
+    ///
+    /// `statementAllocations` (Fase 4.7) só faz sentido quando a transação é
+    /// transferência pra conta-cartão — UI pede ao usuário quais Faturas
+    /// estão sendo pagas. Mapeamento `statementId → applied`. Vazio = nenhuma
+    /// Fatura sendo paga (transferência avulsa entre contas).
     func add(
         accountId: UUID,
         categoryId: UUID,
@@ -129,11 +200,13 @@ final class TransactionStore {
         occurredAt: Date,
         description: String,
         notes: String?,
-        destinationAccountId: UUID? = nil
+        destinationAccountId: UUID? = nil,
+        statementAllocations: [UUID: Decimal] = [:]
     ) async throws {
         let now = Date()
+        let txId = UUID()
         let transaction = Transaction(
-            id: UUID(),
+            id: txId,
             accountId: accountId,
             categoryId: categoryId,
             subcategoryId: subcategoryId,
@@ -146,18 +219,62 @@ final class TransactionStore {
             updatedAt: now
         )
         try await container.transactions.insert(transaction)
+
+        if !statementAllocations.isEmpty {
+            try await applyStatementAllocations(
+                transactionId: txId,
+                allocations: statementAllocations,
+                now: now
+            )
+        }
         // Não precisamos atualizar `self.transactions` manualmente — o watch
         // stream emite o novo estado automaticamente.
     }
 
-    func update(_ transaction: Transaction) async throws {
+    func update(
+        _ transaction: Transaction,
+        statementAllocations: [UUID: Decimal]? = nil
+    ) async throws {
         var copy = transaction
         copy.updatedAt = Date()
         try await container.transactions.update(copy)
+
+        // `nil` = manter payments existentes (chamadas que não tocam em
+        // pagamento de fatura passam nil). `[:]` vazio = limpar todos os
+        // payments dessa transação (ex: usuário re-categorizou pra
+        // transferência sem destino).
+        if let statementAllocations {
+            try await applyStatementAllocations(
+                transactionId: transaction.id,
+                allocations: statementAllocations,
+                now: copy.updatedAt
+            )
+        }
     }
 
     func delete(id: UUID) async throws {
         try await container.transactions.delete(id: id)
+    }
+
+    private func applyStatementAllocations(
+        transactionId: UUID,
+        allocations: [UUID: Decimal],
+        now: Date
+    ) async throws {
+        let payments = allocations.map { statementId, amount in
+            StatementPayment(
+                id: UUID(),
+                statementId: statementId,
+                transactionId: transactionId,
+                appliedAmount: amount,
+                createdAt: now,
+                updatedAt: now
+            )
+        }
+        try await container.statements.replacePayments(
+            forTransaction: transactionId,
+            with: payments
+        )
     }
 
     // MARK: - Helpers para a UI
@@ -184,6 +301,42 @@ final class TransactionStore {
         accounts.first { $0.id == id }
     }
 
+    // MARK: - Statement helpers (Fase 4.7)
+
+    /// Statement à qual a transação pertence (compra de cartão). `nil` pra
+    /// transações em conta corrente ou transferências.
+    func statement(for transaction: Transaction) -> Statement? {
+        guard let id = transaction.statementId else { return nil }
+        return statements.first { $0.id == id }
+    }
+
+    /// Statements em aberto de uma conta-cartão, ordenadas por `closing_date`
+    /// crescente (mais antiga primeiro). Usada pelo picker de pagamento.
+    func openStatements(for accountId: UUID) -> [Statement] {
+        statements
+            .filter { $0.accountId == accountId && $0.paidAt == nil }
+            .sorted { $0.closingDate < $1.closingDate }
+    }
+
+    /// Payments aplicados a uma Statement (lista de transferências que
+    /// pagaram parte/total). `nil` em vez de array vazio quando a Statement
+    /// não existe — distingue do caso "existe mas ninguém pagou ainda".
+    func payments(for statement: Statement) -> [StatementPayment] {
+        statementPayments.filter { $0.statementId == statement.id }
+    }
+
+    /// Total já aplicado a uma Statement via payments — soma do
+    /// `appliedAmount` de todos os payments daquela Statement.
+    func appliedAmount(to statement: Statement) -> Decimal {
+        payments(for: statement).reduce(Decimal(0)) { $0 + $1.appliedAmount }
+    }
+
+    /// Saldo restante de uma Statement (`total - applied`). Pode ficar
+    /// negativo em caso de overpayment.
+    func remainingAmount(of statement: Statement) -> Decimal {
+        statement.totalAmount - appliedAmount(to: statement)
+    }
+
     func institution(for id: UUID) -> Institution? {
         institutions.first { $0.id == id }
     }
@@ -191,7 +344,12 @@ final class TransactionStore {
     /// Nome derivado da conta — espelha `AccountStore.displayName(for:)`. Cada
     /// store tem sua cópia porque carrega institutions sob demanda da feature.
     func displayName(for account: Account) -> String {
-        Account.displayName(for: account, institutions: institutions)
+        Account.displayName(
+            for: account,
+            institutions: institutions,
+            bankAccounts: bankDetails,
+            creditCards: creditCards
+        )
     }
 
     var rootCategories: [Category] {

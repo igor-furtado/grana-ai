@@ -18,27 +18,64 @@
 
 ## Fase 4 — Integração Claude API: categorização automática ✅
 
-## Fase 4.5 — Cartões de Crédito
+## Fase 4.5 — Cartões de Crédito ✅
 
-**Objetivo:** modelar cartão de crédito como **conta de passivo separada**, com cada compra detalhada e categorizada individualmente — pagamento de fatura vira transferência entre contas próprias. Hoje a fatura inteira cai como uma única despesa "Cartão de Crédito" na corrente, escondendo o detalhamento e contabilizando o gasto no mês do pagamento em vez do mês da compra.
+
+## Fase 4.6 — Refator estrutural de `Account`
+
+**Objetivo:** `Account` vira primitivo financeiro puro. Campos específicos por tipo (banco, cartão) viram tabelas-irmãs 1:1 — evita `Account` virar god class à medida que tipos novos entram (poupança, corretora). Pré-requisito da Fase 4.7 (Faturas), que precisa adicionar `statementClosingDay`/`paymentDueDay` ao cartão sem inflar `Account`.
+
+**Decisões fixas:**
+- `accounts.type` continua sendo `checking | creditCard`. Cada cartão segue sendo 1 row em `accounts` (não vira filho de outra conta). O "1:N de cartões por instituição" já existe via `institution_id` compartilhado — não precisa mudar nada pra isso.
+- Cartão **não é** filho de conta corrente no schema. Vinculo de "fonte de pagamento" emerge naturalmente da transferência categorizada (Fase 4.7), não de FK.
 
 **Entregáveis:**
-- Novo `AccountType.creditCard` (display "Cartão de Crédito"). `AccountFormView` aceita o tipo.
-- Saldo do cartão é negativo quando há fatura aberta = dívida. Somatório de saldos das contas reflete patrimônio líquido real.
-- `InterCreditCardCSVReader`: parser dedicado ao CSV de fatura do Inter (esquema fixo conhecido, **não** reintroduz o framework genérico de CSV removido na Fase 3). Cada linha vira `TransactionDraft` na conta-cartão.
-- Pipeline de import reaproveitado (preview, dedup, categorização IA, commit transacional via `writeTransaction`).
-- IA recebe contexto da conta-cartão pra categorizar cada compra como despesa real (não como transferência) — `ownAccounts` já passado no prompt na Fase 4 facilita a regra.
-- Pagamento da fatura: usuário marca **manualmente** a transação "PAGAMENTO CARTAO X" do extrato bancário como `transferencias / Transferência entre Contas` apontando pra conta-cartão de destino. Zera no dashboard, abate dívida do cartão.
-- Faturas antigas (pré-feature): permanecem como despesa única na corrente (Opção A — sem migração retroativa).
+- Nova tabela `bank_accounts(account_id PK/FK, branch_id, account_number)`. 1:1 com `accounts` onde `type = checking`. `branch_id` e `account_number` saem de `accounts`.
+- Nova tabela `credit_cards(account_id PK/FK, card_last_four, credit_limit_cents, statement_closing_day, payment_due_day)`. 1:1 com `accounts` onde `type = creditCard`. `card_last_four` sai de `accounts`. `credit_limit_cents`, `statement_closing_day`, `payment_due_day` entram novos.
+- `accounts` final: `id`, `type`, `institution_id`, `initial_balance`, `archived`, `currency`, `created_at`, `updated_at`.
+- `AccountRepository`: novos métodos `bankDetails(for accountId:)` e `creditCardDetails(for accountId:)`. CRUD de Account passa a aceitar opcionalmente os details e escreve as 2 linhas em `writeTransaction` atômico.
+- `AccountStore.displayName(for:)` reescrito pra receber `accounts + institutions + creditCardDetails` (mantém formato `Inter Cartão · ••••1234`).
+- **`AccountFormView` reaproveitado com seções condicionais por tipo:**
+  - Seção comum sempre visível: instituição, tipo (picker `checking | creditCard`), saldo inicial, moeda.
+  - Quando `type = checking`: campos de agência + número da conta.
+  - Quando `type = creditCard`: últimos 4 dígitos, limite, dia de fechamento (1–31), dia de vencimento (1–31).
+  - Submit escreve `accounts` + (`bank_accounts` ou `credit_cards`) numa única `writeTransaction` atômica.
+  - `AccountsView` sidebar/toolbar mantém um único botão "Nova conta" que abre o form.
+- OFX auto-detect: o triple `institution + branch + account_number` passa a fazer JOIN com `bank_accounts` em vez de ler de `accounts`.
+- **Migração destrutiva local** (sem sync ainda): script de migração apaga `accounts`/`transactions`/`import_batches` e recria com schema novo. Usuário re-importa OFXs e os 2 CSVs do Inter do zero — aceitável porque a Fase 4.7 já planejava re-import dos CSVs.
 
-**Sem isto, não avança:** importar fatura do Inter → ver as compras detalhadas, categorizadas, no mês correto do dashboard; ver saldo do cartão refletindo a dívida atual.
+**Sem isto, não avança:** ver `Account` sem campos opcionais específicos por tipo; cadastrar dia de fechamento/vencimento de um cartão; ter form dedicado pra cartão.
+
+---
+
+## Fase 4.7 — Faturas (Statements) de cartão
+
+**Objetivo:** modelar `Statement` (Fatura) como entidade própria, criada lazy quando uma transação de cartão entra. Cada compra fica vinculada à Fatura do ciclo que a contém. Pagamento da fatura via extrato bancário marca a Statement como paga apontando pra transferência específica.
+
+**Pré-requisito:** Fase 4.6 (campos `statement_closing_day` e `payment_due_day` na `credit_cards`).
+
+**Entregáveis:**
+- Nova tabela `statements(id, account_id FK, closing_date, due_date, total_amount_cents, paid_at?, source_filename?, created_at, updated_at)`. `account_id` aponta sempre pra `accounts` com `type = creditCard`. `closing_date`/`due_date` são **snapshot imutável** do ciclo — não mudam mesmo se o usuário editar `statement_closing_day` na `credit_cards` depois. `paid_at` é cache denormalizado, populado quando `SUM(applied_amount_cents) >= total_amount_cents` daquela Statement.
+- Nova tabela junction `statement_payments(id, statement_id FK, transaction_id FK, applied_amount_cents, created_at, updated_at)`. Modela N:N entre Statements e transferências de pagamento. Cobre 2 casos: (a) múltiplas transferências pagando a mesma Statement (adiantamento — caso comum); (b) 1 transferência fatiada entre Statements (raro, mas suportado).
+- Nova coluna `transactions.statement_id` (nullable). Obrigatória só pra transações em conta-cartão — invariante validada no `TransactionRepository`, não no schema (PowerSync não tem NOT NULL). É a vinculação **compra → fatura do ciclo**, distinta da vinculação **transferência → fatura paga** (que vive em `statement_payments`).
+- **Resolver de janela:** função `StatementWindow.resolve(for accountId:, on date:)` que lê `credit_cards.statement_closing_day` + `payment_due_day` e devolve `(closingDate, dueDate)` do ciclo que cobre aquela data. Lógica: se `date.day <= closing_day` então a fatura fecha em `(date.year, date.month, closing_day)`; senão na do mês seguinte. `due_date` é `closingDate` + offset baseado em `payment_due_day` (rola pro mês seguinte se necessário).
+- **Lazy creation hook** no `TransactionRepository`: na inserção/edição de transação em conta-cartão, resolve a janela → busca Statement existente por `(account_id, closing_date)` → cria se não existir → seta `statement_id` na transação. Re-resolve no edit se `occurred_at` mudar.
+- **CSV import** (Inter) passa pelo mesmo hook automaticamente. Re-import dos 2 CSVs históricos gera Statements correspondentes.
+- **Recálculo automático:** toda escrita em `transactions` (insert/update/delete) que toca uma transação em cartão → recalcula `statements.total_amount_cents` da Statement afetada. Toda escrita em `statement_payments` → recalcula `statements.paid_at` (set se `SUM(applied_amount_cents) >= total`, clear caso contrário). Tudo dentro da mesma `writeTransaction` que disparou a mudança.
+- **Picker de pagamento (UX padrão):** ao categorizar transação de extrato como `transferencias / Transferência entre Contas` apontando pra conta-cartão de destino, abre sheet listando Statements daquela conta com `paid_at IS NULL`. Cada item mostra `total_amount_cents - SUM(applied)` ("Faltam R$ X de R$ Y"). Sugere por default a Statement cujo saldo restante mais se aproxima do valor da transferência. Confirmar cria 1 `statement_payment` com `applied_amount_cents = transação.amount_cents`.
+- **Pagamento parcial / split (UX avançada):** mesmo picker tem um modo "Aplicar em mais de uma fatura" que permite distribuir o valor da transferência entre N Statements (input de valor por Statement, com validação `SUM <= transação.amount_cents`). Default fechado — só aparece se o usuário clicar pra expandir.
+- **Cancelar/re-categorizar:** se a transferência for editada (categoria muda, destino muda, transação deletada), todas as `statement_payments` daquela transaction são removidas. Cada Statement afetada recalcula `paid_at`.
+- **Dashboard:** novo card "Próxima fatura" (Statement em aberto cujo `closing_date` está mais próximo da data atual). Mostra total + valor já pago + saldo restante.
+- **Detalhe de transação de cartão:** exibe a Statement à qual pertence (closing/due/status pago).
+- **Detalhe de Statement:** lista compras vinculadas + lista de pagamentos aplicados (data, transação, valor).
+
+**Sem isto, não avança:** importar fatura → ver entidade Statement com fechamento/vencimento/total; adiantar parte do pagamento → ver Statement com saldo restante decrescendo; quitar com pagamento final → ver Statement marcada como paga; dashboard mostrando "Próxima fatura" com progresso.
 
 **TODOs / melhorias futuras (não bloqueiam a fase):**
-- Auto-detect do pagamento da fatura: regra que casa "pagamento cartão + banco + valor próximo ao saldo do cartão" → sugere transferência automaticamente em vez do usuário marcar manual.
-- Campos extras do cartão na `Account`: `creditLimit`, `statementClosingDay`, `paymentDueDay`. Habilita UI específica (próxima fatura, dias até vencimento, % de limite usado).
-- Parsers de CSV/OFX de cartão pra outros bancos (Nubank, Bradesco, etc.) — só quando houver demanda real.
-- UI dedicada de cartão (visão "próxima fatura" agregando despesas do ciclo atual antes do fechamento).
-- Migração retroativa opcional de faturas antigas (Opção B): wizard que ajuda a importar histórico e remarcar pagamentos passados como transferência.
+- Auto-match silencioso quando valor da transferência == saldo restante exato de exatamente 1 Statement em aberto.
+- Tela "Histórico de faturas" da conta-cartão (lista cronológica com status pago/aberto, link pras compras e pagamentos de cada).
+- Warning quando editar `occurred_at` de uma transação fizer ela mudar de Statement (efeito colateral em saldos passados).
+- Tratamento de overpayment (transferência > saldo da Statement): hoje o excesso fica sem destino. Futuro: oferecer aplicar excesso na próxima Statement do ciclo seguinte.
 
 ---
 

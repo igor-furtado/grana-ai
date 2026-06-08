@@ -176,9 +176,13 @@ Termos canônicos do projeto. Não invente sinônimos.
 
 | Termo | Definição |
 |---|---|
-| **Transaction** | Um movimento financeiro (gasto, receita, transferência). Tem valor, data, categoria, conta. |
-| **Account** | Conta onde dinheiro reside: corrente, poupança, carteira, conta corretora. Vínculo opcional com `Institution`. |
-| **Institution** | Banco ou corretora. Várias Accounts podem compartilhar a mesma (ex: corrente + poupança no mesmo banco). `code` é o FEBRABAN/COMPE, `kind` é o enum `InstitutionKind` (Inter + `other`). Auto-detect via FID do OFX usa o `code`. |
+| **Transaction** | Um movimento financeiro (gasto, receita, transferência). Tem valor, data, categoria, conta. Quando a `account` é cartão de crédito, também tem `statement_id` apontando pra Fatura do ciclo (Fase 4.7+). |
+| **Account** | Primitivo financeiro: o que tem saldo. A partir da Fase 4.6, carrega só o que é universal entre tipos: `id`, `type` (`checking` \| `creditCard`), `institution_id`, `initial_balance`, `archived`, `currency`, timestamps. Campos específicos por tipo moram em tabelas-irmãs 1:1 (`bank_accounts`, `credit_cards`). |
+| **BankAccountDetails** | Tabela `bank_accounts` 1:1 com `accounts` onde `type = checking`. Guarda `branch_id` + `account_number`. Usada no auto-detect de OFX (triple institution+branch+number). Fase 4.6+. |
+| **CreditCardDetails** | Tabela `credit_cards` 1:1 com `accounts` onde `type = creditCard`. Guarda `card_last_four` + `credit_limit_cents` + `statement_closing_day` + `payment_due_day`. Os dois últimos alimentam o resolver de janela de Fatura. Fase 4.6+. |
+| **Statement (Fatura)** | Ciclo de fatura de um cartão. Tem `account_id`, `closing_date`, `due_date`, `total_amount_cents`, `paid_at?`. `closing_date`/`due_date` são snapshot imutável do ciclo (não mudam se o cartão for editado depois). `paid_at` é cache denormalizado, populado quando o somatório dos `StatementPayment` aplicados cobre o total. Criada lazy quando uma transação de cartão entra e ainda não há Statement cobrindo sua data. Fase 4.7+. |
+| **StatementPayment** | Tabela junction `statement_payments(statement_id, transaction_id, applied_amount_cents)` que modela N:N entre Statements e transferências de pagamento. Cobre adiantamento (várias transferências pra mesma Statement) e split (1 transferência fatiada entre Statements). Fase 4.7+. |
+| **Institution** | Banco ou corretora. Várias Accounts podem compartilhar a mesma (ex: corrente + cartão no mesmo banco). `code` é o FEBRABAN/COMPE, `kind` é o enum `InstitutionKind` (Inter + `other`). Auto-detect via FID do OFX usa o `code`. |
 | **Category** | Classificação de transação. Hierárquica via **self-FK `parent_id`** (`null = raiz`, preenchido = subcategoria) em vez de dois campos planos. Permite editar nomes e adicionar subcategorias sem migration. Ícone visual (SF Symbol) **só na raiz**; subcategoria herda na UI via `TransactionStore.icon(for:)`. Taxonomia padrão definida em `CategorySeedData.swift`. |
 | **Asset** | Ativo financeiro específico: ação (PETR4), FII (HGLG11), tesouro, fundo. |
 | **Holding** | Posição atual em um Asset: quantidade, preço médio, conta corretora. |
@@ -196,6 +200,9 @@ Termos canônicos do projeto. Não invente sinônimos.
 - **Comparação por "dia" usa Calendar local, não SUBSTR UTC:** o `Converters.iso8601` serializa em UTC ("Z"). Comparar `SUBSTR(occurred_at, 1, 10)` quebra perto da meia-noite (transação 22h local Brasil vira dia seguinte em UTC). Padrão usado: janela `[startOfDay−1d, startOfDay+2d)` em SQL + filtro `Calendar.isDate(_:inSameDayAs:)` em Swift. Funções com lógica de "dia" aceitam `calendar: Calendar = .current` injetável pra testes determinísticos.
 - Moeda padrão: BRL. Multi-moeda fica fora do MVP.
 - IDs são UUIDs. PowerSync gera o `id text` automaticamente em INSERTs sem id explícito (via `uuid()` no SQL). Pra FKs em código Swift: `UUID().uuidString`.
+- **Account = primitivo, details em tabelas-irmãs** (a partir da Fase 4.6): `accounts` só carrega o que é universal entre tipos. `bank_accounts` (1:1, FK = `account_id`) guarda dados bancários (branch + número). `credit_cards` (1:1, FK = `account_id`) guarda dados de cartão (últimos 4, limite, dia de fechamento, dia de vencimento). CRUD de Account sempre escreve as 2 tabelas em `writeTransaction` atômico.
+- **Toda Transaction em conta-cartão tem `statement_id`** (a partir da Fase 4.7). Schema PowerSync não enforce — invariante validada no `TransactionRepository.insert/update`. Resolver de janela cria Statement lazy se não existir. Editar `occurred_at` re-resolve. Toda escrita que afeta `statement_id` recalcula `statements.total_amount_cents` na mesma `writeTransaction`.
+- **Pagamento de Fatura via N:N** (a partir da Fase 4.7): `transactions.statement_id` (compra → fatura do ciclo) é **distinto** de `statement_payments` (transferência → fatura paga). A primeira diz "essa compra entrou nessa fatura"; a segunda diz "essa transferência pagou X dessa fatura". Toda escrita em `statement_payments` recalcula `statements.paid_at` na mesma `writeTransaction` (set quando `SUM(applied) >= total`, clear caso contrário).
 
 ---
 

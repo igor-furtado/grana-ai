@@ -93,8 +93,6 @@ struct OFXReaderTests {
         #expect(stmt.account.bankId == "077")
         #expect(stmt.account.branchId == "0001-9")
         #expect(stmt.account.accountId == "310013887")
-        #expect(stmt.account.accountType == "CHECKING")
-        #expect(stmt.account.mappedAccountType == .checking)
     }
 
     @Test("Lê transações com sinal, descrição e FITID")
@@ -160,7 +158,6 @@ struct OFXReaderTests {
         #expect(doc.statements.count == 2)
         #expect(doc.statements[0].account.accountId == "111")
         #expect(doc.statements[1].account.accountId == "222")
-        #expect(doc.statements[1].account.mappedAccountType == .savings)
     }
 
     // MARK: - Parsing utilitário

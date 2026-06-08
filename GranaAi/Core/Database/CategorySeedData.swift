@@ -32,17 +32,11 @@ nonisolated enum CategorySeedData {
         CategorySeedDefinition(slug: "renda-e-pagamentos", name: "Renda e Pagamentos", kind: .income, subcategories: [
             "Salário",
             "Freelance",
-            "Aposentadoria",
-            "Auxílio e Benefícios",
-            "Pensão",
             "13º Salário",
             "Férias",
             "PLR",
-            "Comissões",
             "Juros de Investimentos",
             "Dividendos",
-            "Aluguel Recebido",
-            "Vendas",
             "Restituição de IR",
             "Cashback",
             "Reembolso",
@@ -50,62 +44,79 @@ nonisolated enum CategorySeedData {
 
         // MARK: - Despesas
 
-        CategorySeedDefinition(slug: "compras-pessoais", name: "Compras Pessoais", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "compras", name: "Compras", kind: .expense, subcategories: [
             "Roupas e Calçados",
             "Acessórios e Joias",
-            "Eletrônicos",
-            "Cosméticos e Higiene",
-            "Móveis",
-            "Decoração",
-            "Utensílios Domésticos",
-            "Ferramentas",
-            "Livros",
             "Presentes",
             "Artigos Esportivos",
             "Hobbies e Coleções",
         ]),
 
-        CategorySeedDefinition(slug: "transporte", name: "Transporte", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "cuidados-pessoais", name: "Cuidados Pessoais", kind: .expense, subcategories: [
+            "Barbearia",
+            "Massagem",
+            "Cosméticos e Higiene",
+        ]),
+
+        CategorySeedDefinition(slug: "mobilidade", name: "Mobilidade", kind: .expense, subcategories: [
             "Uber e 99",
             "Táxi",
-            "Combustível",
             "Transporte Público",
-            "Manutenção Veículos",
-            "Estacionamento",
             "Pedágio",
+        ]),
+
+        CategorySeedDefinition(slug: "moto", name: "Moto", kind: .expense, subcategories: [
+            "Combustível",
+            "Manutenção e Mecânica",
+            "Estacionamento",
+            "Licenciamento",
+            "Multas de Trânsito",
+            "Seguro Moto",
+            "Equipamentos e Acessórios",
         ]),
 
         CategorySeedDefinition(slug: "viagem", name: "Viagem", kind: .expense, subcategories: [
             "Passagens Aéreas",
-            "Passagens de Ônibus",
             "Hospedagem",
-            "Aluguel de Carros",
             "Pacotes de Viagem",
             "Bagagem",
+            "Seguro Viagem",
+            "Passeios e Atrações",
+            "Câmbio",
         ]),
 
         CategorySeedDefinition(
-            slug: "entretenimento-e-lazer",
-            name: "Entretenimento e Lazer",
+            slug: "lazer",
+            name: "Lazer",
             kind: .expense,
             subcategories: [
-                "Streaming de Vídeo",
-                "Streaming de Música",
-                "Academia",
-                "Personal Trainer",
-                "Jogos e Aplicativos",
+                "Bares",
+                "Baladas e Boates",
+                "Bailes",
+                "Festas e Eventos",
+                "Shows e Festivais",
                 "Cinema",
                 "Teatro",
-                "Shows e Eventos",
                 "Parques e Diversões",
-                "Cursos Online",
-                "Software e Licenças",
             ]
         ),
 
+        CategorySeedDefinition(slug: "trabalho", name: "Trabalho", kind: .expense, subcategories: [
+            "Hardware",
+            "Conferências e Eventos Tech",
+        ]),
+
+        CategorySeedDefinition(slug: "educacao", name: "Educação", kind: .expense, subcategories: [
+            "Mensalidades",
+            "Cursos",
+            "Certificações",
+            "Livros",
+            "Material Escolar",
+        ]),
+
         CategorySeedDefinition(
-            slug: "alimentacao-e-supermercado",
-            name: "Alimentação e Supermercado",
+            slug: "alimentacao",
+            name: "Alimentação",
             kind: .expense,
             subcategories: [
                 "Supermercados",
@@ -116,52 +127,68 @@ nonisolated enum CategorySeedData {
                 "Lanchonetes",
                 "Delivery de Comida",
                 "Cafeterias",
-                "Bares",
-                "Hortifrúti",
+                "Feira e Hortifrúti",
             ]
         ),
 
-        CategorySeedDefinition(slug: "contas-e-servicos", name: "Contas e Serviços", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "apartamento", name: "Apartamento", kind: .expense, subcategories: [
+            "Aluguel",
+            "Entrada e Encargos",
+            "Condomínio",
             "Energia Elétrica",
-            "Água e Esgoto",
+            "Água",
+            "Gás",
+            "IPTU",
+            "Financiamento Imobiliário",
+            "Reforma",
+            "Móveis",
+            "Decoração",
+            "Eletrônicos",
+            "Utensílios Domésticos",
+            "Ferramentas",
+        ]),
+
+        CategorySeedDefinition(slug: "streaming-e-apps", name: "Streaming e Apps", kind: .expense, subcategories: [
+            "Streaming de Vídeo",
+            "Streaming de Música",
+            "IA e Produtividade",
+            "Apps e Softwares",
+            "Jogos",
+        ]),
+
+        CategorySeedDefinition(slug: "comunicacao", name: "Comunicação", kind: .expense, subcategories: [
             "Internet Banda Larga",
             "Celular",
-            "Gás Encanado",
-            "Gás de Cozinha",
-            "TV por Assinatura",
-            "Condomínio",
-            "Limpeza Doméstica",
-            "Jardinagem",
-            "Segurança Residencial",
-            "Correios",
+        ]),
+
+        CategorySeedDefinition(slug: "atividades-e-aulas", name: "Atividades e Aulas", kind: .expense, subcategories: [
+            "Academia",
+            "Personal Trainer",
+            "Escola de Dança",
         ]),
 
         CategorySeedDefinition(
-            slug: "creditos-e-emprestimos",
-            name: "Créditos e Empréstimos",
+            slug: "servicos-profissionais",
+            name: "Serviços Profissionais",
             kind: .expense,
             subcategories: [
-                "Cartão de Crédito",
-                "Empréstimos Pessoais",
-                "Crediário",
-                "Financiamento Imobiliário",
-                "Financiamento Veicular",
-                "Consórcio Imóvel",
-                "Consórcio Veículo",
-                "Empréstimo Consignado",
-                "Cheque Especial",
-                "Juros e Multas",
+                "Contabilidade",
+                "Jurídico e Advocacia",
+                "Consultoria",
+                "Limpeza Doméstica",
             ]
         ),
 
-        CategorySeedDefinition(slug: "saude-e-medicina", name: "Saúde e Medicina", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "saude", name: "Saúde", kind: .expense, subcategories: [
             "Plano de Saúde",
             "Consultas Médicas",
             "Consultas Dentárias",
+            "Nutricionista",
             "Psicoterapia",
             "Fisioterapia",
             "Farmácias e Medicamentos",
             "Exames",
+            "Vacinas",
             "Cirurgias",
             "Emergências Médicas",
             "Óculos e Lentes",
@@ -169,18 +196,9 @@ nonisolated enum CategorySeedData {
             "Suplementos",
         ]),
 
-        CategorySeedDefinition(slug: "seguros", name: "Seguros", kind: .expense, subcategories: [
-            "Seguro de Vida",
-            "Seguro Veicular",
-            "Seguro Residencial",
-            "Seguro Viagem",
-            "Seguro Celular",
-            "Outros Seguros",
-        ]),
-
         CategorySeedDefinition(
-            slug: "investimentos-e-poupanca",
-            name: "Investimentos e Poupança",
+            slug: "investimentos",
+            name: "Investimentos",
             kind: .expense,
             subcategories: [
                 "Poupança",
@@ -196,37 +214,26 @@ nonisolated enum CategorySeedData {
             ]
         ),
 
-        CategorySeedDefinition(slug: "impostos-e-taxas", name: "Impostos e Taxas", kind: .expense, subcategories: [
+        CategorySeedDefinition(slug: "impostos", name: "Impostos", kind: .expense, subcategories: [
             "Imposto de Renda",
-            "IPVA",
-            "IPTU",
+            "DAS",
+            "INSS Autônomo",
+            "ISS",
             "ITBI",
-            "Licenciamento Veicular",
-            "Multas de Trânsito",
             "Taxas Cartoriais",
             "Taxas Bancárias",
             "IOF",
-            "INSS Autônomo",
-            "ISS",
         ]),
 
-        CategorySeedDefinition(slug: "saques-e-atm", name: "Saques e ATM", kind: .expense, subcategories: [
-            "Saque ATM Próprio",
-            "Saque ATM Terceiros",
+        CategorySeedDefinition(slug: "saques", name: "Saques", kind: .expense, subcategories: [
             "Saque em Agência",
-            "Saque Internacional",
             "Taxa de Saque",
-            "Saque Cartão Crédito",
         ]),
 
         CategorySeedDefinition(slug: "nao-classificado", name: "Não Classificado", kind: .expense, subcategories: [
             "Pendente de Revisão",
         ]),
 
-        CategorySeedDefinition(slug: "jogos-e-apostas", name: "Jogos e Apostas", kind: .expense, subcategories: [
-            "Lojas de Jogos",
-            "Loterias",
-        ]),
 
         // MARK: - Transferências
 
