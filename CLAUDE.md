@@ -8,7 +8,7 @@
 
 App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-first) + Supabase (entra na Fase 5).
 
-**Status:** Fases 0–3 ✅ (fundação, CRUD, dashboard, importação OFX). Fases 4+ no [ROADMAP.md](./ROADMAP.md).
+**Status:** Fases 0–4.7 ✅ (fundação, CRUD, dashboard, importação OFX+CSV Inter, categorização IA, cartões + faturas, refator de Account em primitivo + tabelas-irmãs). Fase 5+ no [ROADMAP.md](./ROADMAP.md).
 
 ## Stack travada
 
@@ -41,7 +41,7 @@ App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-
 
 - Views pequenas (~150 linhas é o alvo). `@State` local pra estado puramente de visualização; `@Observable` Store pra dados do banco. Tabelas/colunas SQL em `snake_case`.
 - `async/await` exclusivamente (Combine só pra código legado, que não tem aqui).
-- `#Preview` macro em toda View nova.
+- **Não usar `#Preview`.** O stack pesado (PowerSync + Supabase + Crypto + GRDB, ~35 módulos pra JIT-linkar) faz o canvas do Xcode estourar timeout, enquanto o app real builda e abre em <5s. Iterar UI via `Cmd+R` no app, não no canvas.
 - Erros com `enum` por domínio (`DatabaseError`, `ImportError`, etc.) + `LocalizedError` em PT-BR.
 - Comentários explicam **por quê**, nunca **o quê**.
 - Cada arquivo que usa `log.<categoria>.info(...)` precisa `import OSLog` explícito (interpolation da Apple só fica visível no módulo importado).
@@ -53,42 +53,66 @@ App financeiro pessoal **single-user** macOS. SwiftUI + PowerSync (SQLite local-
 - `watch` re-emite a cada `INSERT`/`UPDATE`/`DELETE` na tabela tocada. Usar pra listas reativas. Usar `getAll` pra snapshots (dashboards, agregações com filtro de período).
 - Agregar em SQL (`SUM`, `GROUP BY`) sempre que possível. Exceção: lógica que depende de fuso local (dia da semana, dia local) — `strftime` opera em UTC. Traga colunas mínimas e agregue em Swift com `Calendar`.
 
-## Importação (Fase 3 — entregue)
+## Importação
 
-- **Apenas OFX.** CSV/XLSX foram removidos — não tinham uso real e dobravam a superfície (templates, mapeamento manual, dedup heurística).
-- **OFX**: reader unificado SGML 1.x + XML 2.x, charset CP1252 ou UTF-8. Cada `<STMTRS>` vira um batch independente. Auto-detect de Institution (FEBRABAN code) e Account (tripla institution+branch+number). Multi-account num arquivo → todos os inserts (Institutions novas, Accounts novas, N batches, N×M transactions) numa única `writeTransaction` via `commitImport`.
-- **Dedup OFX**: exata por FITID (`external_id`), batched via `Set<String>` por conta.
-- **Categorização inicial**: `OFXCategoryHeuristic` por TRNTYPE/MEMO/NAME. Fase 4 (IA) refina antes do commit.
+- **OFX (extrato bancário) + CSV (fatura Inter).** XLSX continua fora. Extensões aceitas em `ImportStore.supportedExtensions` — é o single source of truth pro `loadFile` e pro drag & drop.
+- **Wizard**: `ImportView` é um shell modal que roteia `Phase` → step view. Cada step vive em `Features/Import/Steps/` (OFX review, CSV review, Categorizing, Failed). A tela "Importações" (`ImportHistoryView`) também aceita drag & drop — arrasta arquivo, abre wizard com `initialFile` pré-carregado.
+- **OFX**: reader unificado SGML 1.x + XML 2.x, charset CP1252 ou UTF-8. Cada `<STMTRS>` vira um batch independente. Auto-detect de Institution (FEBRABAN code) e Account (tripla institution+branch+number). A partir da Fase 4.5 o import **não cria contas** — o usuário escolhe uma existente quando o auto-detect não acha. Multi-statement num arquivo → todos os inserts (N batches, N×M transactions) numa única `writeTransaction` via `commitImport`.
+- **CSV Inter (fatura de cartão)**: parser dedicado em `InterCreditCardCSVReader`. Filtra linhas com valor negativo (pagamentos da fatura anterior + estornos) — o pagamento real é registrado como transferência no extrato OFX do checking. Não tem auto-detect: o usuário escolhe a conta-cartão de destino no preview.
+- **Dedup OFX**: exata por FITID (`external_id`), batched via `Set<String>` por conta. CSV Inter: heurística por (data + descrição + valor) contra `categorization_cache` da conta.
+- **Categorização inicial**: heurística por TRNTYPE/MEMO/NAME (OFX). A categorização via IA (Fase 4) roda **antes do commit** entre os steps `*Review` e `confirming` — a tela de revisão é parte do wizard, não um post-step. Cancelar descarta tudo.
 
 ## Onde mexer pra cada coisa
 
 | Pra... | Edite |
 |---|---|
-| Reportar erro pro toast global | `ErrorCenter.shared.report(error)` (MainActor) ou `ErrorCenter.capture(error)` (nonisolated) — ver seção "Tratamento de erros" |
+| Reportar erro/sucesso/info pro toast global | `NoticeCenter.shared.report(error)`, `.success(title:...)`, `.info(title:...)` (MainActor) ou `NoticeCenter.capture(error)` (nonisolated) — ver seção "Feedback ao usuário (toasts)" |
 | Adicionar tabela nova | `GranaAi/Core/Database/AppSchema.swift` + novo Repository + model |
+| Adicionar campo a Account por tipo | `bank_accounts` (checking) ou `credit_cards` (cartão) em `AppSchema.swift`. `accounts` é primitivo desde a Fase 4.6 — campos específicos vivem em tabelas-irmãs 1:1, escritos junto via `writeTransaction` no `AccountRepository` |
+| Adicionar formato de importação novo | `GranaAi/Core/Import/<Formato>Reader.swift` + ramo em `ImportStore.loadFile` + extensão em `ImportStore.supportedExtensions` + novo `*ReviewStepView` em `Features/Import/Steps/` |
 | Adicionar categoria/subcategoria padrão | `GranaAi/Core/Database/CategorySeedData.swift` |
 | Adicionar ícone novo de categoria | `GranaAi/Models/Category.swift` (enum `CategoryIcon`) + `GranaAi/Shared/Components/CategoryIcon+Color.swift` |
 | Adicionar ícone de UI (toolbar, empty state, ação) | `GranaAi/Shared/Components/AppIcon.swift` (enum `AppIcon`) — nunca usar string literal de SF Symbol direto na View |
 | Adicionar instituição "rica" (logo + auto-detect) | `GranaAi/Models/Institution.swift` (enum `InstitutionKind`) + `GranaAi/Core/Database/Seed.swift` (seed) |
 | Adicionar cor do tema | `GranaAi/Resources/Assets.xcassets/<Nome>.colorset/` (variante dark obrigatória) — Xcode gera o `Color.<nome>` automático |
+| Adicionar categoria de log nova | `GranaAi/Core/Logging/Logger.swift` (struct `Log`). Categorias atuais: `database`, `sync`, `network`, `ui`, `ai`, `import` |
 | Mudar filtros de período | `GranaAi/Models/PeriodFilter.swift` |
 | Mudar layout do dashboard | `GranaAi/Features/Dashboard/DashboardView.swift` + `Charts/` |
 
-## Tratamento de erros
+## Feedback ao usuário (toasts)
 
-Sistema centralizado em `GranaAi/Core/ErrorHandling/`. **Toda falha visível pro usuário passa pelo `ErrorCenter`**, que mantém uma fila de toasts renderizada no canto superior-direito da janela via `.errorToastOverlay()` (plugado uma única vez em `ContentView`).
+Sistema centralizado em `GranaAi/Core/ErrorHandling/NoticeCenter.swift`. **Toda comunicação visível pro usuário passa pelo `NoticeCenter`** — fila de toasts no canto superior-direito da janela, plugada uma única vez em `ContentView` via `.noticeOverlay()`.
+
+Três categorias com timeout e cor distintos:
+
+| Kind | Cor | Timeout (sem ações) | Timeout (com ações) | Quando usar |
+|---|---|---|---|---|
+| `error` | vermelho | 6s | 6s | Falhas visíveis pro usuário. |
+| `success` | verde | 4s | 10s | Confirmação de operação concluída (ex: import). |
+| `info` | neutro | 5s | 10s | Avisos não-críticos (ex: input ajustado, comportamento inesperado mas não-falha). |
 
 **Como reportar:**
 
 ```swift
-// MainActor (Stores, Views, callers que já estão no main):
-ErrorCenter.shared.report(error)                          // título derivado do tipo
-ErrorCenter.shared.report(error, title: "Falha ao X")     // título custom
-ErrorCenter.shared.report(title: "Aviso", message: "...") // sem Error tipado
+// Erros
+NoticeCenter.shared.report(error)                          // título derivado do tipo
+NoticeCenter.shared.report(error, title: "Falha ao X")     // título custom
+NoticeCenter.shared.report(title: "Aviso", message: "...") // sem Error tipado
+
+// Sucesso (toast verde, opcionalmente com ações)
+NoticeCenter.shared.success(title: "Importação concluída", message: "12 transações em 1 lote.")
+NoticeCenter.shared.success(title: "...", actions: [
+    .init(title: "Desfazer", role: .destructive) { /* … */ }
+])
+
+// Info (toast neutro)
+NoticeCenter.shared.info(title: "Vários arquivos", message: "Importando só o primeiro.")
 
 // Contexto não-MainActor (services Sendable, callbacks de SDK):
-ErrorCenter.capture(error, title: "Falha ao X")           // faz hop pro main internamente
+NoticeCenter.capture(error, title: "Falha ao X")           // faz hop pro main internamente
 ```
+
+**Ações inline** (`NoticeCenter.Action`): botões clicáveis dentro do card, role `.default` (azul) ou `.destructive` (vermelho). Clicar dispara o handler e dispensa a notice. Usar pra "Desfazer" pós-import, etc. Notices **com** ações **não** deduplicam — disparos repetidos viram cards separados.
 
 **Regra de ouro por tipo de `catch`:**
 
@@ -99,15 +123,15 @@ ErrorCenter.capture(error, title: "Falha ao X")           // faz hop pro main in
 | Reage a erro já reportado por outro lugar | `log.X.notice(...)` (não `.error`) pra evitar toast duplicado. |
 | `catch is CancellationError` | Silencioso. `.task` cancelado = comportamento esperado. |
 
-**O `ErrorCenter` já cuida sozinho de:**
+**O `NoticeCenter` cuida sozinho de:**
 - Filtrar `CancellationError` (não vira toast).
-- Dedup de toasts iguais em janela <1s (evita spam quando stream falha em loop).
-- Auto-dismiss em 6s.
-- Logar tudo em `log.ui.error` automaticamente — **não duplicar `log.X.error` antes de reportar**.
+- Dedup de notices iguais em janela <1s (só pra notices **sem** ações — evita spam quando stream falha em loop).
+- Auto-dismiss com timeout por kind.
+- Logar tudo em `log.ui` (`.error` pra `Kind.error`, `.info` pros demais), com mensagem em `privacy: .private` — **não duplicar `log.X.error` antes de reportar**.
 
 **O que NÃO dá pra capturar:** logs do CFNetwork/AppKit/sandbox que aparecem no Console (`networkd_settings`, `nw_resolver`, `Task <…> HTTP load failed`, `layoutSubtreeIfNeeded`). Não são `Error` Swift — são `os_log` direto do sistema. O `URLError` real correspondente chega como exceção e esse sim é reportado.
 
-**Criar um erro novo:** estenda os enums por domínio em `Core/{Database,Import,Networking}/<Domain>Error.swift`. Todos conformam a `LocalizedError` com mensagens em PT-BR. Opcionalmente conformar a `UserFacingError` se quiser controlar o título do toast (default: nome legível do tipo, ex: "Erro no banco", "Erro na importação").
+**Criar um erro novo:** estenda os enums por domínio em `Core/{Database,Import,Networking}/<Domain>Error.swift`. Todos conformam a `LocalizedError` com mensagens em PT-BR. Opcionalmente conformar a `UserFacingError` (em `Core/ErrorHandling/AppError.swift`) se quiser controlar o título do toast (default: nome legível do tipo, ex: "Erro no banco", "Erro na importação").
 
 ## Antes de codar (checklist)
 
