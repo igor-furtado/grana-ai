@@ -30,11 +30,11 @@ struct CategoriesView: View {
     var body: some View {
         Group {
             if let loadError {
-                ContentUnavailableView {
-                    Label("Erro ao carregar categorias", systemImage: AppIcon.warning.systemImage)
-                } description: {
-                    Text(loadError.localizedDescription)
-                }
+                EmptyStateView(
+                    "Não foi possível carregar",
+                    icon: .warning,
+                    description: loadError.localizedDescription
+                )
             } else if categories.isEmpty {
                 ProgressView()
             } else {
@@ -143,7 +143,7 @@ struct CategoriesView: View {
 
     private var inspectorPlaceholder: some View {
         VStack(spacing: Spacing.md) {
-            Image(systemName: AppIcon.categoryPlaceholder.systemImage)
+            Image(systemName: AppIcon.sidebarCategories.systemImage)
                 .font(.system(size: 32))
                 .foregroundStyle(.tertiary)
             Text("Selecione uma categoria")
@@ -212,7 +212,9 @@ private struct CategoryGroup: Identifiable {
     let root: Category
     let subs: [Category]
 
-    var id: UUID { root.id }
+    var id: UUID {
+        root.id
+    }
 }
 
 /// Card uniforme de uma categoria raiz. Altura fixa pra manter ritmo visual

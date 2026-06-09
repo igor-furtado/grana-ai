@@ -21,10 +21,10 @@ struct CategoryBarChart: View {
             // a largura disponível — sem isso ele toma só a largura intrínseca
             // do conteúdo e o `VStack(alignment: .leading)` do chartCard pai
             // alinha tudo à esquerda em vez de centralizar.
-            ContentUnavailableView(
+            EmptyStateView(
                 "Sem gastos no período",
-                systemImage: AppIcon.categoryRankingEmpty.systemImage,
-                description: Text("Adicione transações pra ver o ranking por categoria.")
+                icon: .chartCategoryRanking,
+                description: "Adicione transações pra ver o ranking."
             )
             .frame(maxWidth: .infinity)
         } else {

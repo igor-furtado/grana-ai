@@ -21,8 +21,13 @@ struct CreditCardDetailView: View {
     @State private var selectedStatementId: UUID?
     @State private var showDeleteConfirm = false
 
-    private var institution: Institution? { store.institution(forAccount: account) }
-    private var details: CreditCardDetails? { store.creditCard(for: account.id) }
+    private var institution: Institution? {
+        store.institution(forAccount: account)
+    }
+
+    private var details: CreditCardDetails? {
+        store.creditCard(for: account.id)
+    }
 
     /// Faturas reais (persistidas) do cartão, ordenadas cronologicamente
     /// — base pra timeline e pra resolver a "anterior / atual / próxima"
@@ -197,14 +202,18 @@ struct CreditCardDetailView: View {
         .help(help)
     }
 
-    private var bankName: String { institution?.name ?? "Cartão" }
+    private var bankName: String {
+        institution?.name ?? "Cartão"
+    }
 
     private var maskedNumber: String {
         guard let last4 = details?.cardLastFour, last4.count == 4 else { return "Cartão" }
         return "•••• \(last4)"
     }
 
-    private var displayName: String { "\(bankName) · \(maskedNumber)" }
+    private var displayName: String {
+        "\(bankName) · \(maskedNumber)"
+    }
 
     /// "Melhor dia de compra" = dia seguinte ao fechamento. Faz a compra
     /// começar o ciclo no dia 1 — maior prazo até o vencimento. Só faz
@@ -219,7 +228,6 @@ struct CreditCardDetailView: View {
 
     // MARK: - Transactions block
 
-    @ViewBuilder
     private var transactionsBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -234,7 +242,8 @@ struct CreditCardDetailView: View {
             }
 
             if let selectedId = selectedStatementId,
-               statements.contains(where: { $0.id == selectedId }) {
+               statements.contains(where: { $0.id == selectedId })
+            {
                 StatementTransactionsList(
                     statementId: selectedId,
                     container: store.container
@@ -296,7 +305,9 @@ private struct LimitGaugeBlock: View {
         return .danger
     }
 
-    private var available: Decimal { max(0, limit - used) }
+    private var available: Decimal {
+        max(0, limit - used)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -577,7 +588,7 @@ private struct StatementCyclePanel: View {
     private var ordered: [CycleItem] {
         var items: [CycleItem] = statements.map { .statement($0) }
         items.append(contentsOf: projections.map { .projection($0) })
-        return items.sorted { (a, b) -> Bool in
+        return items.sorted { a, b -> Bool in
             (a.closingDate ?? .distantPast) < (b.closingDate ?? .distantPast)
         }
     }

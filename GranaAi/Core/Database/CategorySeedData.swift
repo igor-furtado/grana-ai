@@ -254,7 +254,6 @@ nonisolated enum CategorySeedData {
             "Pendente de Revisão",
         ]),
 
-
         // MARK: - Transferências
 
         CategorySeedDefinition(slug: "transferencias", name: "Transferências", kind: .transfer, subcategories: [

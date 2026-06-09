@@ -274,9 +274,11 @@ struct TransactionFormView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Text("\(totalDecimal.formatted(.currency(code: "BRL"))) de \(transferDecimal.formatted(.currency(code: "BRL")))")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(isOver ? .danger : (isExact ? .success : .secondary))
+            Text(
+                "\(totalDecimal.formatted(.currency(code: "BRL"))) de \(transferDecimal.formatted(.currency(code: "BRL")))"
+            )
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(isOver ? .danger : (isExact ? .success : .secondary))
         }
     }
 
@@ -294,9 +296,13 @@ struct TransactionFormView: View {
 
     private var footerText: Text {
         if splitMode {
-            return Text("Distribua o valor da transferência entre as Faturas. A soma não precisa cobrir o total, mas não pode passar.")
+            return Text(
+                "Distribua o valor da transferência entre as Faturas. A soma não precisa cobrir o total, mas não pode passar."
+            )
         }
-        return Text("A transferência vai aplicar o valor cheio à Fatura selecionada. Ative o modo split pra dividir entre várias.")
+        return Text(
+            "A transferência vai aplicar o valor cheio à Fatura selecionada. Ative o modo split pra dividir entre várias."
+        )
     }
 
     // MARK: - Save

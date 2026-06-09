@@ -231,11 +231,7 @@ private struct FailedStepView: View {
     let onClose: () -> Void
 
     var body: some View {
-        ContentUnavailableView {
-            Label("Algo deu errado", systemImage: AppIcon.warning.systemImage)
-        } description: {
-            Text(message)
-        } actions: {
+        EmptyStateView("A importação falhou", icon: .warning, description: message) {
             HStack(spacing: 12) {
                 Button("Fechar") { onClose() }
                     .keyboardShortcut(.cancelAction)

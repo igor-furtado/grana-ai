@@ -273,9 +273,9 @@ final class AccountStore {
         copy.updatedAt = Date()
         // Repassa os details existentes pra `update` não dropar eles no
         // delete-then-insert da tabela-irmã.
-        let bank = self.bankDetails.first { $0.accountId == account.id }
+        let bank = bankDetails.first { $0.accountId == account.id }
             .map { BankAccountDetailsInput(branchId: $0.branchId, accountNumber: $0.accountNumber) }
-        let card = self.creditCards.first { $0.accountId == account.id }
+        let card = creditCards.first { $0.accountId == account.id }
             .map {
                 CreditCardDetailsInput(
                     cardLastFour: $0.cardLastFour,

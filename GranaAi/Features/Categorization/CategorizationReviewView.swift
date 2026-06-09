@@ -181,10 +181,10 @@ struct CategorizationReviewView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ContentUnavailableView(
-                "Nada para revisar",
-                systemImage: AppIcon.success.systemImage,
-                description: Text("Não há sugestões pendentes.")
+            EmptyStateView(
+                "Tudo categorizado",
+                icon: .success,
+                description: "Sem sugestões pendentes pra revisar."
             )
         }
     }

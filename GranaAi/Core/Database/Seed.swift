@@ -13,11 +13,13 @@ enum Seed {
     /// Usado pela UI ("Sincronizar categorias padrão") pra dar feedback do
     /// que efetivamente foi inserido — diferenciando "tudo já estava lá"
     /// de "entraram X coisas novas".
-    struct SyncResult: Sendable {
+    struct SyncResult {
         let rootsAdded: Int
         let subcategoriesAdded: Int
 
-        var didChange: Bool { rootsAdded > 0 || subcategoriesAdded > 0 }
+        var didChange: Bool {
+            rootsAdded > 0 || subcategoriesAdded > 0
+        }
     }
 
     static func runIfNeeded(container: AppContainer) async throws {

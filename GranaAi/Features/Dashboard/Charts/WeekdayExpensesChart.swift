@@ -33,10 +33,10 @@ struct WeekdayExpensesChart: View {
 
     var body: some View {
         if totals.isEmpty {
-            ContentUnavailableView(
+            EmptyStateView(
                 "Sem gastos no período",
-                systemImage: AppIcon.calendar.systemImage,
-                description: Text("Adicione transações pra ver o padrão semanal.")
+                icon: .chartWeekday,
+                description: "Adicione transações pra ver o padrão semanal."
             )
             .frame(maxWidth: .infinity)
         } else {

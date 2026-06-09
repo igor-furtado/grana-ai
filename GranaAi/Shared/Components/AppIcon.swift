@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// Catálogo central de SF Symbols usados como **chrome de UI** (toolbars,
-/// empty states, métricas, feedback de status). Ícones de **domínio** vivem
-/// nos enums das próprias entidades — `CategoryIcon` (categoria),
-/// `InstitutionKind` (instituição), `AppSection` (tab/sidebar).
+/// Catálogo central de SF Symbols usados como **chrome de UI** (sidebar nav,
+/// toolbars, empty states, métricas, feedback de status). Ícones de **domínio**
+/// vivem nos enums das próprias entidades — `CategoryIcon` (categoria),
+/// `InstitutionKind` (instituição).
 ///
 /// **Por que centralizar:** strings cruas de SF Symbol espalhadas pelas Views
 /// criam três problemas — typo silencioso (só descobre em runtime, ícone some),
@@ -26,6 +26,7 @@ enum AppIcon {
     case archive
     case unarchive
     case sort
+    case inspectorToggle
 
     // MARK: - Métricas / dashboard
 
@@ -33,6 +34,16 @@ enum AppIcon {
     case expenseFlow
     case incomeFlow
     case netResult
+
+    // MARK: - Empty states de charts do dashboard
+    //
+    // Um ícone por chart, escolhido pelo eixo semântico do gráfico — assim
+    // três cards de chart vazios lado a lado mantêm pistas visuais distintas
+    // do que cada um exibiria com dados.
+
+    case chartCategoryRanking
+    case chartIncomeExpense
+    case chartWeekday
 
     // MARK: - Feedback de status
 
@@ -45,17 +56,21 @@ enum AppIcon {
     case invalidDate
     case invalidAmount
 
-    // MARK: - Empty states / conteúdo
+    // MARK: - Sidebar / Seções
 
-    case walletEmpty
-    case transactionsList
-    case inbox
-    case chart
-    case categoryRankingEmpty
-    case categoryPlaceholder
-    case calendar
-    case institution
-    case inspectorToggle
+    case sidebarDashboard
+    case sidebarSummary
+    case sidebarTransactions
+    case sidebarCreditCards
+    case sidebarAccounts
+    case sidebarPlanning
+    case sidebarSavings
+    case sidebarInvestments
+    case sidebarImport
+    case sidebarCategorization
+    case sidebarCategories
+    case sidebarInstitutions
+    case sidebarAdvanced
 
     // MARK: - Tema
 
@@ -74,11 +89,16 @@ enum AppIcon {
         case .archive: "archivebox"
         case .unarchive: "tray.and.arrow.up"
         case .sort: "chevron.up.chevron.down"
+        case .inspectorToggle: "sidebar.right"
         // Métricas
         case .balance: "wallet.pass.fill"
         case .expenseFlow: "arrow.down.right.circle.fill"
         case .incomeFlow: "arrow.up.right.circle.fill"
         case .netResult: "chart.line.uptrend.xyaxis"
+        // Charts do dashboard
+        case .chartCategoryRanking: "chart.bar.xaxis"
+        case .chartIncomeExpense: "arrow.up.arrow.down"
+        case .chartWeekday: "calendar"
         // Status
         case .success: "checkmark.circle.fill"
         case .warning: "exclamationmark.triangle.fill"
@@ -88,16 +108,20 @@ enum AppIcon {
         case .completedSeal: "checkmark.seal.fill"
         case .invalidDate: "calendar.badge.exclamationmark"
         case .invalidAmount: "dollarsign.circle.trianglebadge.exclamationmark"
-        // Conteúdo / empty
-        case .walletEmpty: "wallet.pass"
-        case .transactionsList: "list.bullet.rectangle"
-        case .inbox: "tray"
-        case .chart: "chart.bar"
-        case .categoryRankingEmpty: "chart.bar.fill"
-        case .categoryPlaceholder: "tag"
-        case .calendar: "calendar"
-        case .institution: "building.columns"
-        case .inspectorToggle: "sidebar.right"
+        // Sidebar
+        case .sidebarDashboard: "chart.pie"
+        case .sidebarSummary: "doc.text"
+        case .sidebarTransactions: "list.bullet"
+        case .sidebarCreditCards: "creditcard"
+        case .sidebarAccounts: "building.columns"
+        case .sidebarPlanning: "trophy"
+        case .sidebarSavings: "mountain.2"
+        case .sidebarInvestments: "chart.line.uptrend.xyaxis"
+        case .sidebarImport: "tray.and.arrow.down"
+        case .sidebarCategorization: "sparkles"
+        case .sidebarCategories: "tag"
+        case .sidebarInstitutions: "building.columns"
+        case .sidebarAdvanced: "wrench.and.screwdriver"
         // Tema
         case .themeLight: "sun.max"
         case .themeDark: "moon"

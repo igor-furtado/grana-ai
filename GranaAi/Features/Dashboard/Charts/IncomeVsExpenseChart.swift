@@ -50,10 +50,10 @@ struct IncomeVsExpenseChart: View {
 
     var body: some View {
         if totals.isEmpty {
-            ContentUnavailableView(
-                "Sem dados de receita/despesa",
-                systemImage: AppIcon.chart.systemImage,
-                description: Text("Adicione transações pra comparar entradas e saídas mês a mês.")
+            EmptyStateView(
+                "Sem dados no período",
+                icon: .chartIncomeExpense,
+                description: "Adicione transações pra comparar entradas e saídas."
             )
             .frame(maxWidth: .infinity)
         } else {

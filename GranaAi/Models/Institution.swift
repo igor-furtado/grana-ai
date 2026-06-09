@@ -4,7 +4,7 @@ import SwiftUI
 /// Instituição financeira (banco / corretora). Várias `Account` podem
 /// referenciar a mesma — uma corrente + uma poupança no mesmo banco
 /// compartilham a Institution.
-struct Institution: Identifiable, Codable, Hashable, Sendable {
+struct Institution: Identifiable, Codable, Hashable {
     let id: UUID
     /// Código FEBRABAN/COMPE (3 dígitos, ex: "077" para o Inter). É o que o
     /// OFX traz em `<FI><FID>` ou `<BANKID>`.
@@ -25,7 +25,7 @@ struct Institution: Identifiable, Codable, Hashable, Sendable {
 /// no código garante consistência visual sem ficar dependendo de seed/import.
 /// Quando um banco novo precisa de suporte rico, adicionar um caso aqui é
 /// uma linha; bancos não listados continuam funcionando via `.other`.
-enum InstitutionKind: String, Codable, CaseIterable, Sendable {
+enum InstitutionKind: String, Codable, CaseIterable {
     case inter
     case itau
     case bb

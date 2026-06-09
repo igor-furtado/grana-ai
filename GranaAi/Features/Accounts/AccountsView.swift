@@ -64,12 +64,19 @@ struct AccountsView: View {
         }
     }
 
+    @ViewBuilder
     private func content(store: AccountStore) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                listOrEmpty(store: store)
+        let visibleAccounts = visible(store: store)
+        Group {
+            if visibleAccounts.isEmpty {
+                // Fora do `ScrollView` pra que `maxHeight: .infinity` centralize
+                // verticalmente no espaço disponível — dentro de um ScrollView
+                // a altura é intrínseca e o estado vazio gruda no topo.
+                emptyState
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                grid(store: store, accounts: visibleAccounts)
             }
-            .padding(20)
         }
         // Form sheet aparece centralizado e dimming no fundo — padrão macOS
         // pra create/edit. `.sheet(item:)` re-monta o conteúdo a cada novo
@@ -82,6 +89,30 @@ struct AccountsView: View {
                 onSaved: { formMode = nil }
             )
             .environment(store)
+        }
+    }
+
+    private func grid(store: AccountStore, accounts: [Account]) -> some View {
+        ScrollView {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 240, maximum: 340), spacing: 16)],
+                spacing: 16
+            ) {
+                ForEach(accounts) { account in
+                    AccountCard(
+                        account: account,
+                        displayName: store.displayName(for: account),
+                        institution: store.institution(forAccount: account),
+                        currentBalance: store.currentBalance(for: account),
+                        onEdit: { formMode = .edit(account) },
+                        onDelete: { Task { try? await store.delete(id: account.id) } },
+                        onToggleArchive: {
+                            Task { try? await store.setArchived(account, archived: !account.archived) }
+                        }
+                    )
+                }
+            }
+            .padding(20)
         }
     }
 
@@ -100,73 +131,20 @@ struct AccountsView: View {
         store?.accounts.contains { $0.type == .checking && $0.archived } ?? false
     }
 
-    @ViewBuilder
-    private func listOrEmpty(store: AccountStore) -> some View {
-        let visibleAccounts = visible(store: store)
-        if visibleAccounts.isEmpty {
-            emptyState
-        } else {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 240, maximum: 340), spacing: 16)],
-                spacing: 16
-            ) {
-                ForEach(visibleAccounts) { account in
-                    AccountCard(
-                        account: account,
-                        displayName: store.displayName(for: account),
-                        institution: store.institution(forAccount: account),
-                        currentBalance: store.currentBalance(for: account),
-                        onEdit: { formMode = .edit(account) },
-                        onDelete: { Task { try? await store.delete(id: account.id) } },
-                        onToggleArchive: {
-                            Task { try? await store.setArchived(account, archived: !account.archived) }
-                        }
-                    )
-                }
-            }
-        }
-    }
-
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: AppIcon.institution.systemImage)
-                .font(.system(size: 36))
-                .foregroundStyle(.secondary)
-            Text("Nenhuma conta cadastrada")
-                .font(.title3.weight(.semibold))
-            Text(
-                "Cadastre as contas correntes que você usa (Inter, Nubank, XP, etc.) para vincular transações e organizar suas movimentações. Cartões de crédito têm tela própria."
-            )
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: 420)
+        EmptyStateView(
+            "Sem contas por aqui",
+            icon: .sidebarAccounts,
+            description: "Cadastre as contas correntes que você usa (Inter, Nubank, XP, etc.) pra vincular transações e organizar suas movimentações. Cartões de crédito têm tela própria."
+        ) {
             Button {
                 formMode = .create
             } label: {
                 Label("Cadastrar primeira conta", systemImage: AppIcon.add.systemImage)
-                    .font(.callout.weight(.medium))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.brandSecondary)
-                    )
-                    .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderedProminent)
             .disabled(formMode != nil)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-        .padding(.horizontal, 20)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(
-                    Color.secondary.opacity(0.3),
-                    style: StrokeStyle(lineWidth: 1, dash: [6, 4])
-                )
-        )
     }
 
     private func visible(store: AccountStore) -> [Account] {

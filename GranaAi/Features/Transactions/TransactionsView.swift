@@ -39,10 +39,10 @@ struct TransactionsView: View {
         list(store: store)
             .overlay {
                 if store.transactions.isEmpty && !store.isLoading {
-                    ContentUnavailableView(
-                        "Sem transações",
-                        systemImage: AppIcon.transactionsList.systemImage,
-                        description: Text("Toque em + pra adicionar a primeira.")
+                    EmptyStateView(
+                        "Sem transações ainda",
+                        icon: .sidebarTransactions,
+                        description: "Adicione uma manualmente ou importe um extrato."
                     )
                 }
             }

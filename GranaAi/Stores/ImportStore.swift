@@ -799,7 +799,10 @@ final class ImportStore {
             // Limpa estado em voo agora que tudo foi commitado.
             clearPendingState()
 
-            log.`import`.info("Import concluído: \(totalRows, privacy: .public) linhas em \(batchIds.count, privacy: .public) lote(s)")
+            log.import
+                .info(
+                    "Import concluído: \(totalRows, privacy: .public) linhas em \(batchIds.count, privacy: .public) lote(s)"
+                )
 
             // Confirmação pelo NoticeCenter (toast verde + botão de undo).
             // Substitui o antigo `DoneStepView`: feedback persiste mesmo após o
@@ -837,7 +840,7 @@ final class ImportStore {
                                 }
                             }
                         }
-                    }
+                    },
                 ]
             )
 
@@ -923,7 +926,9 @@ struct CSVStatementResolution: Equatable {
     /// auditar o que foi filtrado.
     let skippedNegatives: [InterCreditCardCSVReader.SkippedRow]
 
-    var skippedNegativeCount: Int { skippedNegatives.count }
+    var skippedNegativeCount: Int {
+        skippedNegatives.count
+    }
 
     var selectedCount: Int {
         rows.filter(\.selected).count

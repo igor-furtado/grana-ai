@@ -52,21 +52,23 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
         }
     }
 
-    var systemImage: String {
+    /// Ícone da seção. Delega pro `AppIcon` (catálogo central de chrome de UI)
+    /// pra manter strings de SF Symbol num único lugar e evitar typos.
+    var icon: AppIcon {
         switch self {
-        case .dashboard: "chart.pie"
-        case .summary: "doc.text"
-        case .transactions: "list.bullet.rectangle"
-        case .creditCards: "creditcard"
-        case .accounts: "wallet.pass"
-        case .planning: "target"
-        case .savings: "banknote"
-        case .investments: "chart.line.uptrend.xyaxis"
-        case .import: "tray.and.arrow.down"
-        case .categorization: "sparkles"
-        case .categories: "tag"
-        case .institutions: "building.columns"
-        case .advanced: "wrench.and.screwdriver"
+        case .dashboard: .sidebarDashboard
+        case .summary: .sidebarSummary
+        case .transactions: .sidebarTransactions
+        case .creditCards: .sidebarCreditCards
+        case .accounts: .sidebarAccounts
+        case .planning: .sidebarPlanning
+        case .savings: .sidebarSavings
+        case .investments: .sidebarInvestments
+        case .import: .sidebarImport
+        case .categorization: .sidebarCategorization
+        case .categories: .sidebarCategories
+        case .institutions: .sidebarInstitutions
+        case .advanced: .sidebarAdvanced
         }
     }
 }
@@ -277,10 +279,10 @@ struct ContentView: View {
     }
 
     private func placeholder(for section: AppSection) -> some View {
-        ContentUnavailableView(
-            section.title,
-            systemImage: section.systemImage,
-            description: Text("Entra em uma fase futura do roadmap.")
+        EmptyStateView(
+            "Em breve",
+            icon: section.icon,
+            description: "Esta seção entra numa próxima atualização."
         )
     }
 }
@@ -299,7 +301,7 @@ private struct SidebarRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Image(systemName: section.systemImage)
+                Image(systemName: section.icon.systemImage)
                     .font(.body)
                     .frame(width: 18)
                 Text(section.title)

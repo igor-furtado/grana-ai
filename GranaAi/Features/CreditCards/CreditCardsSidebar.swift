@@ -118,7 +118,9 @@ struct CreditCardsSidebar: View {
         return max(0, min(1, debt / limit))
     }
 
-    private var currency: String { cards.first?.currency ?? "BRL" }
+    private var currency: String {
+        cards.first?.currency ?? "BRL"
+    }
 
     private func usageColor(for pct: Double) -> Color {
         if pct < 0.30 { return .success }
@@ -219,14 +221,18 @@ private struct SidebarCardRow: View {
             }
     }
 
-    private var bankName: String { institution?.name ?? "Cartão" }
+    private var bankName: String {
+        institution?.name ?? "Cartão"
+    }
 
     private var maskedNumber: String {
         guard let last4 = details?.cardLastFour, last4.count == 4 else { return "" }
         return "•••• \(last4)"
     }
 
-    private var debtMagnitude: Decimal { currentBalance.magnitude }
+    private var debtMagnitude: Decimal {
+        currentBalance.magnitude
+    }
 
     private var limitPercent: Double? {
         guard let limit = details?.creditLimit, limit > 0 else { return nil }

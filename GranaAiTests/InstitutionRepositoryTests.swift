@@ -146,7 +146,7 @@ struct AccountRepositoryBankIdentityTests {
         )
         try #require(found != nil)
 
-        let details = try await repo.bankDetails(for: found!.id)
+        let details = try await repo.bankDetails(for: #require(found?.id))
         #expect(details?.accountNumber == "333")
 
         try await db.close()

@@ -238,6 +238,12 @@ struct ImportHistoryView: View {
 /// genérico, ele é **o próprio drop target visual** — borda tracejada
 /// permanente que se destaca durante o drag-over pra reforçar que arrastar
 /// arquivos funciona aqui.
+///
+/// **Por que não deriva de `EmptyStateView`:** não é um anúncio passivo de
+/// vazio — é um drop target interativo com animação e highlight de drag-over,
+/// que precisa de vocabulário visual próprio (`symbolEffect`, stroke animado,
+/// fill que reage ao `isTargeted`). Caber isso no `EmptyStateView` diluiria
+/// as duas APIs.
 private struct EmptyStateDropZone: View {
     let isHighlighted: Bool
     let onBrowse: () -> Void

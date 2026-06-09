@@ -35,7 +35,9 @@ struct Statement: Identifiable, Codable, Hashable {
     let createdAt: Date
     var updatedAt: Date
 
-    var isPaid: Bool { paidAt != nil }
+    var isPaid: Bool {
+        paidAt != nil
+    }
 }
 
 /// Aplicação de uma transferência sobre uma Fatura. Modela o N:N — uma

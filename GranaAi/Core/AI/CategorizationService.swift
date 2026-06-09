@@ -33,7 +33,7 @@ final class CategorizationService: Sendable {
     /// Thresholds usados pelo UI pra agrupar sugestões em alta/média/baixa.
     /// `absoluteMinimum` ainda é usado: AI retornando confidence abaixo dele
     /// cai como fallback (não pode poluir cache nem virar sugestão "real").
-    struct ConfidenceThresholds: Hashable, Sendable {
+    struct ConfidenceThresholds: Hashable {
         var autoApproved: Double = 0.85
         var reviewRequired: Double = 0.70
         var absoluteMinimum: Double = 0.30
@@ -46,7 +46,7 @@ final class CategorizationService: Sendable {
     ///
     /// Não persistimos cache durante o classify pra preservar atomicidade —
     /// se o usuário cancelar o import, nada deve sobrar no banco.
-    struct DraftClassificationResult: Sendable {
+    struct DraftClassificationResult {
         let suggestions: [CategorizationSuggestion]
         /// Uma entrada por hash distinto que veio da IA com confidence ≥
         /// absoluteMinimum. Cache hits não geram nova entrada (já existem).
@@ -90,7 +90,7 @@ final class CategorizationService: Sendable {
 
     typealias ProgressHandler = @Sendable (Progress) -> Void
 
-    enum Progress: Sendable {
+    enum Progress {
         case started(total: Int)
         case cacheChecked(hits: Int, misses: Int)
         case aiCallStarted(misses: Int)
@@ -717,7 +717,7 @@ private extension Array {
 
 /// Estrutura de lookup compilada a partir das `categories` carregadas.
 /// Mapeia slug ↔ UUID e nome de subcategoria → UUID dentro de cada raiz.
-private struct Taxonomy: Sendable {
+private struct Taxonomy {
     let fallbackCategoryId: UUID?
 
     private let slugToUUID: [String: UUID]

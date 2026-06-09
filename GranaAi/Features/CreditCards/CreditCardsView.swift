@@ -105,7 +105,8 @@ struct CreditCardsView: View {
             .frame(minWidth: 240, idealWidth: 280, maxWidth: 360)
 
             if let selectedId = selectedCardId,
-               let account = cards.first(where: { $0.id == selectedId }) {
+               let account = cards.first(where: { $0.id == selectedId })
+            {
                 CreditCardDetailView(
                     account: account,
                     store: store,
@@ -163,49 +164,19 @@ struct CreditCardsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "creditcard.fill")
-                .font(.system(size: 36))
-                .foregroundStyle(.secondary)
-            Text("Nenhum cartão cadastrado")
-                .font(.title3.weight(.semibold))
-            Text(
-                """
-                Cadastre os cartões de crédito que você usa para detalhar \
-                as compras de cada fatura (dia de fechamento, dia de \
-                vencimento, limite opcional).
-                """
-            )
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: 420)
+        EmptyStateView(
+            "Sem cartões por aqui",
+            icon: .sidebarCreditCards,
+            description: "Cadastre os cartões de crédito que você usa pra acompanhar as faturas — dia de fechamento, vencimento e limite (opcional)."
+        ) {
             Button {
                 formMode = .create
             } label: {
                 Label("Cadastrar primeiro cartão", systemImage: AppIcon.add.systemImage)
-                    .font(.callout.weight(.medium))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.brandSecondary)
-                    )
-                    .foregroundStyle(.white)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderedProminent)
             .disabled(formMode != nil)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 40)
-        .padding(.horizontal, 20)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(
-                    Color.secondary.opacity(0.3),
-                    style: StrokeStyle(lineWidth: 1, dash: [6, 4])
-                )
-        )
     }
 
     private func visible(store: AccountStore) -> [Account] {
