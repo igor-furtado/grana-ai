@@ -156,8 +156,8 @@ struct ContentView: View {
         // altura mostra ~12 linhas de transação confortavelmente.
         .frame(minWidth: 1000, minHeight: 640)
         // Toasts globais de erro. Plugado aqui (raiz) pra cobrir qualquer
-        // tela. Stores e services reportam via `ErrorCenter.shared.report(_:)`.
-        .errorToastOverlay()
+        // tela. Stores e services reportam via `NoticeCenter.shared.report(_:)`.
+        .noticeOverlay()
     }
 
     private func toggleTheme() {

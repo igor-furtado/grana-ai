@@ -128,7 +128,7 @@ struct StatementTransactionsList: View {
             }
         } catch is CancellationError {
         } catch {
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -142,7 +142,7 @@ struct StatementTransactionsList: View {
             categoryById = Dictionary(uniqueKeysWithValues: categories.map { ($0.id, $0) })
         } catch {
             // Não bloqueante — sem categoria a row mostra só descrição.
-            ErrorCenter.capture(error, title: "Falha ao carregar categorias")
+            NoticeCenter.capture(error, title: "Falha ao carregar categorias")
         }
     }
 }

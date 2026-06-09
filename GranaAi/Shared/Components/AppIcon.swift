@@ -39,6 +39,7 @@ enum AppIcon {
     case success
     case warning
     case error
+    case info
     case unknown
     case completedSeal
     case invalidDate
@@ -82,6 +83,7 @@ enum AppIcon {
         case .success: "checkmark.circle.fill"
         case .warning: "exclamationmark.triangle.fill"
         case .error: "xmark.circle.fill"
+        case .info: "info.circle.fill"
         case .unknown: "questionmark.circle"
         case .completedSeal: "checkmark.seal.fill"
         case .invalidDate: "calendar.badge.exclamationmark"

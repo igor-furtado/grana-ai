@@ -35,6 +35,12 @@ final class ImportStore {
         case failed(message: String)
     }
 
+    /// Extensões aceitas pelo `loadFile`. Single source of truth — o drop
+    /// target em `ImportHistoryView` e qualquer outro callsite que precise
+    /// validar extensão consomem daqui pra não ficar fora de sincronia
+    /// quando um formato novo entrar.
+    static let supportedExtensions: Set<String> = ["ofx", "csv"]
+
     private let container: AppContainer
 
     private(set) var phase: Phase = .idle
@@ -137,7 +143,7 @@ final class ImportStore {
         case let .failed(message):
             // Mesmo em falha, deixa o usuário revisar — sugestões fallback
             // ainda permitem confirmar/corrigir manualmente. O erro
-            // original já foi reportado ao ErrorCenter pelo CategorizationStore;
+            // original já foi reportado ao NoticeCenter pelo CategorizationStore;
             // aqui é só um aviso de fluxo (info, não erro).
             log.ai.notice("Categorização falhou: \(message, privacy: .public). Avançando pra revisão com fallbacks.")
             phase = .reviewingCategorization
@@ -163,7 +169,7 @@ final class ImportStore {
             categories = try await container.categories.getAll()
             batches = try await container.importBatches.getAll()
         } catch {
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -192,7 +198,7 @@ final class ImportStore {
             }
         } catch is CancellationError {
         } catch {
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -203,7 +209,7 @@ final class ImportStore {
             }
         } catch is CancellationError {
         } catch {
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -214,7 +220,7 @@ final class ImportStore {
             }
         } catch is CancellationError {
         } catch {
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -225,7 +231,7 @@ final class ImportStore {
             }
         } catch is CancellationError {
         } catch {
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -236,7 +242,7 @@ final class ImportStore {
             }
         } catch is CancellationError {
         } catch {
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -256,7 +262,7 @@ final class ImportStore {
 
     func refreshBatches() async {
         do { batches = try await container.importBatches.getAll() }
-        catch { ErrorCenter.shared.report(error) }
+        catch { NoticeCenter.shared.report(error) }
     }
 
     func account(for id: UUID) -> Account? {
@@ -277,12 +283,8 @@ final class ImportStore {
             } else {
                 try await loadOFX(url: url)
             }
-        } catch let error as ImportError {
-            phase = .failed(message: error.localizedDescription)
-            ErrorCenter.shared.report(error)
         } catch {
-            phase = .failed(message: error.localizedDescription)
-            ErrorCenter.shared.report(error)
+            fail(with: error)
         }
     }
 
@@ -290,7 +292,20 @@ final class ImportStore {
     /// erro do `fileImporter` da SwiftUI (permissão negada, sandbox, etc.).
     /// Sem isso a UI ficava silenciosa quando o picker do sistema falhava.
     func reportFileImportFailure(_ error: Error) {
-        ErrorCenter.shared.report(error, title: "Erro ao abrir arquivo")
+        fail(with: error, title: "Erro ao abrir arquivo")
+    }
+
+    /// Helper único pra transição `→ .failed`: garante que o erro vai sempre
+    /// pro `NoticeCenter` (toast pro usuário) e o `phase` muda. Como o
+    /// `ImportView` fecha a sheet automaticamente em `.failed`, deixar de
+    /// reportar aqui vira tela escondida sem feedback nenhum. Centralizar
+    /// evita esquecer um caminho.
+    private func fail(with error: Error, title: String? = nil) {
+        if let title {
+            NoticeCenter.shared.report(error, title: title)
+        } else {
+            NoticeCenter.shared.report(error)
+        }
         phase = .failed(message: error.localizedDescription)
     }
 
@@ -318,7 +333,7 @@ final class ImportStore {
         ofxResolutions = resolutions
 
         if resolutions.allSatisfy({ $0.rows.isEmpty }) {
-            phase = .failed(message: ImportError.noValidRows.localizedDescription)
+            fail(with: ImportError.noValidRows)
             return
         }
         phase = .ofxReview
@@ -582,13 +597,13 @@ final class ImportStore {
         guard let resolution = csvResolution else { return }
 
         guard let accountId = resolution.accountId else {
-            phase = .failed(message: ImportError.accountNotSelected.localizedDescription)
+            fail(with: ImportError.accountNotSelected)
             return
         }
 
         let toImport = resolution.rows.filter { $0.selected }
         guard !toImport.isEmpty else {
-            phase = .failed(message: ImportError.noValidRows.localizedDescription)
+            fail(with: ImportError.noValidRows)
             return
         }
 
@@ -659,7 +674,7 @@ final class ImportStore {
                 resolution.accountId.map { (resolution, $0) }
             }
         guard resolved.count == ofxResolutions.count else {
-            phase = .failed(message: ImportError.accountNotSelected.localizedDescription)
+            fail(with: ImportError.accountNotSelected)
             return
         }
 
@@ -699,7 +714,7 @@ final class ImportStore {
         }
 
         if allDrafts.isEmpty {
-            phase = .failed(message: ImportError.noValidRows.localizedDescription)
+            fail(with: ImportError.noValidRows)
             return
         }
 
@@ -723,7 +738,7 @@ final class ImportStore {
         guard phase == .reviewingCategorization else { return }
 
         if pendingDrafts.isEmpty {
-            phase = .failed(message: ImportError.noValidRows.localizedDescription)
+            fail(with: ImportError.noValidRows)
             return
         }
 
@@ -784,13 +799,51 @@ final class ImportStore {
             // Limpa estado em voo agora que tudo foi commitado.
             clearPendingState()
 
+            log.`import`.info("Import concluído: \(totalRows, privacy: .public) linhas em \(batchIds.count, privacy: .public) lote(s)")
+
+            // Confirmação pelo NoticeCenter (toast verde + botão de undo).
+            // Substitui o antigo `DoneStepView`: feedback persiste mesmo após o
+            // wizard fechar, e o undo agregado ("Desfazer todos os lotes")
+            // continua ao alcance de um clique sem precisar passar pela tela
+            // de histórico.
+            //
+            // O closure captura `container.importBatches` direto (não `self`)
+            // porque a sheet vai fechar, o `ImportStore` do wizard vira
+            // candidato a dealloc, e o repository é safe pra usar em qualquer
+            // lugar — chamada idempotente do ponto de vista do banco.
+            //
+            // **Não-atômico por lote:** o loop deleta um batch por vez. Se a
+            // deleção do N-ésimo falhar, os N-1 anteriores já foram desfeitos
+            // e o usuário fica num estado parcial. Aceitável hoje porque (a)
+            // o caso comum é 1 lote e (b) cada batch é independente do ponto
+            // de vista do dashboard. Quando virar suporte multi-banco
+            // rotineiro, mover pro repo (`deleteMany(ids:)` em
+            // `writeTransaction`).
+            let importBatches = container.importBatches
+            NoticeCenter.shared.success(
+                title: "Importação concluída",
+                message: "\(totalRows) \(totalRows == 1 ? "transação importada" : "transações importadas") em \(batchIds.count) \(batchIds.count == 1 ? "lote" : "lotes").",
+                actions: [
+                    NoticeCenter.Action(
+                        title: batchIds.count == 1 ? "Desfazer" : "Desfazer todos",
+                        role: .destructive
+                    ) {
+                        Task {
+                            for id in batchIds {
+                                do {
+                                    try await importBatches.delete(id: id)
+                                } catch {
+                                    NoticeCenter.shared.report(error, title: "Falha ao desfazer importação")
+                                }
+                            }
+                        }
+                    }
+                ]
+            )
+
             phase = .done(batchIds: batchIds, rowCount: totalRows)
-        } catch let error as ImportError {
-            phase = .failed(message: error.localizedDescription)
-            ErrorCenter.shared.report(error)
         } catch {
-            phase = .failed(message: error.localizedDescription)
-            ErrorCenter.shared.report(error)
+            fail(with: error)
         }
     }
 
@@ -820,7 +873,7 @@ final class ImportStore {
             try await container.importBatches.delete(id: batchId)
             await refreshBatches()
         } catch {
-            ErrorCenter.shared.report(error, title: "Falha ao desfazer importação")
+            NoticeCenter.shared.report(error, title: "Falha ao desfazer importação")
         }
     }
 }

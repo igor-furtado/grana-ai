@@ -121,7 +121,7 @@ final class DashboardStore {
             lastError = nil
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 

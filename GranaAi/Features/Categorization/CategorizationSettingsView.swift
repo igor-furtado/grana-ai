@@ -189,7 +189,7 @@ struct CategorizationSettingsView: View {
                     await store.loadCategories()
                 }
             } catch {
-                ErrorCenter.shared.report(error, title: "Falha ao sincronizar categorias")
+                NoticeCenter.shared.report(error, title: "Falha ao sincronizar categorias")
             }
         }
     }

@@ -201,7 +201,7 @@ struct CategoriesView: View {
             // .task cancelado pela SwiftUI — comportamento esperado.
         } catch {
             loadError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 }

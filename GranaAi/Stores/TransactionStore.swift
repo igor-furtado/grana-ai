@@ -92,7 +92,7 @@ final class TransactionStore {
             // .task foi cancelado pela SwiftUI — comportamento esperado.
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -105,7 +105,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -118,7 +118,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -130,7 +130,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -142,7 +142,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -154,7 +154,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -166,7 +166,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -179,7 +179,7 @@ final class TransactionStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 

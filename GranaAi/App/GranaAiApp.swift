@@ -31,10 +31,10 @@ struct GranaAiApp: App {
                     do {
                         try await Seed.runIfNeeded(container: environment.container)
                     } catch {
-                        ErrorCenter.shared.report(error, title: "Falha no seed inicial")
+                        NoticeCenter.shared.report(error, title: "Falha no seed inicial")
                     }
                     if let setupError = environment.setupError {
-                        ErrorCenter.shared.report(setupError, title: "Falha ao iniciar o banco")
+                        NoticeCenter.shared.report(setupError, title: "Falha ao iniciar o banco")
                     }
                 }
         }

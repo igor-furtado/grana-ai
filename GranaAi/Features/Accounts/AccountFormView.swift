@@ -379,7 +379,7 @@ struct AccountFormView: View {
             onSaved()
         } catch {
             saveError = error.localizedDescription
-            ErrorCenter.shared.report(error, title: "Falha ao salvar conta")
+            NoticeCenter.shared.report(error, title: "Falha ao salvar conta")
         }
     }
 }

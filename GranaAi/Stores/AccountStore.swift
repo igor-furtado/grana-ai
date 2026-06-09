@@ -58,7 +58,7 @@ final class AccountStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -70,7 +70,7 @@ final class AccountStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -82,7 +82,7 @@ final class AccountStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -94,7 +94,7 @@ final class AccountStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -106,7 +106,7 @@ final class AccountStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -118,7 +118,7 @@ final class AccountStore {
         } catch is CancellationError {
         } catch {
             lastError = error
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 

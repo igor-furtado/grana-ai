@@ -69,7 +69,7 @@ final class CategorizationStore {
             accounts = try await accs
             institutions = try await insts
         } catch {
-            ErrorCenter.shared.report(error)
+            NoticeCenter.shared.report(error)
         }
     }
 
@@ -129,7 +129,7 @@ final class CategorizationStore {
                 self?.status = .idle
             } catch {
                 self?.status = .failed(message: error.localizedDescription)
-                ErrorCenter.shared.report(error, title: "Falha ao categorizar")
+                NoticeCenter.shared.report(error, title: "Falha ao categorizar")
             }
         }
     }
@@ -160,7 +160,7 @@ final class CategorizationStore {
                 self?.status = .idle
             } catch {
                 self?.status = .failed(message: error.localizedDescription)
-                ErrorCenter.shared.report(error, title: "Falha ao categorizar")
+                NoticeCenter.shared.report(error, title: "Falha ao categorizar")
             }
         }
     }
@@ -192,7 +192,7 @@ final class CategorizationStore {
                 try await container.categorization.confirmExistingSuggestion(suggestion)
                 suggestions[index].isReviewed = true
             } catch {
-                ErrorCenter.shared.report(error, title: "Falha ao confirmar sugestão")
+                NoticeCenter.shared.report(error, title: "Falha ao confirmar sugestão")
             }
         }
     }
@@ -245,7 +245,7 @@ final class CategorizationStore {
                     subcategoryId: correctedSubcategoryId
                 )
             } catch {
-                ErrorCenter.shared.report(error, title: "Falha ao aplicar correção")
+                NoticeCenter.shared.report(error, title: "Falha ao aplicar correção")
             }
         }
     }

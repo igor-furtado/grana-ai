@@ -1,7 +1,7 @@
 import Foundation
 
 /// Protocolo opcional pra erros que querem controlar o **título** exibido no
-/// toast global. Sem implementar, o `ErrorCenter` cai num título genérico
+/// toast global. Sem implementar, o `NoticeCenter` cai num título genérico
 /// derivado do tipo do erro ("DatabaseError", "ImportError", …).
 ///
 /// A *mensagem* sempre vem de `LocalizedError.errorDescription`, então os
@@ -12,7 +12,7 @@ protocol UserFacingError: LocalizedError {
     var errorTitle: String { get }
 }
 
-/// Tupla `(título, mensagem)` que o `ErrorCenter` consome.
+/// Tupla `(título, mensagem)` que o `NoticeCenter` consome.
 struct AppErrorPresentation: Equatable {
     let title: String
     let message: String

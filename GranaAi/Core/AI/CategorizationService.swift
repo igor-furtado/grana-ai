@@ -288,7 +288,7 @@ final class CategorizationService: Sendable {
             }
 
             // Agrega resultados de todos os chunks. Erros viram um único toast
-            // (em vez de N toasts pra N chunks falhos) — `ErrorCenter` faz
+            // (em vez de N toasts pra N chunks falhos) — `NoticeCenter` faz
             // dedup mas mesmo assim queremos ser explícitos.
             var failedCount = 0
             for outcome in outcomes {
@@ -336,7 +336,7 @@ final class CategorizationService: Sendable {
                 // `AIError` específico aqui mentiria sobre a categoria do erro.
                 let message = "\(failedCount) lote(s) caíram pro fallback. Veja o console pra detalhes."
                 Task { @MainActor in
-                    ErrorCenter.shared.report(title: title, message: message)
+                    NoticeCenter.shared.report(title: title, message: message)
                 }
             }
             progress?(.aiCallFinished)
@@ -567,7 +567,7 @@ final class CategorizationService: Sendable {
 
             guard let resolvedCategoryId = taxonomy.uuid(forSlug: result.categorySlug) else {
                 if reportedUnknownSlugs.insert(result.categorySlug).inserted {
-                    ErrorCenter.capture(AIError.unknownCategorySlug(result.categorySlug))
+                    NoticeCenter.capture(AIError.unknownCategorySlug(result.categorySlug))
                 }
                 continue
             }

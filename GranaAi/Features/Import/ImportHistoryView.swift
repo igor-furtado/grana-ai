@@ -1,15 +1,35 @@
 import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Tela "Importações" do menu lateral: lista visual de `ImportBatch` agrupada
 /// por período (Hoje / Ontem / Esta semana / Este mês / Mais antigos), com
 /// logo da instituição em cada card e botão de desfazer. Toolbar primária
 /// abre a `ImportView` em sheet modal.
+///
+/// **Drag & drop:** a tela inteira é um drop target. Arrastar um arquivo OFX
+/// ou CSV pra dentro abre o wizard com o arquivo já carregado, pulando o file
+/// picker do sistema. Tipos inválidos viram toast via `NoticeCenter` —
+/// usuário não fica olhando uma tela "que não fez nada".
 struct ImportHistoryView: View {
     @Environment(AppEnvironment.self) private var environment
     @State private var store: ImportStore?
     @State private var pendingDeleteBatch: ImportBatch?
-    @State private var showingImportSheet = false
+    @State private var importContext: ImportContext?
+    @State private var isDropTargeted = false
+
+    /// Wrapper `Identifiable` que carrega o arquivo escolhido (nil = manual)
+    /// pra dentro da `.sheet(item:)`. Usamos `.sheet(item:)` em vez de
+    /// `.sheet(isPresented:)` porque a versão isPresented tem um race entre
+    /// o flag e a URL: dois `@State` mutados em sequência podem ser lidos
+    /// pela closure de conteúdo em ordens diferentes, fazendo o wizard
+    /// abrir com `initialFile == nil` mesmo após drop bem-sucedido. Com
+    /// `.sheet(item:)`, o valor é atômico — quando o sheet abre, o item já
+    /// está completo, sem janela pra estado intermediário.
+    private struct ImportContext: Identifiable {
+        let id = UUID()
+        let file: URL?
+    }
 
     var body: some View {
         Group {
@@ -31,16 +51,29 @@ struct ImportHistoryView: View {
             if let store, !store.batches.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        showingImportSheet = true
+                        presentImportSheet(file: nil)
                     } label: {
                         Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
                     }
-                    .help("Importar extrato bancário")
+                    .help("Importar extrato bancário (OFX ou CSV)")
                 }
             }
         }
-        .sheet(isPresented: $showingImportSheet) {
-            ImportView()
+        // Drop destination cobre a área inteira da tela — incluindo o empty
+        // state e a lista populada. O `isTargeted` dirige o overlay visual.
+        .dropDestination(for: URL.self, action: handleDrop, isTargeted: setDropTargeted)
+        .overlay {
+            if isDropTargeted, !(store?.batches.isEmpty ?? true) {
+                // Empty state já tem visual de drop zone permanente — overlay
+                // só faz sentido por cima da lista populada.
+                DropOverlay()
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .allowsHitTesting(false)
+            }
+        }
+        .animation(.easeOut(duration: 0.18), value: isDropTargeted)
+        .sheet(item: $importContext) { context in
+            ImportView(initialFile: context.file)
                 .environment(environment)
         }
     }
@@ -57,19 +90,12 @@ struct ImportHistoryView: View {
     @ViewBuilder
     private func content(store: ImportStore) -> some View {
         if store.batches.isEmpty {
-            ContentUnavailableView {
-                Label("Sem importações", systemImage: AppIcon.inbox.systemImage)
-            } description: {
-                Text("Importe um extrato bancário (OFX) ou fatura de cartão Inter (CSV) para começar.")
-            } actions: {
-                Button {
-                    showingImportSheet = true
-                } label: {
-                    Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
-                }
-                .buttonStyle(.borderedProminent)
-                .keyboardShortcut(.defaultAction)
-            }
+            EmptyStateDropZone(
+                isHighlighted: isDropTargeted,
+                onBrowse: { presentImportSheet(file: nil) }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(40)
         } else {
             list(store: store)
                 .confirmationDialog(
@@ -160,6 +186,162 @@ struct ImportHistoryView: View {
                 guard let batches = groups[bucket], !batches.isEmpty else { return nil }
                 return (bucket, batches)
             }
+    }
+
+    // MARK: - Drop handling
+
+    private func presentImportSheet(file: URL?) {
+        // Atribuição única → `.sheet(item:)` abre com o `file` já capturado
+        // dentro do contexto. Sem race entre flag de presença e URL.
+        importContext = ImportContext(file: file)
+    }
+
+    /// Callback do `.dropDestination`. Roda no main actor. Valida extensão e
+    /// abre a sheet com o arquivo pré-carregado; arquivos inválidos viram
+    /// toast pelo `NoticeCenter` (sem abrir sheet — não faz sentido entrar no
+    /// wizard pra logo cair em failed).
+    private func handleDrop(_ urls: [URL], at _: CGPoint) -> Bool {
+        guard let url = urls.first else { return false }
+        let ext = url.pathExtension.lowercased()
+
+        guard ImportStore.supportedExtensions.contains(ext) else {
+            NoticeCenter.shared.report(
+                ImportError.unsupportedFormat(extension: ext.isEmpty ? "(sem extensão)" : ext),
+                title: "Arquivo não suportado"
+            )
+            return false
+        }
+
+        // Múltiplos arquivos: avisa que vamos importar só o primeiro. O wizard
+        // é single-file por design (uma instituição/conta por vez no preview).
+        // Vira `.info` (não `.error`): nada falhou, só estamos explicando que
+        // o input foi reduzido.
+        if urls.count > 1 {
+            NoticeCenter.shared.info(
+                title: "Vários arquivos soltos",
+                message: "Importe um por vez. Abrindo \"\(url.lastPathComponent)\"."
+            )
+        }
+
+        presentImportSheet(file: url)
+        return true
+    }
+
+    private func setDropTargeted(_ targeted: Bool) {
+        isDropTargeted = targeted
+    }
+}
+
+// MARK: - Empty state drop zone
+
+/// Empty state da tela de Importações. Diferente de um `ContentUnavailableView`
+/// genérico, ele é **o próprio drop target visual** — borda tracejada
+/// permanente que se destaca durante o drag-over pra reforçar que arrastar
+/// arquivos funciona aqui.
+private struct EmptyStateDropZone: View {
+    let isHighlighted: Bool
+    let onBrowse: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                Circle()
+                    .fill(Color.brandPrimary.opacity(isHighlighted ? 0.18 : 0.10))
+                    .frame(width: 84, height: 84)
+                Image(systemName: AppIcon.importFile.systemImage)
+                    .font(.system(size: 34, weight: .regular))
+                    .foregroundStyle(Color.brandPrimary)
+                    .symbolEffect(.bounce, value: isHighlighted)
+            }
+
+            VStack(spacing: 6) {
+                Text(isHighlighted ? "Solte para importar" : "Arraste e solte para importar")
+                    .font(.title3.weight(.semibold))
+                    .contentTransition(.opacity)
+                Text("Aceita OFX (extrato bancário) ou CSV (fatura Inter). Um arquivo por vez.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+            }
+
+            HStack(spacing: 10) {
+                Text("ou")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Button {
+                    onBrowse()
+                } label: {
+                    Label("Selecionar arquivo", systemImage: AppIcon.importFile.systemImage)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+            }
+            .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(40)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.brandPrimary.opacity(isHighlighted ? 0.06 : 0.0))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(
+                    Color.brandPrimary.opacity(isHighlighted ? 0.85 : 0.35),
+                    style: StrokeStyle(lineWidth: isHighlighted ? 2 : 1.5, dash: [8, 6])
+                )
+        )
+        .scaleEffect(isHighlighted ? 1.01 : 1.0)
+        .animation(.easeOut(duration: 0.18), value: isHighlighted)
+    }
+}
+
+// MARK: - Drop overlay (lista populada)
+
+/// Overlay translúcido que aparece por cima da lista durante o drag-over.
+/// Mesma linguagem visual do empty state pra continuidade — o usuário sabe
+/// que está soltando "no mesmo lugar" independente do estado da tela.
+private struct DropOverlay: View {
+    var body: some View {
+        ZStack {
+            // Material translúcido suaviza o conteúdo embaixo sem escondê-lo
+            // por completo — HIG: feedback claro mas não destrutivo.
+            Rectangle()
+                .fill(.regularMaterial)
+                .opacity(0.9)
+
+            VStack(spacing: 16) {
+                ZStack {
+                    Circle()
+                        .fill(Color.brandPrimary.opacity(0.18))
+                        .frame(width: 96, height: 96)
+                    Image(systemName: AppIcon.importFile.systemImage)
+                        .font(.system(size: 40, weight: .regular))
+                        .foregroundStyle(Color.brandPrimary)
+                }
+                Text("Solte para importar")
+                    .font(.title2.weight(.semibold))
+                Text("OFX ou CSV")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(40)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+                    .shadow(color: .black.opacity(0.18), radius: 24, x: 0, y: 8)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(
+                        Color.brandPrimary.opacity(0.7),
+                        style: StrokeStyle(lineWidth: 2, dash: [8, 6])
+                    )
+            )
+            .padding(40)
+        }
     }
 }
 
@@ -295,8 +477,13 @@ private struct ImportBatchRow: View {
     }()
 }
 
-#Preview {
+#Preview("Histórico — vazio") {
     NavigationStack { ImportHistoryView() }
         .environment(AppEnvironment())
+        .frame(width: 900, height: 600)
+}
+
+#Preview("Drop overlay") {
+    DropOverlay()
         .frame(width: 900, height: 600)
 }
