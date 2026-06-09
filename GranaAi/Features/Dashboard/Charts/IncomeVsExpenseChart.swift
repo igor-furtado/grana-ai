@@ -97,29 +97,3 @@ struct IncomeVsExpenseChart: View {
         NSDecimalNumber(decimal: value).doubleValue
     }
 }
-
-#Preview {
-    let cal = Calendar.current
-    let today = Date()
-    let startOfThisMonth = cal.date(from: cal.dateComponents([.year, .month], from: today))!
-
-    let samples: [MonthlyKindTotal] = (0 ..< 8).reversed().map { offset in
-        let month = cal.date(byAdding: .month, value: -offset, to: startOfThisMonth)!
-        return MonthlyKindTotal(
-            monthStart: month,
-            income: Decimal(5000 + Int.random(in: -800 ... 800)),
-            expense: Decimal(3500 + Int.random(in: -1200 ... 1500))
-        )
-    }
-
-    return VStack(spacing: 24) {
-        IncomeVsExpenseChart(totals: samples, mode: .both)
-            .frame(height: 220)
-        IncomeVsExpenseChart(totals: samples, mode: .income)
-            .frame(height: 220)
-        IncomeVsExpenseChart(totals: samples, mode: .expense)
-            .frame(height: 220)
-    }
-    .padding()
-    .frame(width: 700)
-}

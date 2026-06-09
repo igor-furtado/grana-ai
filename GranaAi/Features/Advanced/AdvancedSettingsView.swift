@@ -43,7 +43,3 @@ struct AdvancedSettingsView: View {
         }
     }
 }
-
-#Preview {
-    AdvancedSettingsView()
-}

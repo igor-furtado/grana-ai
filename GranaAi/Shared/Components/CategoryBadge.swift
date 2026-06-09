@@ -78,26 +78,3 @@ struct CategoryBadge: View {
         }
     }
 }
-
-#Preview {
-    VStack(alignment: .leading, spacing: 8) {
-        CategoryBadge(
-            category: Category(
-                id: UUID(), parentId: nil,
-                name: "Alimentação e Supermercado",
-                kind: .expense, slug: "alimentacao-e-supermercado", createdAt: Date()
-            ),
-            icon: .food
-        )
-        CategoryBadge(
-            category: Category(
-                id: UUID(), parentId: nil,
-                name: "Renda e Pagamentos",
-                kind: .income, slug: "renda-e-pagamentos", createdAt: Date()
-            ),
-            icon: .income
-        )
-        CategoryBadge(category: nil, icon: nil)
-    }
-    .padding()
-}

@@ -37,12 +37,3 @@ struct CategorizationConfidenceBadge: View {
         }
     }
 }
-
-#Preview {
-    VStack(spacing: 8) {
-        CategorizationConfidenceBadge(confidence: 0.95, bucket: .high)
-        CategorizationConfidenceBadge(confidence: 0.75, bucket: .medium)
-        CategorizationConfidenceBadge(confidence: 0.30, bucket: .low)
-    }
-    .padding()
-}

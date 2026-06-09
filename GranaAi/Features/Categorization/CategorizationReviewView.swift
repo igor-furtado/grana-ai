@@ -253,7 +253,3 @@ struct CategorizationReviewView: View {
         }
     }
 }
-
-#Preview {
-    CategorizationReviewView(store: CategorizationStore(container: AppContainer.placeholder()))
-}

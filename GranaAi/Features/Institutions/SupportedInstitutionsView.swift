@@ -64,8 +64,3 @@ private struct InstitutionCatalogCard: View {
         )
     }
 }
-
-#Preview {
-    NavigationStack { SupportedInstitutionsView() }
-        .frame(width: 800, height: 600)
-}

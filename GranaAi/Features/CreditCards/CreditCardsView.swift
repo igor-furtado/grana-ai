@@ -220,9 +220,3 @@ struct CreditCardsView: View {
         return nil
     }
 }
-
-#Preview("Mac") {
-    NavigationStack { CreditCardsView() }
-        .environment(AppEnvironment())
-        .frame(width: 1100, height: 720)
-}

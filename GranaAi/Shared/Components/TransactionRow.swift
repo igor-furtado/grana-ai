@@ -148,36 +148,3 @@ struct TransactionRow: View {
         return f
     }()
 }
-
-#Preview("Import preview · Inter cartão") {
-    @Previewable @State var selected1 = true
-    @Previewable @State var selected2 = false
-    return VStack(spacing: 0) {
-        TransactionRow(
-            selection: $selected1,
-            institutionKind: .inter,
-            description: "Uber *UBER *TRIP",
-            memo: nil,
-            date: Date(),
-            amount: 13.09,
-            amountKind: .outgoing,
-            status: nil
-        )
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-        Divider()
-        TransactionRow(
-            selection: $selected2,
-            institutionKind: .inter,
-            description: "ifood *IFD*Rosa Chur",
-            memo: nil,
-            date: Date(),
-            amount: 27.98,
-            amountKind: .outgoing,
-            status: .duplicate
-        )
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-    }
-    .frame(width: 640)
-}

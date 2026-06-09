@@ -387,11 +387,3 @@ private struct CategoryInspector: View {
         }
     }
 }
-
-#Preview {
-    NavigationStack {
-        CategoriesView()
-            .environment(AppEnvironment())
-    }
-    .frame(width: 1000, height: 760)
-}

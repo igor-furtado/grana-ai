@@ -52,24 +52,3 @@ struct InstitutionIcon: View {
         }
     }
 }
-
-#Preview("Tamanhos") {
-    VStack(spacing: 20) {
-        HStack(spacing: 12) {
-            ForEach(InstitutionKind.supported, id: \.rawValue) { kind in
-                InstitutionIcon(kind: kind, size: 56)
-            }
-        }
-        HStack(spacing: 8) {
-            ForEach(InstitutionKind.supported, id: \.rawValue) { kind in
-                InstitutionIcon(kind: kind, size: 32)
-            }
-        }
-        HStack(spacing: 6) {
-            ForEach(InstitutionKind.supported, id: \.rawValue) { kind in
-                InstitutionIcon(kind: kind, size: 24)
-            }
-        }
-    }
-    .padding(24)
-}

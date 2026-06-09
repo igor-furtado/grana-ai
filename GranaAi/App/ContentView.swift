@@ -379,9 +379,3 @@ private struct SidebarIconButton: View {
         .accessibilityLabel(accessibilityLabel)
     }
 }
-
-#Preview {
-    ContentView()
-        .environment(AppEnvironment())
-        .frame(width: 900, height: 600)
-}

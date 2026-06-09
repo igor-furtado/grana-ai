@@ -75,20 +75,3 @@ struct WeekdayExpensesChart: View {
         NSDecimalNumber(decimal: value).doubleValue
     }
 }
-
-#Preview {
-    // Distribuição típica de uso pessoal: gasta mais sexta/sábado, menos
-    // segunda/terça.
-    let samples: [WeekdayTotal] = [
-        WeekdayTotal(weekday: 2, total: 120, count: 4), // Seg
-        WeekdayTotal(weekday: 3, total: 90, count: 3), // Ter
-        WeekdayTotal(weekday: 4, total: 150, count: 4), // Qua
-        WeekdayTotal(weekday: 5, total: 180, count: 4), // Qui
-        WeekdayTotal(weekday: 6, total: 420, count: 5), // Sex
-        WeekdayTotal(weekday: 7, total: 380, count: 4), // Sáb
-        WeekdayTotal(weekday: 1, total: 110, count: 2), // Dom
-    ]
-    return WeekdayExpensesChart(totals: samples)
-        .frame(width: 380, height: 280)
-        .padding()
-}

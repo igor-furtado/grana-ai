@@ -246,13 +246,3 @@ private struct FailedStepView: View {
         }
     }
 }
-
-#Preview("Importar") {
-    ImportView()
-        .environment(AppEnvironment())
-}
-
-#Preview("Importar com arquivo pré-selecionado") {
-    ImportView(initialFile: URL(fileURLWithPath: "/tmp/extrato.ofx"))
-        .environment(AppEnvironment())
-}

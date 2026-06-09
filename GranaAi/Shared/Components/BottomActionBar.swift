@@ -50,28 +50,3 @@ struct BottomActionBar<Trailing: View>: View {
         }
     }
 }
-
-#Preview("Com caption e dois botões") {
-    VStack(spacing: 0) {
-        Color.gray.opacity(0.1)
-            .frame(maxHeight: .infinity)
-        BottomActionBar(caption: "7 transações selecionadas em 1 conta") {
-            Button("Voltar") {}
-            Button("Importar 7 transações") {}
-                .buttonStyle(.borderedProminent)
-        }
-    }
-    .frame(width: 700, height: 200)
-}
-
-#Preview("Sem caption, um botão") {
-    VStack(spacing: 0) {
-        Color.gray.opacity(0.1)
-            .frame(maxHeight: .infinity)
-        BottomActionBar {
-            Button("Avançar") {}
-                .buttonStyle(.borderedProminent)
-        }
-    }
-    .frame(width: 700, height: 200)
-}

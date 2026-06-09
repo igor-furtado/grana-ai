@@ -190,11 +190,3 @@ struct DashboardView: View {
             .foregroundStyle(.danger)
     }
 }
-
-#Preview {
-    NavigationStack {
-        DashboardView()
-            .environment(AppEnvironment())
-    }
-    .frame(width: 1000, height: 700)
-}

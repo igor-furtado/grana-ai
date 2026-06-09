@@ -203,11 +203,3 @@ struct CategorizationSettingsView: View {
         )
     }
 }
-
-#Preview {
-    NavigationStack {
-        CategorizationSettingsView()
-    }
-    .environment(AppEnvironment())
-    .frame(width: 700, height: 500)
-}

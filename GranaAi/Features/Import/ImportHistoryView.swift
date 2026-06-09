@@ -476,14 +476,3 @@ private struct ImportBatchRow: View {
         return f
     }()
 }
-
-#Preview("Histórico — vazio") {
-    NavigationStack { ImportHistoryView() }
-        .environment(AppEnvironment())
-        .frame(width: 900, height: 600)
-}
-
-#Preview("Drop overlay") {
-    DropOverlay()
-        .frame(width: 900, height: 600)
-}

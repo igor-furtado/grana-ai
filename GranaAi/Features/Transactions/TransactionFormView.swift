@@ -488,29 +488,3 @@ struct TransactionFormView: View {
         return [:]
     }
 }
-
-#Preview("Nova") {
-    let env = AppEnvironment()
-    let store = TransactionStore(container: env.container)
-    return TransactionFormView()
-        .environment(store)
-}
-
-#Preview("Edição") {
-    let env = AppEnvironment()
-    let store = TransactionStore(container: env.container)
-    let sample = Transaction(
-        id: UUID(),
-        accountId: UUID(),
-        categoryId: UUID(),
-        subcategoryId: nil,
-        amount: 42.90,
-        occurredAt: Date(),
-        description: "Café da manhã",
-        notes: "Padaria perto de casa",
-        createdAt: Date(),
-        updatedAt: Date()
-    )
-    return TransactionFormView(existing: sample)
-        .environment(store)
-}

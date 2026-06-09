@@ -275,10 +275,3 @@ struct TransactionsView: View {
         }
     }
 }
-
-#Preview {
-    NavigationStack {
-        TransactionsView()
-            .environment(AppEnvironment())
-    }
-}

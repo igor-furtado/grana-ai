@@ -342,9 +342,3 @@ private struct AccountCard: View {
         .help(help)
     }
 }
-
-#Preview("Mac") {
-    NavigationStack { AccountsView() }
-        .environment(AppEnvironment())
-        .frame(width: 900, height: 600)
-}

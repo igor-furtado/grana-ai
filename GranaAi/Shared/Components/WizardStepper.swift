@@ -76,27 +76,3 @@ struct WizardStepper: View {
         return .pending
     }
 }
-
-#Preview("Step 1 de 3") {
-    VStack(spacing: 0) {
-        WizardStepper(steps: ["Revisar", "Categorizar", "Concluir"], currentIndex: 0)
-        Color.gray.opacity(0.05).frame(height: 200)
-    }
-    .frame(width: 700)
-}
-
-#Preview("Step 2 de 3") {
-    VStack(spacing: 0) {
-        WizardStepper(steps: ["Revisar", "Categorizar", "Concluir"], currentIndex: 1)
-        Color.gray.opacity(0.05).frame(height: 200)
-    }
-    .frame(width: 700)
-}
-
-#Preview("Step 3 de 3") {
-    VStack(spacing: 0) {
-        WizardStepper(steps: ["Revisar", "Categorizar", "Concluir"], currentIndex: 2)
-        Color.gray.opacity(0.05).frame(height: 200)
-    }
-    .frame(width: 700)
-}

@@ -44,29 +44,3 @@ struct MetricCard: View {
         }
     }
 }
-
-#Preview {
-    VStack(spacing: 12) {
-        MetricCard(
-            title: "Saldo total",
-            value: 12345.67,
-            icon: .balance,
-            accent: .brandPrimary
-        )
-        MetricCard(
-            title: "Gastos do mês",
-            value: 2340.00,
-            icon: .expenseFlow,
-            accent: .expense
-        )
-        MetricCard(
-            title: "Patrimônio investido",
-            value: 0,
-            icon: .netResult,
-            accent: .income,
-            placeholder: true
-        )
-    }
-    .padding()
-    .frame(width: 320)
-}

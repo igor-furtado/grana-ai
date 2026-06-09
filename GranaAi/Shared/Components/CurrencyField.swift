@@ -111,15 +111,3 @@ struct CurrencyTextField: NSViewRepresentable {
         }
     }
 }
-
-#Preview {
-    @Previewable @State var cents = 0
-    return Form {
-        LabeledContent("Valor") {
-            CurrencyField(cents: $cents)
-        }
-        Text("Centavos: \(cents)")
-    }
-    .formStyle(.grouped)
-    .frame(width: 400, height: 200)
-}

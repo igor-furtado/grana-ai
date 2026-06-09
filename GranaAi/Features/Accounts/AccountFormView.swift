@@ -383,27 +383,3 @@ struct AccountFormView: View {
         }
     }
 }
-
-#Preview("Nova") {
-    let env = AppEnvironment()
-    let store = AccountStore(container: env.container)
-    return AccountFormView(onCancel: {}, onSaved: {})
-        .environment(store)
-}
-
-#Preview("Edição") {
-    let env = AppEnvironment()
-    let store = AccountStore(container: env.container)
-    let sample = Account(
-        id: UUID(),
-        type: .checking,
-        initialBalance: 1500.00,
-        archived: false,
-        institutionId: nil,
-        currency: "BRL",
-        createdAt: Date(),
-        updatedAt: Date()
-    )
-    return AccountFormView(existing: sample, onCancel: {}, onSaved: {})
-        .environment(store)
-}
