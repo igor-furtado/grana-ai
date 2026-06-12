@@ -2,8 +2,8 @@ import Foundation
 import OSLog
 import PowerSync
 
-/// Popula o banco com dados iniciais (contas padrão + taxonomia do Apêndice A
-/// do PROJECT.md) na primeira execução.
+/// Popula o banco com dados iniciais (contas e taxonomia definidas em
+/// `CategorySeedData`) na primeira execução.
 ///
 /// **Por que checar "se vazio" em vez de uma flag "já rodou":** simples,
 /// barato, e robusto a casos de banco apagado/recriado (ex: trocar de máquina,

@@ -25,7 +25,7 @@ struct OFXCategoryHeuristic {
 
     func categoryId(for transaction: OFXTransaction) -> UUID {
         // PIX, TED, DOC, TEF — independente do TRNTYPE, são movimentações
-        // entre contas. PROJECT.md trata transfer como neutro de saldo.
+        // entre contas. Transferências são neutras nas agregações do dashboard.
         if let memo = transaction.memo, memo.containsAny(["pix", "ted ", "doc ", "tef"]) {
             return roots.transfers ?? roots.unclassified
         }

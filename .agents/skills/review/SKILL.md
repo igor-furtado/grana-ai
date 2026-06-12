@@ -17,10 +17,10 @@ Quando esta skill for ativada, revise todas as alterações pendentes no reposit
 
 ## Passo 1: Carregar contexto do projeto (se disponível)
 
-Antes de olhar o código, verifique se existe um arquivo `CLAUDE.md` na raiz do repositório:
+Antes de olhar o código, verifique se existe um arquivo `AGENTS.md` na raiz do repositório:
 
 ```bash
-cat CLAUDE.md 2>/dev/null
+cat AGENTS.md 2>/dev/null
 ```
 
 Se existir, leia-o inteiro. Ele provavelmente descreve convenções do projeto, arquitetura, padrões adotados, decisões intencionais e restrições específicas. Guarde esse contexto — ele vai calibrar toda a análise:
@@ -28,7 +28,7 @@ Se existir, leia-o inteiro. Ele provavelmente descreve convenções do projeto, 
 - **Evitar falsos positivos:** se o projeto documenta que usa um padrão específico (ex: "usamos `any` intencionalmente em adapters"), não sinalize isso como problema.
 - **Reforçar convenções:** se o projeto define regras (ex: "toda função async deve ter try/catch", "nomes de variáveis em camelCase"), sinalize desvios como issues.
 
-Se não houver `CLAUDE.md`, continue normalmente com boas práticas gerais — sem avisar o usuário sobre a ausência.
+Se não houver `AGENTS.md`, continue normalmente com boas práticas gerais — sem avisar o usuário sobre a ausência.
 
 ## Passo 2: Coletar o diff
 
@@ -55,7 +55,7 @@ Se o diff for extenso (mais de ~500 linhas), priorize os arquivos com mais mudan
 
 ## Passo 3: Analisar o código
 
-(Use o contexto do `CLAUDE.md` lido no Passo 1 para calibrar os itens abaixo.)
+(Use o contexto do `AGENTS.md` lido no Passo 1 para calibrar os itens abaixo.)
 
 Examine o diff nas quatro dimensões abaixo. Para cada problema encontrado, anote:
 

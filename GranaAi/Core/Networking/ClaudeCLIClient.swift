@@ -54,7 +54,7 @@ final class ClaudeCLIClient: Sendable {
     ///
     /// `systemPrompt` substitui inteiro o system prompt default do harness,
     /// garantindo que o modelo veja só a tarefa de classificação (sem
-    /// CLAUDE.md, hooks, etc.).
+    /// instruções do repositório, hooks, etc.).
     func runStructured(
         systemPrompt: String,
         userPrompt: String,

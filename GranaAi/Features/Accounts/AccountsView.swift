@@ -10,11 +10,18 @@ import SwiftUI
 /// dedicada `CreditCardsView` (entrada própria na sidebar). Esta tela cuida
 /// apenas de `type == .checking`. O form é o mesmo `AccountFormView`, invocado
 /// com `lockedType: .checking` pra esconder o picker de tipo.
+///
+/// **Seleção:** clicar num card seleciona ele (stroke de accent). Ações de
+/// editar/arquivar/apagar agem no card selecionado e vivem na window toolbar.
+/// Context menu (right-click) duplica as ações pra acesso rápido sem precisar
+/// selecionar primeiro.
 struct AccountsView: View {
     @Environment(AppEnvironment.self) private var environment
     @State private var store: AccountStore?
     @State private var formMode: FormMode?
     @State private var showArchived = false
+    @State private var selectedAccountId: UUID?
+    @State private var showDeleteConfirm = false
 
     /// `Identifiable` pra alimentar o `.sheet(item:)` — o id distingue
     /// "novo" de cada edição específica, garantindo que trocar de "editar
@@ -36,6 +43,7 @@ struct AccountsView: View {
             if let store {
                 content(store: store)
                     .task { await store.start() }
+                    .toolbar { toolbarContent(store: store) }
             } else {
                 ProgressView()
                     .task { store = AccountStore(container: environment.container) }
@@ -43,25 +51,6 @@ struct AccountsView: View {
         }
         .navigationTitle("Contas")
         .navigationSubtitle(subtitle)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    formMode = .create
-                } label: {
-                    Label("Nova conta", systemImage: AppIcon.add.systemImage)
-                }
-                .disabled(formMode != nil)
-                .help("Adicionar nova conta")
-            }
-            // Toggle só aparece quando existe pelo menos uma conta arquivada.
-            // Sem isso o controle ficava sempre visível mesmo no estado vazio
-            // ou quando o usuário nunca arquivou nada — ruído de UI.
-            if hasArchivedAccount {
-                ToolbarItem(placement: .secondaryAction) {
-                    Toggle("Mostrar arquivadas", isOn: $showArchived)
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -90,6 +79,24 @@ struct AccountsView: View {
             )
             .environment(store)
         }
+        .confirmationDialog(
+            "Apagar conta?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Apagar", role: .destructive) {
+                guard let id = selectedAccountId else { return }
+                Task { try? await store.delete(id: id) }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text(
+                "Transações vinculadas continuarão no banco mas ficarão órfãs. Considere arquivar em vez de apagar."
+            )
+        }
+        .onChange(of: visibleAccounts.map(\.id)) { _, ids in
+            reconcileSelection(visibleIds: ids)
+        }
     }
 
     private func grid(store: AccountStore, accounts: [Account]) -> some View {
@@ -104,15 +111,87 @@ struct AccountsView: View {
                         displayName: store.displayName(for: account),
                         institution: store.institution(forAccount: account),
                         currentBalance: store.currentBalance(for: account),
-                        onEdit: { formMode = .edit(account) },
-                        onDelete: { Task { try? await store.delete(id: account.id) } },
+                        isSelected: account.id == selectedAccountId,
+                        onSelect: { selectedAccountId = account.id },
+                        onEdit: {
+                            selectedAccountId = account.id
+                            formMode = .edit(account)
+                        },
                         onToggleArchive: {
                             Task { try? await store.setArchived(account, archived: !account.archived) }
+                        },
+                        onRequestDelete: {
+                            selectedAccountId = account.id
+                            showDeleteConfirm = true
                         }
                     )
                 }
             }
             .padding(20)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func toolbarContent(store: AccountStore) -> some ToolbarContent {
+        let accounts = visible(store: store)
+        let selected = accounts.first(where: { $0.id == selectedAccountId })
+
+        // `ToolbarSpacer(.fixed, ...)` quebra a pílula única que o SwiftUI
+        // faz pra items adjacentes no mesmo placement. Resulta em 3 grupos
+        // visuais distintos no trailing edge — padrão Liquid Glass do macOS 26+.
+        if let selected {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    formMode = .edit(selected)
+                } label: {
+                    Label("Editar", systemImage: AppIcon.edit.systemImage)
+                }
+                .help("Editar conta")
+
+                Button {
+                    Task {
+                        try? await store.setArchived(selected, archived: !selected.archived)
+                    }
+                } label: {
+                    Label(
+                        selected.archived ? "Desarquivar" : "Arquivar",
+                        systemImage: selected.archived
+                            ? AppIcon.unarchive.systemImage
+                            : AppIcon.archive.systemImage
+                    )
+                }
+                .help(selected.archived ? "Desarquivar conta" : "Arquivar conta")
+
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Apagar", systemImage: AppIcon.delete.systemImage)
+                }
+                .help("Apagar conta")
+            }
+
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                formMode = .create
+            } label: {
+                Label("Nova conta", systemImage: AppIcon.add.systemImage)
+            }
+            .help("Nova conta")
+        }
+
+        if hasArchivedAccount {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Toggle("Mostrar arquivadas", isOn: $showArchived)
+                } label: {
+                    Label("Mais", systemImage: AppIcon.more.systemImage)
+                }
+            }
         }
     }
 
@@ -131,11 +210,20 @@ struct AccountsView: View {
         store?.accounts.contains { $0.type == .checking && $0.archived } ?? false
     }
 
+    /// Limpa seleção quando a conta selecionada some da lista visível
+    /// (apagada, arquivada com toggle desligado, etc.). Diferente da
+    /// `CreditCardsView`, não auto-seleciona o primeiro — em grid, seleção
+    /// é sempre opt-in via clique do usuário.
+    private func reconcileSelection(visibleIds: [UUID]) {
+        guard let current = selectedAccountId, !visibleIds.contains(current) else { return }
+        selectedAccountId = nil
+    }
+
     private var emptyState: some View {
         EmptyStateView(
             "Sem contas por aqui",
             icon: .sidebarAccounts,
-            description: "Cadastre as contas correntes que você usa (Inter, Nubank, XP, etc.) pra vincular transações e organizar suas movimentações. Cartões de crédito têm tela própria."
+            description: "Cadastre as contas correntes que você usa (Inter, Nubank, XP, etc.) pra vincular transações e organizar suas movimentações."
         ) {
             Button {
                 formMode = .create
@@ -167,12 +255,11 @@ private struct AccountCard: View {
     let displayName: String
     let institution: Institution?
     let currentBalance: Decimal
+    let isSelected: Bool
+    let onSelect: () -> Void
     let onEdit: () -> Void
-    let onDelete: () -> Void
     let onToggleArchive: () -> Void
-
-    @State private var isHovered = false
-    @State private var showDeleteConfirm = false
+    let onRequestDelete: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -183,24 +270,7 @@ private struct AccountCard: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top) {
                     accountIcon
-
                     Spacer()
-
-                    if isHovered {
-                        HStack(spacing: 6) {
-                            iconButton(systemImage: AppIcon.edit.systemImage, help: "Editar", action: onEdit)
-                            iconButton(
-                                systemImage: account.archived ? AppIcon.unarchive.systemImage : AppIcon.archive
-                                    .systemImage,
-                                help: account.archived ? "Desarquivar" : "Arquivar",
-                                action: onToggleArchive
-                            )
-                            iconButton(systemImage: AppIcon.delete.systemImage, help: "Apagar") {
-                                showDeleteConfirm = true
-                            }
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
-                    }
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -237,30 +307,26 @@ private struct AccountCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.secondary.opacity(0.15), lineWidth: 1)
+                .strokeBorder(
+                    isSelected ? Color.accentColor : Color.secondary.opacity(0.15),
+                    lineWidth: isSelected ? 2 : 1
+                )
         )
         .opacity(account.archived ? 0.6 : 1)
-        .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.12)) { isHovered = hovering }
-        }
-        // Espelho das ações hover-only via context menu. Garante acesso por
-        // teclado (Control+click) e right-click pra quem não dispara hover.
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onSelect)
+        // Context menu duplica as ações da toolbar pra acesso rápido por
+        // right-click — sem precisar selecionar primeiro. Apagar passa por
+        // `onRequestDelete` que seleciona a conta e abre o confirm a nível
+        // de tela.
         .contextMenu {
             Button("Editar", action: onEdit)
             Button(account.archived ? "Desarquivar" : "Arquivar", action: onToggleArchive)
             Divider()
-            Button("Apagar", role: .destructive) { showDeleteConfirm = true }
+            Button("Apagar", role: .destructive, action: onRequestDelete)
         }
-        .confirmationDialog(
-            "Apagar conta “\(displayName)”?",
-            isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Apagar", role: .destructive, action: onDelete)
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("Transações vinculadas continuarão no banco mas ficarão órfãs. Considere arquivar em vez de apagar.")
-        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private var accentColor: Color {
@@ -270,7 +336,7 @@ private struct AccountCard: View {
     private var defaultAccent: Color {
         switch account.type {
         case .creditCard: return .transfer
-        default: return .brandSecondary
+        default: return .accentColor
         }
     }
 
@@ -304,19 +370,5 @@ private struct AccountCard: View {
         if account.archived { return .secondary }
         if currentBalance < 0 { return .danger }
         return .primary
-    }
-
-    private func iconButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 24, height: 24)
-                .background(
-                    Circle().fill(Color.secondary.opacity(0.12))
-                )
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 }

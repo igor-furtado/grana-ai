@@ -6,7 +6,7 @@ import Foundation
 /// **Por que existe:** Fase 4 categoriza ANTES da inserção no banco. Pra isso
 /// precisamos passar pra IA o `signedAmount` original (com sinal vindo do CSV/XLSX/OFX),
 /// que a `Transaction` perde no `abs()` exigido pela convenção do app
-/// (CLAUDE.md invariante 1). O draft preserva o sinal só enquanto necessário —
+/// (ver invariantes em `AGENTS.md`). O draft preserva o sinal só enquanto necessário —
 /// no commit final, `abs(signedAmount)` vira `Transaction.amount`.
 ///
 /// **`id` já fixado**: gerado quando o draft é criado, propagado pra

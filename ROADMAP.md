@@ -1,6 +1,6 @@
 # ROADMAP.md — Fases de desenvolvimento
 
-> Cada fase entrega algo **funcional e visível**. Não pular fases. Concluir uma antes de iniciar a próxima.
+> Registro consultivo de planejamento, histórico e ideias futuras. Este arquivo não define regras nem autoriza ou bloqueia trabalho; `AGENTS.md` é a única documentação normativa do projeto.
 
 ---
 
@@ -171,17 +171,3 @@ Itens de conformidade com Apple Human Interface Guidelines mapeados durante o de
 - **Atalhos extras** — `⌘N` (nova transação), `⌘F` (busca em transações), `⌘⇧I` (importar), `⌘,` (preferências/Avançado). Pareados com o item de menu bar acima.
 
 ---
-
-## Como trabalhar com Claude Code em cada fase
-
-1. Abrir nova sessão do Claude Code na pasta do projeto.
-2. Pedir ao Claude (chat) o **prompt da Fase N**.
-3. Colar o prompt no Claude Code.
-4. Claude Code lê PROJECT.md + ROADMAP.md, executa a fase.
-5. Você revisa o código gerado, **lê de fato**, faz perguntas sobre partes que não entendeu.
-6. Roda, testa, anota issues.
-7. Quando a fase está sólida, faz commit com tag `fase-N-completa`.
-8. Atualiza este ROADMAP marcando a fase como ✅.
-9. Próxima fase.
-
-**Nunca pular fases.** Tentar fazer Fase 5 (sync) sem Fase 1 (CRUD local) é receita pra desastre arquitetural.

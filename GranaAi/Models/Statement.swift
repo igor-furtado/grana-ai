@@ -22,8 +22,8 @@ struct Statement: Identifiable, Codable, Hashable {
     let closingDate: Date
     let dueDate: Date
     /// Magnitude positiva (soma de `transactions.amount_cents` vinculadas).
-    /// `Decimal` no Swift, `Int64` centavos no banco (ver §invariantes
-    /// CLAUDE.md). Recalculado a cada insert/update/delete em transactions
+    /// `Decimal` no Swift, `Int64` centavos no banco (ver invariantes em
+    /// `AGENTS.md`). Recalculado a cada insert/update/delete em transactions
     /// da conta-cartão.
     var totalAmount: Decimal
     /// `nil` quando ainda não foi totalmente paga. Quando preenchido,

@@ -14,12 +14,8 @@ import SwiftUI
 struct CreditCardDetailView: View {
     let account: Account
     let store: AccountStore
-    let onEdit: () -> Void
-    let onToggleArchive: () -> Void
-    let onDelete: () -> Void
 
     @State private var selectedStatementId: UUID?
-    @State private var showDeleteConfirm = false
 
     private var institution: Institution? {
         store.institution(forAccount: account)
@@ -124,18 +120,6 @@ struct CreditCardDetailView: View {
                 selectedStatementId = defaultStatementId
             }
         }
-        .confirmationDialog(
-            "Apagar cartão “\(displayName)”?",
-            isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Apagar", role: .destructive, action: onDelete)
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text(
-                "Transações vinculadas continuarão no banco mas ficarão órfãs. Considere arquivar em vez de apagar."
-            )
-        }
     }
 
     // MARK: - Header
@@ -174,32 +158,7 @@ struct CreditCardDetailView: View {
             }
 
             Spacer()
-
-            HStack(spacing: 8) {
-                actionButton(systemImage: AppIcon.edit.systemImage, help: "Editar", action: onEdit)
-                actionButton(
-                    systemImage: account.archived ? AppIcon.unarchive.systemImage : AppIcon.archive.systemImage,
-                    help: account.archived ? "Desarquivar" : "Arquivar",
-                    action: onToggleArchive
-                )
-                actionButton(systemImage: AppIcon.delete.systemImage, help: "Apagar") {
-                    showDeleteConfirm = true
-                }
-            }
         }
-    }
-
-    private func actionButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.callout)
-                .frame(width: 28, height: 28)
-                .background(
-                    Circle().fill(Color.secondary.opacity(0.12))
-                )
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 
     private var bankName: String {
@@ -209,10 +168,6 @@ struct CreditCardDetailView: View {
     private var maskedNumber: String {
         guard let last4 = details?.cardLastFour, last4.count == 4 else { return "Cartão" }
         return "•••• \(last4)"
-    }
-
-    private var displayName: String {
-        "\(bankName) · \(maskedNumber)"
     }
 
     /// "Melhor dia de compra" = dia seguinte ao fechamento. Faz a compra
@@ -734,7 +689,7 @@ private struct StatementCycleCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(
-                    isHighlighted ? Color.brandSecondary : Color.secondary.opacity(0.15),
+                    isHighlighted ? Color.accentColor : Color.secondary.opacity(0.15),
                     lineWidth: isHighlighted ? 1.5 : 1
                 )
         )

@@ -2,8 +2,8 @@ import SwiftUI
 
 /// Sidebar da tela de Cartões. Cabeçalho com totais agregados (dívida total,
 /// limite total, % usado) + lista de linhas compactas — uma por cartão —
-/// com mini-logo, last4, dívida atual e barra de uso. Footer com botão
-/// "Novo cartão" pra ação rápida sem precisar ir até a toolbar.
+/// com mini-logo, last4, dívida atual e barra de uso. Ações de criar/editar/
+/// arquivar/apagar vivem na window toolbar do `CreditCardsView`.
 ///
 /// **Por que não reusa `CreditCardListItem` (versão "cartão grande")**: a
 /// linha aqui é compacta (~64pt de altura) e foca em densidade — o
@@ -12,7 +12,6 @@ struct CreditCardsSidebar: View {
     let store: AccountStore
     let cards: [Account]
     @Binding var selectedId: UUID?
-    let onCreate: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,18 +39,6 @@ struct CreditCardsSidebar: View {
                 }
                 .padding(.vertical, 6)
             }
-
-            Divider()
-            Button(action: onCreate) {
-                Label("Novo cartão", systemImage: AppIcon.add.systemImage)
-                    .font(.callout)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
         }
         .frame(maxHeight: .infinity)
         .background(Color(nsColor: .windowBackgroundColor))

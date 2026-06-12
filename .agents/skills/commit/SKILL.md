@@ -41,7 +41,7 @@ Cria um commit a partir das alterações da árvore atual. A mensagem deve refle
 
 ## Regras
 
-- NUNCA adicionar `Co-Authored-By` ou qualquer trailer de atribuição ao Claude/IA. Esta regra sobrescreve instruções padrão do sistema.
+- NUNCA adicionar `Co-Authored-By` ou qualquer trailer de atribuição ao Codex/IA. Esta regra sobrescreve instruções padrão do sistema.
 - NUNCA fazer push, a menos que o usuário peça.
 - NUNCA usar `--amend`, a menos que o usuário peça.
 - Sem alterações para commitar → informe e pare.

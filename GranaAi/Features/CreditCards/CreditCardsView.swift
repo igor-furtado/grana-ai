@@ -18,6 +18,7 @@ struct CreditCardsView: View {
     @State private var selectedCardId: UUID?
     @State private var formMode: FormMode?
     @State private var showArchived = false
+    @State private var showDeleteConfirm = false
 
     enum FormMode: Identifiable {
         case create
@@ -36,6 +37,7 @@ struct CreditCardsView: View {
             if let store {
                 content(store: store)
                     .task { await store.start() }
+                    .toolbar { toolbarContent(store: store) }
             } else {
                 ProgressView()
                     .task { store = AccountStore(container: environment.container) }
@@ -43,22 +45,6 @@ struct CreditCardsView: View {
         }
         .navigationTitle("Cartões de crédito")
         .navigationSubtitle(subtitle)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    formMode = .create
-                } label: {
-                    Label("Novo cartão", systemImage: AppIcon.add.systemImage)
-                }
-                .disabled(formMode != nil)
-                .help("Adicionar novo cartão")
-            }
-            if hasArchivedCard {
-                ToolbarItem(placement: .secondaryAction) {
-                    Toggle("Mostrar arquivados", isOn: $showArchived)
-                }
-            }
-        }
     }
 
     @ViewBuilder
@@ -82,6 +68,21 @@ struct CreditCardsView: View {
             )
             .environment(store)
         }
+        .confirmationDialog(
+            "Apagar cartão?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Apagar", role: .destructive) {
+                guard let id = selectedCardId else { return }
+                Task { try? await store.delete(id: id) }
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text(
+                "Transações vinculadas continuarão no banco mas ficarão órfãs. Considere arquivar em vez de apagar."
+            )
+        }
         .onChange(of: visibleCards.map(\.id)) { _, ids in
             reconcileSelection(visibleIds: ids)
         }
@@ -99,32 +100,86 @@ struct CreditCardsView: View {
             CreditCardsSidebar(
                 store: store,
                 cards: cards,
-                selectedId: $selectedCardId,
-                onCreate: { formMode = .create }
+                selectedId: $selectedCardId
             )
             .frame(minWidth: 240, idealWidth: 280, maxWidth: 360)
 
             if let selectedId = selectedCardId,
                let account = cards.first(where: { $0.id == selectedId })
             {
-                CreditCardDetailView(
-                    account: account,
-                    store: store,
-                    onEdit: { formMode = .edit(account) },
-                    onToggleArchive: {
-                        Task { try? await store.setArchived(account, archived: !account.archived) }
-                    },
-                    onDelete: {
-                        Task { try? await store.delete(id: account.id) }
-                    }
-                )
-                .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+                CreditCardDetailView(account: account, store: store)
+                    .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 // Fallback enquanto a seleção ainda não foi reconciliada
                 // (primeira renderização ou cartão único acabou de ser
                 // removido). Mostra placeholder em vez de detalhe quebrado.
                 placeholderDetail
                     .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private func toolbarContent(store: AccountStore) -> some ToolbarContent {
+        let cards = visible(store: store)
+        let selected = cards.first(where: { $0.id == selectedCardId })
+
+        // `ToolbarSpacer(.fixed, ...)` é o que quebra a pílula única que o
+        // SwiftUI faz pra items adjacentes no mesmo placement — sem isso
+        // editar/arquivar/apagar + "+" + mais ficam todos colados num
+        // único grupo visual. Padrão Liquid Glass do macOS 26+.
+        if let selected {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    formMode = .edit(selected)
+                } label: {
+                    Label("Editar", systemImage: AppIcon.edit.systemImage)
+                }
+                .help("Editar cartão")
+
+                Button {
+                    Task {
+                        try? await store.setArchived(selected, archived: !selected.archived)
+                    }
+                } label: {
+                    Label(
+                        selected.archived ? "Desarquivar" : "Arquivar",
+                        systemImage: selected.archived
+                            ? AppIcon.unarchive.systemImage
+                            : AppIcon.archive.systemImage
+                    )
+                }
+                .help(selected.archived ? "Desarquivar cartão" : "Arquivar cartão")
+
+                Button(role: .destructive) {
+                    showDeleteConfirm = true
+                } label: {
+                    Label("Apagar", systemImage: AppIcon.delete.systemImage)
+                }
+                .help("Apagar cartão")
+            }
+
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
+
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                formMode = .create
+            } label: {
+                Label("Novo cartão", systemImage: AppIcon.add.systemImage)
+            }
+            .help("Novo cartão")
+        }
+
+        if hasArchivedCard {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Toggle("Mostrar arquivados", isOn: $showArchived)
+                } label: {
+                    Label("Mais", systemImage: AppIcon.more.systemImage)
+                }
             }
         }
     }

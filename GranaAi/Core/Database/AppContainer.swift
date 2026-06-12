@@ -9,8 +9,8 @@ import PowerSync
 ///
 /// Por que "Container" e não "Database": esta classe **não é** o banco. O banco
 /// é a propriedade `db`. O Container é o lugar único onde tudo é amarrado
-/// (banco + repositories + serviços), seguindo o padrão Composition Root. Veja
-/// `ARCHITECTURE.md` na raiz pra uma visão completa das camadas.
+/// (banco + repositories + serviços), seguindo o padrão Composition Root
+/// documentado em `AGENTS.md`.
 ///
 /// Conceito-chave: **modo local-only**.
 /// `PowerSyncDatabase` funciona perfeitamente como um SQLite local sem chamar

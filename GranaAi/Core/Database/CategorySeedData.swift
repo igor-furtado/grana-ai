@@ -93,6 +93,7 @@ nonisolated enum CategorySeedData {
                 "Cinema",
                 "Teatro",
                 "Parques e Diversões",
+                "Loterias",
             ]
         ),
 

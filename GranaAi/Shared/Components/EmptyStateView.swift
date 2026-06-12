@@ -55,15 +55,15 @@ struct EmptyStateView<Actions: View>: View {
     ///   mantém o nome original.
     /// — `symbolRenderingMode(.hierarchical)` produz tiers de opacidade na
     ///   camada do símbolo, dando profundidade sem precisar de cores múltiplas.
-    /// — `foregroundStyle(.gradient)` da `brandPrimary` reforça a marca e
-    ///   combina com o gradiente das tiers do modo hierárquico.
+    /// — `foregroundStyle(.gradient)` em cima do `Color.primary` combina com
+    ///   o gradiente das tiers do modo hierárquico.
     /// O tamanho do símbolo é definido no `EmptyStateLabelStyle` (não aqui),
     /// porque `.font` aplicado direto na `Image` é sobreposto pelo
     /// `ContentUnavailableView`.
     private var iconView: some View {
         Image(systemName: Self.resolveSymbol(icon.systemImage))
             .symbolRenderingMode(.hierarchical)
-            .foregroundStyle(Color.brandPrimary.gradient)
+            .foregroundStyle(Color.primary.gradient)
     }
 
     /// Procura o variant `.circle.fill` do símbolo. Estratégia em ordem:

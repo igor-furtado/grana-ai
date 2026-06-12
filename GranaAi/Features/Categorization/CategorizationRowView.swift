@@ -21,18 +21,25 @@ struct CategorizationRowView: View {
     }
 
     var body: some View {
+        // **Layout proporcional:** colunas fixas (ícone, valor/data, badge)
+        // ocupam seu tamanho natural; descrição, categoria e subcategoria
+        // dividem o espaço restante **igualmente** via `maxWidth: .infinity`.
+        // SwiftUI não tem equivalente direto ao `Expanded(flex: N)` do Flutter
+        // pra ratios assimétricos (2:1:1) sem `Layout` custom — o `minWidth`
+        // baseline diferenciado dá prioridade visual à descrição em larguras
+        // apertadas, mas em larguras confortáveis as três crescem na mesma
+        // proporção.
         HStack(alignment: .center, spacing: 12) {
             if let kind = store.institutionKind(forAccountId: suggestion.transactionAccountId) {
                 InstitutionIcon(kind: kind, size: 24)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(suggestion.transactionDescription)
-                    .font(.callout)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(suggestion.transactionDescription)
+                .font(.callout)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(minWidth: 160, maxWidth: .infinity, alignment: .leading)
+                .help(suggestion.transactionDescription)
 
             categoryMenu
             subcategoryMenu
@@ -45,7 +52,7 @@ struct CategorizationRowView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
-            .frame(minWidth: 88, alignment: .trailing)
+            .frame(width: 92, alignment: .trailing)
 
             CategorizationConfidenceBadge(
                 confidence: suggestion.confidence,
@@ -91,7 +98,8 @@ struct CategorizationRowView: View {
             menuLabel(text: rootName)
         }
         .menuStyle(.borderlessButton)
-        .frame(minWidth: 140, idealWidth: 180)
+        .frame(minWidth: 130, maxWidth: .infinity)
+        .help(rootName)
     }
 
     private var subcategoryMenu: some View {
@@ -120,7 +128,8 @@ struct CategorizationRowView: View {
             menuLabel(text: subName ?? "—")
         }
         .menuStyle(.borderlessButton)
-        .frame(minWidth: 110, idealWidth: 140)
+        .frame(minWidth: 110, maxWidth: .infinity)
+        .help(subName ?? "Sem subcategoria")
     }
 
     private var rootName: String {

@@ -193,7 +193,7 @@ struct TransactionsView: View {
                         Image(systemName: AppIcon.edit.systemImage)
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.borderless)
                     .help("Editar")
 
                     Button(role: .destructive) {
@@ -202,7 +202,7 @@ struct TransactionsView: View {
                         Image(systemName: AppIcon.delete.systemImage)
                             .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.borderless)
                     .help("Apagar")
                 }
             }

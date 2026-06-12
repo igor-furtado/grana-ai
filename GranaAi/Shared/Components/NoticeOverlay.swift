@@ -74,7 +74,7 @@ private struct NoticeCard: View {
                     .padding(6)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.borderless)
             .help("Fechar")
             .accessibilityLabel("Fechar notificação")
         }
@@ -125,7 +125,7 @@ extension NoticeCenter.Kind {
         switch self {
         case .error: .danger
         case .success: .success
-        case .info: .brandPrimary
+        case .info: .primary
         }
     }
 }

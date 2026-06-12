@@ -77,7 +77,7 @@ struct DashboardView: View {
                 title: "Saldo total",
                 value: store.totalBalance,
                 icon: .balance,
-                accent: .brandPrimary
+                accent: .primary
             )
             // Títulos genéricos ("no período") porque o filtro também muda
             // pra 6/12 meses — "Gastos do mês" seria mentira nesses casos.
@@ -98,7 +98,7 @@ struct DashboardView: View {
                 title: "Patrimônio investido",
                 value: store.investmentValue,
                 icon: .netResult,
-                accent: .brandSecondary,
+                accent: .primary,
                 placeholder: true
             )
         }
@@ -177,7 +177,7 @@ struct DashboardView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(Color.brandPrimary.opacity(0.05))
+        .background(Color.primary.opacity(0.05))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 

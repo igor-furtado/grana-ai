@@ -25,7 +25,7 @@ enum AppSection: String, Hashable, CaseIterable, Identifiable {
     }
 
     /// Ordem é **parte do contrato de UI**: os 9 primeiros itens nesta
-    /// ordem ganham atalho `⌘1..⌘9` (ver `ContentView.sectionShortcuts`).
+    /// ordem ganham atalho `⌘1..⌘9` (ver `ContentView.shortcutOrder`).
     /// Reordenar aqui muda os atalhos do usuário silenciosamente.
     static let groups: [SidebarGroup] = [
         SidebarGroup(title: nil, items: [.dashboard, .summary, .transactions, .creditCards, .accounts]),
@@ -88,15 +88,14 @@ struct ContentView: View {
     @Environment(AppEnvironment.self) private var environment
 
     /// Override de tema válido só pra sessão atual (não persistido). Toda
-    /// abertura do app começa em `nil` (segue o sistema); o botão no rodapé
-    /// da sidebar flipa pra `.light`/`.dark` e o estado se perde ao fechar.
+    /// abertura do app começa em `nil` (segue o sistema); o botão de tema
+    /// na toolbar da sidebar flipa pra `.light`/`.dark` e o estado se perde
+    /// ao fechar.
     @State private var themeOverride: ColorScheme?
 
     /// Lido pra decidir a direção do toggle quando ainda não há override.
     /// Reflete o tema efetivo da janela — sistema quando `themeOverride`
-    /// é `nil`, ou o próprio override depois do primeiro clique. Lido aqui
-    /// no nível do `ContentView` (e não dentro do `sidebar`) porque a
-    /// sidebar força `.environment(\.colorScheme, .dark)` no próprio escopo.
+    /// é `nil`, ou o próprio override depois do primeiro clique.
     @Environment(\.colorScheme) private var currentScheme
 
     /// Restaurado entre sessões via `@SceneStorage` — abrir o app cai na
@@ -107,25 +106,30 @@ struct ContentView: View {
     @SceneStorage("ContentView.selection") private var selectionRaw: String = AppSection.dashboard.rawValue
 
     private var selection: AppSection {
-        get { AppSection(rawValue: selectionRaw) ?? .dashboard }
-        nonmutating set { selectionRaw = newValue.rawValue }
+        AppSection(rawValue: selectionRaw) ?? .dashboard
     }
 
-    /// Atalhos ⌘1..⌘9 mapeados pelas primeiras 9 seções na ordem visual da
-    /// sidebar. Segue convenção do macOS (Safari, Mail, Notes usam ⌘1..⌘N
-    /// pra alternar entre seções/abas/contas). As seções restantes
-    /// (Categorização, Categorias, Instituições, Avançado) ficam sem
-    /// atalho — são mais acessadas via clique, e ⌘0 colide com "tamanho
-    /// real" em vários contextos macOS.
-    private static let sectionShortcuts: [AppSection: KeyboardShortcut] = {
-        let ordered = AppSection.groups.flatMap(\.items).prefix(9)
-        let keys: [KeyEquivalent] = ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
-        return Dictionary(
-            uniqueKeysWithValues: zip(ordered, keys).map {
-                ($0, KeyboardShortcut($1, modifiers: .command))
+    /// Binding pro `List(selection:)`. Optional porque o List aceita "nada
+    /// selecionado" — tratamos `nil` como no-op pra preservar a última
+    /// seleção válida (evita janela em branco se o sistema desselecionar).
+    private var selectionBinding: Binding<AppSection?> {
+        Binding(
+            get: { AppSection(rawValue: selectionRaw) },
+            set: { newValue in
+                if let newValue { selectionRaw = newValue.rawValue }
             }
         )
-    }()
+    }
+
+    /// Atalhos ⌘1..⌘9 — primeiras 9 seções na ordem visual da sidebar.
+    /// Segue convenção do macOS (Safari, Mail, Notes usam ⌘1..⌘N pra
+    /// alternar entre seções/abas/contas). As seções restantes ficam sem
+    /// atalho — são acessadas via clique, e ⌘0 colide com "tamanho real"
+    /// em vários contextos macOS.
+    private static let shortcutOrder: [AppSection] =
+        Array(AppSection.groups.flatMap(\.items).prefix(9))
+    private static let shortcutKeys: [KeyEquivalent] =
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
 
     var body: some View {
         NavigationSplitView {
@@ -148,7 +152,6 @@ struct ContentView: View {
                 case .advanced: AdvancedSettingsView()
                 }
             }
-            .tint(.brandSecondary)
         }
         .navigationTitle("Grana AI")
         .preferredColorScheme(themeOverride)
@@ -166,115 +169,52 @@ struct ContentView: View {
         themeOverride = (currentScheme == .dark) ? .light : .dark
     }
 
-    /// Sidebar custom — Buttons em vez de `List(selection:)`. Motivo: na
-    /// `NavigationSplitView` do macOS, a cor do highlight da linha
-    /// selecionada vem do asset `AccentColor` (e `.tint(...)` é ignorado
-    /// nesse ponto). Como aqui queremos a seleção branca **sem** mudar o
-    /// AccentColor global (que afetaria foco de TextField, default buttons,
-    /// etc.), abandonamos o sistema de seleção do List e renderizamos o
-    /// destaque na unha via `background` condicionado a `selection`.
-    ///
-    /// **Trade-off aceito:** a navegação por seta cima/baixo do `List` nativo
-    /// é substituída pelo handler `onMoveCommand` abaixo, focusável no
-    /// container. VoiceOver enxerga cada item como Button com `accessibilityLabel`
-    /// — perde o "row N of M" do List, mas anuncia título + estado de seleção.
+    /// Sidebar padrão do macOS: `List(selection:)` com `Label` nativo.
+    /// Seleção, hover, navegação por teclado (setas ↑↓), background
+    /// translúcido, suporte a Increase Contrast — tudo grátis do sistema.
+    /// Highlight de seleção usa `AccentColor`.
     private var sidebar: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(AppSection.groups) { group in
-                        if let header = group.title {
-                            // Leading 38 = 10 (padding interno da row) + 18 (ícone) + 10
-                            // (spacing) — alinha o header com o **texto** das rows, padrão
-                            // macOS. Antes (10pt) caía em cima do canto arredondado da
-                            // janela em larguras pequenas e o primeiro caractere sumia.
-                            Text(header)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(Color.white.opacity(0.45))
-                                .padding(.leading, 38)
-                                .padding(.trailing, 10)
-                                .padding(.top, 18)
-                                .padding(.bottom, 4)
-                        }
-
-                        ForEach(group.items) { section in
-                            SidebarRow(
-                                section: section,
-                                isSelected: selection == section,
-                                shortcut: Self.sectionShortcuts[section]
-                            ) {
-                                selection = section
-                            }
-                        }
+        List(selection: selectionBinding) {
+            ForEach(AppSection.groups) { group in
+                Section {
+                    ForEach(group.items) { section in
+                        Label(section.title, systemImage: section.icon.systemImage)
+                            .tag(section)
+                    }
+                } header: {
+                    if let title = group.title {
+                        Text(title)
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollContentBackground(.hidden)
-
-            sidebarBottomBar
         }
-        // `sidebarBackground` é um asset SEM variante dark — fica grafite
-        // sempre. `brandPrimary` flipa pra creme no tema dark (intencional pro
-        // resto do app, mas a sidebar precisa permanecer escura).
-        .background(Color.sidebarBackground)
-        .frame(minWidth: 200)
-        // Sem isso o `NavigationSplitView` escolhe um ideal próprio (~250pt),
-        // comendo espaço do detail. Fixar `ideal = min` faz a sidebar abrir
-        // no tamanho mínimo; o usuário ainda pode arrastar pra alargar até 280.
-        .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 280)
-        // Força colorScheme dark aqui pra que o toggle nativo de sidebar (e
-        // qualquer outro control herdado do sistema) renderize com ícones
-        // claros, visíveis contra o fundo escuro fixo.
-        .environment(\.colorScheme, .dark)
-        .focusable()
-        // Sem o `.focusEffectDisabled`, o focus ring nativo (cor = AccentColor,
-        // gold) desenha um retângulo dourado ao redor da sidebar inteira sempre
-        // que ela recebe foco. `.focusable` continua ativo pra capturar
-        // `onMoveCommand` (setas), só removemos o highlight visual.
-        .focusEffectDisabled()
-        .onMoveCommand { direction in
-            moveSelection(direction)
-        }
-    }
-
-    /// Faixa fixa no rodapé da sidebar pra ícones de ação rápida. Hoje só
-    /// hospeda o toggle de tema; o `HStack` com `Spacer` no final deixa o
-    /// crescimento futuro acontecer sem rearranjo (basta adicionar botões
-    /// antes do `Spacer`).
-    private var sidebarBottomBar: some View {
-        VStack(spacing: 0) {
-            Divider()
-                .overlay(Color.white.opacity(0.08))
-
-            HStack(spacing: 4) {
-                Spacer(minLength: 0)
-
-                SidebarIconButton(
-                    icon: currentScheme == .dark ? .themeLight : .themeDark,
-                    help: currentScheme == .dark ? "Mudar para tema claro" : "Mudar para tema escuro",
-                    accessibilityLabel: "Alternar tema",
-                    action: toggleTheme
-                )
+        .navigationSplitViewColumnWidth(min: 200, ideal: 220, max: 280)
+        .background {
+            // Atalhos ⌘1..⌘9 — Buttons invisíveis que capturam os shortcuts
+            // e setam a seleção. `Label` dentro do `List(selection:)` não
+            // aceita `.keyboardShortcut` direto, daí o workaround.
+            Group {
+                ForEach(Array(zip(Self.shortcutOrder, Self.shortcutKeys)), id: \.0) { section, key in
+                    Button(section.title) {
+                        selectionRaw = section.rawValue
+                    }
+                    .keyboardShortcut(key, modifiers: .command)
+                }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 8)
+            .hidden()
         }
-    }
-
-    private var orderedSections: [AppSection] {
-        AppSection.groups.flatMap(\.items)
-    }
-
-    private func moveSelection(_ direction: MoveCommandDirection) {
-        let ordered = orderedSections
-        guard let idx = ordered.firstIndex(of: selection) else { return }
-        switch direction {
-        case .up where idx > 0: selection = ordered[idx - 1]
-        case .down where idx < ordered.count - 1: selection = ordered[idx + 1]
-        default: break
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: toggleTheme) {
+                    Label(
+                        currentScheme == .dark ? "Tema claro" : "Tema escuro",
+                        systemImage: currentScheme == .dark
+                            ? AppIcon.themeLight.systemImage
+                            : AppIcon.themeDark.systemImage
+                    )
+                }
+                .help(currentScheme == .dark ? "Mudar para tema claro" : "Mudar para tema escuro")
+            }
         }
     }
 
@@ -284,100 +224,5 @@ struct ContentView: View {
             icon: section.icon,
             description: "Esta seção entra numa próxima atualização."
         )
-    }
-}
-
-/// Linha da sidebar como `View` própria (em vez de função em `ContentView`)
-/// pra cada instância carregar seu próprio `@State` de hover — sem isso,
-/// um único flag controlaria todas as linhas ao mesmo tempo.
-private struct SidebarRow: View {
-    let section: AppSection
-    let isSelected: Bool
-    let shortcut: KeyboardShortcut?
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: section.icon.systemImage)
-                    .font(.body)
-                    .frame(width: 18)
-                Text(section.title)
-                    .font(.body)
-                Spacer(minLength: 0)
-            }
-            // `sidebarBackground` (grafite fixo) é o oposto do fundo branco do
-            // item selecionado — `brandPrimary` flipa pra creme no env dark e
-            // sumiria contra o highlight.
-            .foregroundStyle(isSelected ? Color.sidebarBackground : Color.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(rowBackground)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        // `keyboardShortcut(_:)` aceita `KeyboardShortcut?` — passar nil é no-op,
-        // então itens sem atalho (10+ na sidebar) ficam sem registrar nada.
-        .keyboardShortcut(shortcut)
-        .onHover { isHovering = $0 }
-        .help(helpText)
-        .accessibilityLabel(section.title)
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
-    }
-
-    /// Tooltip com o nome da seção + o atalho (quando há). Faz o usuário
-    /// descobrir ⌘1..⌘9 ao passar o mouse, já que não aparecem na menu bar.
-    /// Renderiza modificadores na ordem canônica do macOS (⌃⌥⇧⌘) pra
-    /// suportar atalhos compostos futuros (ex: `⌘⇧I`) sem rewrite.
-    private var helpText: String {
-        guard let shortcut else { return section.title }
-        var glyphs = ""
-        if shortcut.modifiers.contains(.control) { glyphs += "⌃" }
-        if shortcut.modifiers.contains(.option) { glyphs += "⌥" }
-        if shortcut.modifiers.contains(.shift) { glyphs += "⇧" }
-        if shortcut.modifiers.contains(.command) { glyphs += "⌘" }
-        return "\(section.title) (\(glyphs)\(shortcut.key.character.uppercased()))"
-    }
-
-    private var rowBackground: Color {
-        if isSelected { return .white }
-        if isHovering { return Color.white.opacity(0.1) }
-        return .clear
-    }
-}
-
-/// Botão de ícone da faixa inferior da sidebar. Mesmo motivo da
-/// `SidebarRow` pra ser uma `View` própria: cada botão precisa do seu
-/// `@State` de hover.
-private struct SidebarIconButton: View {
-    let icon: AppIcon
-    let help: String
-    let accessibilityLabel: String
-    let action: () -> Void
-
-    @State private var isHovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon.systemImage)
-                .font(.body)
-                .foregroundStyle(Color.white)
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isHovering ? Color.white.opacity(0.12) : Color.clear)
-                )
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovering = $0 }
-        .help(help)
-        .accessibilityLabel(accessibilityLabel)
     }
 }

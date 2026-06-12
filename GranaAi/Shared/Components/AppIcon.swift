@@ -27,6 +27,7 @@ enum AppIcon {
     case unarchive
     case sort
     case inspectorToggle
+    case more
 
     // MARK: - Métricas / dashboard
 
@@ -90,6 +91,7 @@ enum AppIcon {
         case .unarchive: "tray.and.arrow.up"
         case .sort: "chevron.up.chevron.down"
         case .inspectorToggle: "sidebar.right"
+        case .more: "ellipsis"
         // Métricas
         case .balance: "wallet.pass.fill"
         case .expenseFlow: "arrow.down.right.circle.fill"

@@ -45,7 +45,7 @@ struct CategoryBarChart: View {
                 x: .value("Total", plottable(item.total)),
                 y: .value("Categoria", item.categoryName)
             )
-            .foregroundStyle((item.icon?.color ?? .brandPrimary.opacity(0.5)).gradient)
+            .foregroundStyle((item.icon?.color ?? .secondary.opacity(0.5)).gradient)
             .cornerRadius(4)
         }
         // Domain explícito na ordem do array (que já chega desc do
@@ -73,7 +73,7 @@ struct CategoryBarChart: View {
             ForEach(totals) { item in
                 HStack(spacing: 10) {
                     Circle()
-                        .fill(item.icon?.color ?? .brandPrimary.opacity(0.5))
+                        .fill(item.icon?.color ?? .secondary.opacity(0.5))
                         .frame(width: 10, height: 10)
 
                     Text(item.categoryName)

@@ -25,7 +25,7 @@ let appSchema = Schema(tables: [
             .text("account_id"),
             .text("category_id"),
             .text("subcategory_id"), // nullable
-            .integer("amount_cents"), // valor em centavos (ver §4 PROJECT.md)
+            .integer("amount_cents"), // valor em centavos (ver invariantes em AGENTS.md)
             .text("occurred_at"), // ISO8601, hora local
             .text("description"),
             .text("notes"), // nullable
@@ -62,8 +62,8 @@ let appSchema = Schema(tables: [
             .integer("initial_balance_cents"),
             .integer("archived"), // 0/1
             // Fase 3: vínculo com `institutions`. Tecnicamente nullable no
-            // schema (PowerSync não tem NOT NULL — ver §invariantes do
-            // CLAUDE.md), mas a partir da Fase 4.5 vira **invariante de
+            // schema (PowerSync não tem NOT NULL — ver invariantes em
+            // AGENTS.md), mas a partir da Fase 4.5 vira **invariante de
             // aplicação**: o display name depende dela, e o `AccountFormView`
             // bloqueia o save sem instituição. Mappers leem como opcional
             // só pra tolerar contas legadas pré-Fase 4.5.
@@ -198,7 +198,7 @@ let appSchema = Schema(tables: [
     // Sonnet, a query do service filtra por `model = configAtual` e cache
     // antigo vira inerte automaticamente — sem precisar de migration.
     //
-    // PowerSync não tem NOT NULL no schema (CLAUDE.md invariante 5) — todas
+    // PowerSync não tem NOT NULL no schema (ver AGENTS.md) — todas
     // as colunas são nullable por baixo. A obrigatoriedade vive nas structs
     // Swift e na lógica de insert dos Repositories.
     Table(

@@ -261,6 +261,10 @@ private struct CategoryCard: View {
             )
             .contentShape(Rectangle())
         }
+        // `.plain` é estrutural: o tile inteiro (GroupBox + overlay de
+        // seleção) é o visual. Sem `.plain` o sistema desenha um push
+        // button por cima do GroupBox e o card vira "botão dentro de
+        // botão".
         .buttonStyle(.plain)
         .accessibilityLabel(group.root.name)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)

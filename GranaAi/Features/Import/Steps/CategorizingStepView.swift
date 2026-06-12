@@ -6,18 +6,36 @@ import SwiftUI
 /// checagem de cache e sabemos quantos itens vão ser classificados).
 /// Fallback pra spinner indeterminado nos primeiros frames antes do
 /// `.started` chegar do service.
+///
+/// **Visual de IA:** o card de loading ganha `aiGlowBorder` — borda
+/// animada com gradiente pastel inspirada em Apple Intelligence. Sinaliza
+/// "tem IA acontecendo aqui" sem texto extra.
 struct CategorizingStepView: View {
     @Bindable var store: ImportStore
 
     var body: some View {
-        VStack(spacing: 16) {
-            progressIndicator
-                .frame(maxWidth: 320)
-            statusText
+        VStack(spacing: 20) {
+            loadingCard
             Button("Cancelar") { store.backToPreviewFromReview() }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 40)
+    }
+
+    private var loadingCard: some View {
+        VStack(spacing: 14) {
+            progressIndicator
+            statusText
+        }
+        // Padding interno generoso pra que o halo interno do glow tenha
+        // espaço pra "invadir" sem cobrir o conteúdo.
+        .padding(.horizontal, 28)
+        .padding(.vertical, 26)
+        .frame(maxWidth: 360)
+        // Sem `.background(.background)` — o container é transparente
+        // intencionalmente, deixa o glow do `aiGlowBorder` sangrar pra
+        // dentro e fazer todo o visual sozinho.
+        .aiGlowBorder(cornerRadius: 14)
     }
 
     @ViewBuilder

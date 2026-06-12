@@ -4,8 +4,8 @@ import UniformTypeIdentifiers
 
 /// Tela "Importações" do menu lateral: lista visual de `ImportBatch` agrupada
 /// por período (Hoje / Ontem / Esta semana / Este mês / Mais antigos), com
-/// logo da instituição em cada card e botão de desfazer. Toolbar primária
-/// abre a `ImportView` em sheet modal.
+/// logo da instituição em cada card e botão de desfazer. Window toolbar tem
+/// o "+" que abre a `ImportView` em sheet modal.
 ///
 /// **Drag & drop:** a tela inteira é um drop target. Arrastar um arquivo OFX
 /// ou CSV pra dentro abre o wizard com o arquivo já carregado, pulando o file
@@ -42,23 +42,8 @@ struct ImportHistoryView: View {
                     .task { store = ImportStore(container: environment.container) }
             }
         }
-        .navigationTitle("Importações")
+        .navigationTitle("Importar dados")
         .navigationSubtitle(importsSubtitle)
-        .toolbar {
-            // Só renderiza o botão da toolbar quando já existe histórico — no
-            // empty state o CTA principal vive no centro da tela, então repetir
-            // o ícone aqui é redundante.
-            if let store, !store.batches.isEmpty {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        presentImportSheet(file: nil)
-                    } label: {
-                        Label("Importar extrato", systemImage: AppIcon.importFile.systemImage)
-                    }
-                    .help("Importar extrato bancário (OFX ou CSV)")
-                }
-            }
-        }
         // Drop destination cobre a área inteira da tela — incluindo o empty
         // state e a lista populada. O `isTargeted` dirige o overlay visual.
         .dropDestination(for: URL.self, action: handleDrop, isTargeted: setDropTargeted)
@@ -76,15 +61,22 @@ struct ImportHistoryView: View {
             ImportView(initialFile: context.file)
                 .environment(environment)
         }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    presentImportSheet(file: nil)
+                } label: {
+                    Label("Nova importação", systemImage: AppIcon.add.systemImage)
+                }
+                .help("Importar extrato bancário (OFX ou CSV)")
+            }
+        }
     }
 
     private var importsSubtitle: String {
         guard let store, !store.batches.isEmpty else { return "" }
-        let totalRows = store.batches.reduce(0) { $0 + $1.rowCount }
-        let lots = store.batches.count
-        let txWord = totalRows == 1 ? "transação" : "transações"
-        let lotWord = lots == 1 ? "importação" : "importações"
-        return "\(totalRows) \(txWord) em \(lots) \(lotWord)"
+        let count = store.batches.count
+        return "\(count) \(count == 1 ? "importação" : "importações")"
     }
 
     @ViewBuilder
@@ -98,26 +90,27 @@ struct ImportHistoryView: View {
             .padding(40)
         } else {
             list(store: store)
-                .confirmationDialog(
-                    "Desfazer importação?",
-                    isPresented: Binding(
-                        get: { pendingDeleteBatch != nil },
-                        set: { if !$0 { pendingDeleteBatch = nil } }
-                    ),
-                    presenting: pendingDeleteBatch
-                ) { batch in
-                    Button("Apagar lote (\(batch.rowCount) transações)", role: .destructive) {
-                        Task {
-                            await store.undo(batchId: batch.id)
-                            pendingDeleteBatch = nil
-                        }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .confirmationDialog(
+                "Desfazer importação?",
+                isPresented: Binding(
+                    get: { pendingDeleteBatch != nil },
+                    set: { if !$0 { pendingDeleteBatch = nil } }
+                ),
+                presenting: pendingDeleteBatch
+            ) { batch in
+                Button("Apagar lote (\(batch.rowCount) transações)", role: .destructive) {
+                    Task {
+                        await store.undo(batchId: batch.id)
+                        pendingDeleteBatch = nil
                     }
-                    Button("Cancelar", role: .cancel) { pendingDeleteBatch = nil }
-                } message: { batch in
-                    Text(
-                        "As \(batch.rowCount) transações de **\(batch.sourceFilename)** serão removidas permanentemente."
-                    )
                 }
+                Button("Cancelar", role: .cancel) { pendingDeleteBatch = nil }
+            } message: { batch in
+                Text(
+                    "As \(batch.rowCount) transações de **\(batch.sourceFilename)** serão removidas permanentemente."
+                )
+            }
         }
     }
 
@@ -252,11 +245,11 @@ private struct EmptyStateDropZone: View {
         VStack(spacing: 20) {
             ZStack {
                 Circle()
-                    .fill(Color.brandPrimary.opacity(isHighlighted ? 0.18 : 0.10))
+                    .fill(Color.primary.opacity(isHighlighted ? 0.18 : 0.10))
                     .frame(width: 84, height: 84)
                 Image(systemName: AppIcon.importFile.systemImage)
                     .font(.system(size: 34, weight: .regular))
-                    .foregroundStyle(Color.brandPrimary)
+                    .foregroundStyle(Color.primary)
                     .symbolEffect(.bounce, value: isHighlighted)
             }
 
@@ -290,12 +283,12 @@ private struct EmptyStateDropZone: View {
         .padding(40)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(Color.brandPrimary.opacity(isHighlighted ? 0.06 : 0.0))
+                .fill(Color.primary.opacity(isHighlighted ? 0.06 : 0.0))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(
-                    Color.brandPrimary.opacity(isHighlighted ? 0.85 : 0.35),
+                    Color.primary.opacity(isHighlighted ? 0.85 : 0.35),
                     style: StrokeStyle(lineWidth: isHighlighted ? 2 : 1.5, dash: [8, 6])
                 )
         )
@@ -321,11 +314,11 @@ private struct DropOverlay: View {
             VStack(spacing: 16) {
                 ZStack {
                     Circle()
-                        .fill(Color.brandPrimary.opacity(0.18))
+                        .fill(Color.primary.opacity(0.18))
                         .frame(width: 96, height: 96)
                     Image(systemName: AppIcon.importFile.systemImage)
                         .font(.system(size: 40, weight: .regular))
-                        .foregroundStyle(Color.brandPrimary)
+                        .foregroundStyle(Color.primary)
                 }
                 Text("Solte para importar")
                     .font(.title2.weight(.semibold))
@@ -342,7 +335,7 @@ private struct DropOverlay: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(
-                        Color.brandPrimary.opacity(0.7),
+                        Color.primary.opacity(0.7),
                         style: StrokeStyle(lineWidth: 2, dash: [8, 6])
                     )
             )
@@ -392,25 +385,19 @@ private struct ImportBatchRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             iconView
+                .help(iconTooltip)
 
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(title)
-                        .font(.headline)
-                    Text("·").foregroundStyle(.tertiary)
-                    Text("\(batch.rowCount) \(batch.rowCount == 1 ? "transação" : "transações")")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                }
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(batch.sourceFilename)
+                    .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                Text("\(batch.rowCount) \(batch.rowCount == 1 ? "transação" : "transações")")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .help(batch.sourceFilename)
 
             Button(role: .destructive, action: onUndo) {
                 Label("Desfazer", systemImage: AppIcon.undo.systemImage)
@@ -454,31 +441,18 @@ private struct ImportBatchRow: View {
         }
     }
 
-    /// Título derivado do filename — quando óbvio (`fatura`/`extrato`),
-    /// nomeia o tipo de import. Caso contrário, usa o filename sem extensão.
-    private var title: String {
-        let lower = batch.sourceFilename.lowercased()
-        if lower.contains("fatura") { return "Fatura" }
-        if lower.contains("extrato") { return "Extrato" }
-        return (batch.sourceFilename as NSString).deletingPathExtension
-    }
-
-    /// Filename não entra aqui — já está no `.help(...)` do card (tooltip),
-    /// evitando duplicar com o título quando ele cai no fallback "filename
-    /// sem extensão".
-    private var subtitle: String {
-        var parts: [String] = []
+    /// Tooltip do ícone: nome do banco + conta/cartão. Fica no ícone (e não
+    /// duplicado no row) porque o ícone é o que **já comunica visualmente**
+    /// a marca da instituição — o tooltip só confirma e adiciona o
+    /// identificador da conta. Fallback pra nome da instituição ou texto
+    /// genérico quando a conta foi removida pós-import.
+    private var iconTooltip: String {
         if let accountDisplayName {
-            parts.append(accountDisplayName)
+            return accountDisplayName
         }
-        parts.append(Self.dateFormatter.string(from: batch.importedAt))
-        return parts.joined(separator: " · ")
+        if let institution {
+            return institution.name
+        }
+        return "Conta desconhecida"
     }
-
-    private static let dateFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "pt_BR")
-        f.setLocalizedDateFormatFromTemplate("dMMM")
-        return f
-    }()
 }
