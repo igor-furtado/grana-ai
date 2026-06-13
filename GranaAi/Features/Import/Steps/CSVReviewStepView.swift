@@ -33,8 +33,8 @@ struct CSVReviewStepView: View {
                     store: store,
                     accounts: creditCardAccounts
                 )
-                if let skipped = resolution?.skippedNegatives, !skipped.isEmpty {
-                    skippedBanner(rows: skipped)
+                if let negatives = resolution?.negativeRows, !negatives.isEmpty {
+                    negativeRowsSection(rows: negatives)
                 }
             }
 
@@ -69,25 +69,43 @@ struct CSVReviewStepView: View {
         return resolution.accountId == nil ? "Escolha a conta-cartão de destino" : nil
     }
 
-    private func skippedBanner(rows: [InterCreditCardCSVReader.SkippedRow]) -> some View {
+    private func negativeRowsSection(rows: [CSVNegativePreviewRow]) -> some View {
         let count = rows.count
         return Form {
             Section {
                 DisclosureGroup {
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(rows) { row in
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(row.date, format: .dateTime.day().month().year())
+                            HStack(alignment: .center) {
+                                Text(row.raw.date, format: .dateTime.day().month().year())
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .frame(width: 90, alignment: .leading)
-                                Text(row.description)
+                                Text(row.raw.description)
                                     .font(.callout)
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                                 Spacer()
-                                Text(row.amount, format: .currency(code: "BRL"))
+                                Text(row.raw.amount, format: .currency(code: "BRL"))
                                     .font(.callout.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
+                            if row.raw.kind == .refund {
+                                Picker("Compra original", selection: Binding(
+                                    get: { row.purchaseId },
+                                    set: { store.setCSVRefundPurchase(rowId: row.id, purchaseId: $0) }
+                                )) {
+                                    Text("Não importar este estorno").tag(UUID?.none)
+                                    ForEach(store.eligibleCSVRefundPurchases(for: row)) { purchase in
+                                        Text(
+                                            "\(purchase.description) · \(purchase.amount.formatted(.currency(code: "BRL")))"
+                                        )
+                                        .tag(UUID?.some(purchase.id))
+                                    }
+                                }
+                            } else {
+                                Text("Pagamento ignorado; importe a transferência pelo extrato da conta.")
+                                    .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
@@ -96,7 +114,7 @@ struct CSVReviewStepView: View {
                 } label: {
                     Label {
                         Text(
-                            "\(count) \(count == 1 ? "linha ignorada" : "linhas ignoradas") (valores negativos: pagamentos da fatura anterior + estornos). Pagamentos serão registrados como transferência no extrato bancário."
+                            "\(count) \(count == 1 ? "valor negativo" : "valores negativos") para revisão. Pagamentos são ignorados; estornos selecionados serão vinculados à compra original."
                         )
                         .font(.callout)
                         .foregroundStyle(.secondary)

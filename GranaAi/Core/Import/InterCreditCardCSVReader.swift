@@ -14,13 +14,8 @@ import Foundation
 /// original: decodifica como UTF-8 → re-codifica cada char como Latin-1 →
 /// decodifica esses bytes como UTF-8.
 ///
-/// **Skip de valores negativos:** a fatura inclui linhas de pagamento da
-/// fatura anterior (`"PAGAMENTO ON LINE"`, `"PAGTO DEBITO AUTOMATICO"`) e
-/// eventuais estornos. Ambas têm valor negativo. Como o pagamento será
-/// modelado como **transferência** vinda do extrato bancário e estornos não
-/// têm contrapartida na fatura líquida que o usuário quer ver, **toda linha
-/// com valor negativo é pulada**. Conta quantas foram puladas pra reportar
-/// na UI.
+/// Valores negativos são classificados para revisão individual: pagamentos
+/// são ignorados e estornos exigem vínculo com a compra original.
 struct InterCreditCardCSVReader {
     /// Resultado da leitura: linhas válidas (todas positivas) + linhas
     /// negativas puladas (preservadas pra auditoria na UI) + ano/mês inferido
@@ -49,10 +44,16 @@ struct InterCreditCardCSVReader {
     /// anterior, estorno etc.). `amount` mantém o sinal negativo original
     /// pra exibição.
     struct SkippedRow: Hashable, Identifiable {
+        enum Kind: Hashable {
+            case payment
+            case refund
+        }
+
         let id = UUID()
         let date: Date
         let description: String
         let amount: Decimal
+        let kind: Kind
     }
 
     func read(from url: URL) throws -> Statement {
@@ -104,7 +105,8 @@ struct InterCreditCardCSVReader {
                 skippedNegatives.append(SkippedRow(
                     date: date,
                     description: description,
-                    amount: amount
+                    amount: amount,
+                    kind: Self.negativeKind(description: description)
                 ))
                 continue
             }
@@ -118,11 +120,20 @@ struct InterCreditCardCSVReader {
             ))
         }
 
-        if parsed.isEmpty {
+        if parsed.isEmpty, !skippedNegatives.contains(where: { $0.kind == .refund }) {
             throw ImportError.noValidRows
         }
 
         return Statement(rows: parsed, skippedNegatives: skippedNegatives)
+    }
+
+    private static func negativeKind(description: String) -> SkippedRow.Kind {
+        let normalized = description
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .uppercased()
+        return normalized.contains("PAGAMENTO") || normalized.contains("PAGTO")
+            ? .payment
+            : .refund
     }
 
     // MARK: - Encoding (mojibake double-decode)

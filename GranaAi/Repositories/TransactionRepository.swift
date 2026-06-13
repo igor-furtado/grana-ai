@@ -16,23 +16,20 @@ final class TransactionRepository: Sendable {
 
     // MARK: - CRUD
 
-    /// Insert atômico com **hook de Statement** (Fase 4.7): se a transação
-    /// for em conta-cartão, resolve a janela de Fatura e cria/encontra a
-    /// Statement antes do insert, populando `statementId`. Recalcula o total
-    /// da Fatura afetada no mesmo `writeTransaction`.
+    /// Insere a origem e reconstrói a projeção de qualquer cartão afetado na
+    /// mesma transação de banco.
     func insert(_ transaction: Transaction) async throws {
         try await db.writeTransaction { tx in
-            var copy = transaction
-            try Self.resolveAndApplyStatement(for: &copy, in: tx)
-            // Sempre passar `parameters` como `[Sendable?]` — o PowerSync usa
-            // prepared statements internamente, então valores nunca vão pra
-            // string SQL e SQL injection fica impossível.
             try tx.execute(
                 sql: Self.insertTransactionSQL,
-                parameters: Self.insertParameters(for: copy)
+                parameters: Self.insertParameters(for: transaction)
             )
-            if let statementId = copy.statementId {
-                try StatementRepository.recalculateTotal(statementId: statementId, in: tx)
+            for accountId in try Self.affectedCardAccountIds(
+                accountId: transaction.accountId,
+                destinationAccountId: transaction.destinationAccountId,
+                in: tx
+            ) {
+                try StatementProjector.rebuild(accountId: accountId, in: tx)
             }
         }
     }
@@ -42,15 +39,10 @@ final class TransactionRepository: Sendable {
     /// Recalcula o total das Faturas antigas e novas afetadas.
     func update(_ transaction: Transaction) async throws {
         try await db.writeTransaction { tx in
-            // Captura o `statementId` antigo antes do UPDATE pra também
-            // recalcular a Fatura de onde a compra saiu (se mudou).
-            let oldStatementId: UUID? = try Self.readOldStatementId(
+            let oldCardAccountIds = try Self.affectedCardAccountIds(
                 transactionId: transaction.id,
                 in: tx
             )
-
-            var copy = transaction
-            try Self.resolveAndApplyStatement(for: &copy, in: tx)
 
             try tx.execute(
                 sql: """
@@ -58,195 +50,105 @@ final class TransactionRepository: Sendable {
                     account_id = ?, category_id = ?, subcategory_id = ?,
                     amount_cents = ?, occurred_at = ?, description = ?,
                     notes = ?, destination_account_id = ?, statement_id = ?,
+                    refund_of_transaction_id = ?,
                     updated_at = ?
                 WHERE id = ?
                 """,
                 parameters: [
-                    copy.accountId.uuidString,
-                    copy.categoryId.uuidString,
-                    copy.subcategoryId?.uuidString,
-                    Converters.decimalToCents(copy.amount),
-                    Converters.dateToString(copy.occurredAt),
-                    copy.description,
-                    copy.notes,
-                    copy.destinationAccountId?.uuidString,
-                    copy.statementId?.uuidString,
-                    Converters.dateToString(copy.updatedAt),
-                    copy.id.uuidString,
+                    transaction.accountId.uuidString,
+                    transaction.categoryId.uuidString,
+                    transaction.subcategoryId?.uuidString,
+                    Converters.decimalToCents(transaction.amount),
+                    Converters.dateToString(transaction.occurredAt),
+                    transaction.description,
+                    transaction.notes,
+                    transaction.destinationAccountId?.uuidString,
+                    transaction.statementId?.uuidString,
+                    transaction.refundOfTransactionId?.uuidString,
+                    Converters.dateToString(transaction.updatedAt),
+                    transaction.id.uuidString,
                 ]
             )
 
-            // Recalcula todas as Faturas envolvidas: a anterior (se mudou
-            // de Fatura) + a nova. `Set` colapsa quando são iguais.
-            let affected = Set([oldStatementId, copy.statementId].compactMap { $0 })
-            for statementId in affected {
-                try StatementRepository.recalculateTotal(statementId: statementId, in: tx)
+            let newCardAccountIds = try Self.affectedCardAccountIds(
+                accountId: transaction.accountId,
+                destinationAccountId: transaction.destinationAccountId,
+                in: tx
+            )
+            for accountId in oldCardAccountIds.union(newCardAccountIds) {
+                try StatementProjector.rebuild(accountId: accountId, in: tx)
             }
         }
     }
 
-    /// Delete atômico que limpa cascateadas: payments que referenciam esta
-    /// transação são removidos (a transferência deixou de pagar essas
-    /// Faturas) e os totais/paid_at das Faturas afetadas são recalculados.
+    /// Delete atômico seguido de replay de todos os cartões afetados.
     func delete(id: UUID) async throws {
         try await db.writeTransaction { tx in
-            // 1. Captura estado relevante antes do delete:
-            //    - `statement_id` da própria transação (se cartão)
-            //    - Statements que esta transação estava pagando (via
-            //      statement_payments)
-            let oldStatementId: UUID? = try Self.readOldStatementId(transactionId: id, in: tx)
-            let paidStatementIds: [UUID] = try tx.getAll(
-                sql: """
-                SELECT DISTINCT statement_id FROM statement_payments
-                WHERE transaction_id = ?
-                """,
-                parameters: [id.uuidString],
-                mapper: { (cursor: SqlCursor) throws -> UUID in
-                    let s = try cursor.getString(name: "statement_id")
-                    guard let uuid = UUID(uuidString: s) else {
-                        throw DatabaseError.invalidUUID(column: "statement_id", value: s)
-                    }
-                    return uuid
-                }
-            )
-
-            // 2. Cascade: apaga payments dela e a transação.
-            try tx.execute(
-                sql: "DELETE FROM statement_payments WHERE transaction_id = ?",
-                parameters: [id.uuidString]
+            let affectedCardAccountIds = try Self.affectedCardAccountIds(
+                transactionId: id,
+                in: tx
             )
             try tx.execute(
                 sql: "DELETE FROM transactions WHERE id = ?",
                 parameters: [id.uuidString]
             )
-
-            // 3. Recalcula: o total da Fatura de onde a compra saiu, e o
-            //    paid_at de cada Fatura que esta transferência pagava.
-            if let oldStatementId {
-                try StatementRepository.recalculateTotal(statementId: oldStatementId, in: tx)
-            }
-            for paidStatementId in paidStatementIds {
-                try StatementRepository.recalculatePaidStatus(statementId: paidStatementId, in: tx)
+            for accountId in affectedCardAccountIds {
+                try StatementProjector.rebuild(accountId: accountId, in: tx)
             }
         }
     }
 
-    // MARK: - Statement hook (Fase 4.7)
+    // MARK: - Statement projection
 
-    /// Se `transaction.accountId` for uma conta-cartão, resolve a Fatura
-    /// pelo `statement_closing_day`/`payment_due_day` e atribui
-    /// `transaction.statementId`. Cria a Statement (com total inicial 0)
-    /// se ainda não existir uma com aquele `closingDate`. Conta corrente
-    /// ou contas sem details: limpa `statementId` pra `nil`.
-    ///
-    /// **Sync dentro do tx** porque `Calendar.nextDate` e UUID generation
-    /// não são async — toda a lógica cabe inline.
-    nonisolated static func resolveAndApplyStatement(
-        for transaction: inout Transaction,
-        in tx: any ConnectionContext
-    ) throws {
-        // Lê `(closing_day, due_day)` se a conta é cartão. JOIN garante
-        // que só vamos resolver quando `accounts.type = 'creditCard'` E
-        // existe linha em `credit_cards`.
-        struct CycleConfig: Sendable {
-            let closingDay: Int
-            let dueDay: Int
-        }
-        let cycle: CycleConfig? = try tx.getOptional(
-            sql: """
-            SELECT cc.statement_closing_day AS closing_day,
-                   cc.payment_due_day AS due_day
-            FROM credit_cards cc
-            JOIN accounts a ON a.id = cc.account_id
-            WHERE a.id = ? AND a.type = ?
-            LIMIT 1
-            """,
-            parameters: [
-                transaction.accountId.uuidString,
-                AccountType.creditCard.rawValue,
-            ],
-            mapper: { (cursor: SqlCursor) throws -> CycleConfig in
-                try CycleConfig(
-                    closingDay: Int(cursor.getInt64(name: "closing_day")),
-                    dueDay: Int(cursor.getInt64(name: "due_day"))
-                )
-            }
-        )
-
-        guard let cycle else {
-            // Não-cartão: zera statementId. Importante no update — se a
-            // transação migrou de cartão pra corrente, a Fatura antiga
-            // perde a transação no recálculo.
-            transaction.statementId = nil
-            return
-        }
-
-        let window = StatementWindow.resolve(
-            closingDay: cycle.closingDay,
-            paymentDueDay: cycle.dueDay,
-            on: transaction.occurredAt
-        )
-
-        // Find existing Statement pra esta (account, closing_date).
-        let existingIdStr: String? = try tx.getOptional(
-            sql: """
-            SELECT id FROM statements
-            WHERE account_id = ? AND closing_date = ?
-            LIMIT 1
-            """,
-            parameters: [
-                transaction.accountId.uuidString,
-                Converters.dateToString(window.closingDate),
-            ],
-            mapper: { (cursor: SqlCursor) throws -> String in
-                try cursor.getString(name: "id")
-            }
-        )
-
-        if let existingIdStr, let existingId = UUID(uuidString: existingIdStr) {
-            transaction.statementId = existingId
-            return
-        }
-
-        // Não achou: cria nova Statement com total = 0 (será recalculado
-        // após o insert da transação).
-        let now = Date()
-        let newStatement = Statement(
-            id: UUID(),
-            accountId: transaction.accountId,
-            closingDate: window.closingDate,
-            dueDate: window.dueDate,
-            totalAmount: 0,
-            paidAt: nil,
-            sourceFilename: nil,
-            createdAt: now,
-            updatedAt: now
-        )
-        try tx.execute(
-            sql: StatementRepository.insertStatementSQL,
-            parameters: StatementRepository.insertStatementParams(newStatement)
-        )
-        transaction.statementId = newStatement.id
-    }
-
-    /// Lê o `statement_id` atual de uma transação (antes do UPDATE/DELETE).
-    /// Retorna `nil` em dois casos: transação não existe (deveria ser
-    /// impossível em fluxo correto) ou `statement_id` é NULL.
-    private nonisolated static func readOldStatementId(
+    private nonisolated static func affectedCardAccountIds(
         transactionId: UUID,
         in tx: any ConnectionContext
-    ) throws -> UUID? {
-        let result: String?? = try tx.getOptional(
-            sql: "SELECT statement_id FROM transactions WHERE id = ?",
+    ) throws -> Set<UUID> {
+        struct Accounts {
+            let accountId: UUID
+            let destinationAccountId: UUID?
+        }
+        guard let accounts: Accounts = try tx.getOptional(
+            sql: """
+            SELECT account_id, destination_account_id
+            FROM transactions WHERE id = ?
+            """,
             parameters: [transactionId.uuidString],
-            mapper: { (cursor: SqlCursor) throws -> String? in
-                try cursor.getStringOptional(name: "statement_id")
+            mapper: { cursor in
+                let accountRaw = try cursor.getString(name: "account_id")
+                guard let accountId = UUID(uuidString: accountRaw) else {
+                    throw DatabaseError.invalidUUID(column: "account_id", value: accountRaw)
+                }
+                let destinationId = try cursor.getStringOptional(name: "destination_account_id")
+                    .flatMap(UUID.init(uuidString:))
+                return Accounts(accountId: accountId, destinationAccountId: destinationId)
             }
+        ) else {
+            return []
+        }
+        return try affectedCardAccountIds(
+            accountId: accounts.accountId,
+            destinationAccountId: accounts.destinationAccountId,
+            in: tx
         )
-        // `result` é Optional<Optional<String>>: outer = "row encontrada"?
-        // inner = "coluna não-NULL"? Achatar pros dois nil → nil.
-        guard let inner = result, let str = inner else { return nil }
-        return UUID(uuidString: str)
+    }
+
+    private nonisolated static func affectedCardAccountIds(
+        accountId: UUID,
+        destinationAccountId: UUID?,
+        in tx: any ConnectionContext
+    ) throws -> Set<UUID> {
+        let candidates = [accountId, destinationAccountId].compactMap { $0 }
+        var result: Set<UUID> = []
+        for candidate in candidates {
+            let isCard: Int64? = try tx.getOptional(
+                sql: "SELECT 1 AS value FROM accounts WHERE id = ? AND type = ? LIMIT 1",
+                parameters: [candidate.uuidString, AccountType.creditCard.rawValue],
+                mapper: { cursor in try cursor.getInt64(name: "value") }
+            )
+            if isCard != nil { result.insert(candidate) }
+        }
+        return result
     }
 
     func getById(_ id: UUID) async throws -> Transaction? {
@@ -346,6 +248,7 @@ final class TransactionRepository: Sendable {
         corrections: [CategorizationCorrection]
     ) async throws {
         try await db.writeTransaction { tx in
+            var affectedCardAccountIds: Set<UUID> = []
             for (batch, transactions) in batchesWithTransactions {
                 try tx.execute(
                     sql: """
@@ -365,25 +268,20 @@ final class TransactionRepository: Sendable {
                     ]
                 )
                 for transaction in transactions {
-                    // Hook de Statement (Fase 4.7): se a transação cai em
-                    // conta-cartão, resolve a Fatura e seta `statementId`
-                    // antes do insert. `resolveAndApplyStatement` cria a
-                    // Statement na hora se não existir (com total = 0).
-                    var copy = transaction
-                    try Self.resolveAndApplyStatement(for: &copy, in: tx)
                     try tx.execute(
                         sql: Self.insertTransactionSQL,
-                        parameters: Self.insertParameters(for: copy)
+                        parameters: Self.insertParameters(for: transaction)
                     )
-                    if let statementId = copy.statementId {
-                        // Acumular pra recalcular depois (fora do loop)
-                        // seria mais eficiente, mas evitar set duplicado
-                        // requer tracking. O custo de recalcular dentro do
-                        // loop é baixo (UPDATE com SUM idempotente) e
-                        // mantém o código direto.
-                        try StatementRepository.recalculateTotal(statementId: statementId, in: tx)
-                    }
+                    try affectedCardAccountIds.formUnion(Self.affectedCardAccountIds(
+                        accountId: transaction.accountId,
+                        destinationAccountId: transaction.destinationAccountId,
+                        in: tx
+                    ))
                 }
+            }
+
+            for accountId in affectedCardAccountIds {
+                try StatementProjector.rebuild(accountId: accountId, in: tx)
             }
 
             // Cache entries: upsert por (hash, model). delete-then-insert.
@@ -458,6 +356,10 @@ final class TransactionRepository: Sendable {
         updatedAt: Date
     ) async throws {
         try await db.writeTransaction { tx in
+            let affectedCardAccountIds = try Self.affectedCardAccountIds(
+                transactionId: transactionId,
+                in: tx
+            )
             try tx.execute(
                 sql: """
                 INSERT INTO categorization_corrections
@@ -517,6 +419,9 @@ final class TransactionRepository: Sendable {
                     transactionId.uuidString,
                 ]
             )
+            for accountId in affectedCardAccountIds {
+                try StatementProjector.rebuild(accountId: accountId, in: tx)
+            }
         }
     }
 
@@ -626,7 +531,10 @@ final class TransactionRepository: Sendable {
         // de NULL — evita ter que tratar opcional aqui em cima.
         let cents = try await db.get(
             sql: """
-            SELECT COALESCE(SUM(t.amount_cents), 0) AS total
+            SELECT COALESCE(SUM(
+                CASE WHEN t.refund_of_transaction_id IS NULL
+                     THEN t.amount_cents ELSE -t.amount_cents END
+            ), 0) AS total
             FROM transactions t
             JOIN categories c ON t.category_id = c.id
             WHERE c.kind = ?
@@ -656,7 +564,8 @@ final class TransactionRepository: Sendable {
         try await db.getAll(
             sql: """
             SELECT c.id AS id, c.name AS name, c.slug AS slug,
-                   SUM(t.amount_cents) AS total
+                   SUM(CASE WHEN t.refund_of_transaction_id IS NULL
+                            THEN t.amount_cents ELSE -t.amount_cents END) AS total
             FROM transactions t
             JOIN categories c ON t.category_id = c.id
             WHERE c.kind = ?
@@ -691,7 +600,8 @@ final class TransactionRepository: Sendable {
         let rows: [Occurrence] = try await db.getAll(
             sql: """
             SELECT t.occurred_at  AS occurred_at,
-                   t.amount_cents AS amount_cents
+                   CASE WHEN t.refund_of_transaction_id IS NULL
+                        THEN t.amount_cents ELSE -t.amount_cents END AS amount_cents
             FROM transactions t
             JOIN categories c ON t.category_id = c.id
             WHERE c.kind = ?
@@ -734,7 +644,8 @@ final class TransactionRepository: Sendable {
                    c.id   AS id,
                    c.name AS name,
                    c.slug AS slug,
-                   SUM(t.amount_cents) AS total
+                   SUM(CASE WHEN t.refund_of_transaction_id IS NULL
+                            THEN t.amount_cents ELSE -t.amount_cents END) AS total
             FROM transactions t
             JOIN categories c ON t.category_id = c.id
             WHERE c.kind = ?
@@ -763,8 +674,14 @@ final class TransactionRepository: Sendable {
         try await db.getAll(
             sql: """
             SELECT SUBSTR(t.occurred_at, 1, 7) AS month,
-                   SUM(CASE WHEN c.kind = 'income'  THEN t.amount_cents ELSE 0 END) AS income,
-                   SUM(CASE WHEN c.kind = 'expense' THEN t.amount_cents ELSE 0 END) AS expense
+                   SUM(CASE WHEN c.kind = 'income'
+                            THEN CASE WHEN t.refund_of_transaction_id IS NULL
+                                      THEN t.amount_cents ELSE -t.amount_cents END
+                            ELSE 0 END) AS income,
+                   SUM(CASE WHEN c.kind = 'expense'
+                            THEN CASE WHEN t.refund_of_transaction_id IS NULL
+                                      THEN t.amount_cents ELSE -t.amount_cents END
+                            ELSE 0 END) AS expense
             FROM transactions t
             JOIN categories c ON t.category_id = c.id
             WHERE c.kind IN ('income', 'expense')
@@ -791,8 +708,8 @@ final class TransactionRepository: Sendable {
         (id, account_id, category_id, subcategory_id,
          amount_cents, occurred_at, description, notes,
          import_batch_id, external_id, destination_account_id,
-         statement_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         statement_id, refund_of_transaction_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
     /// Parâmetros do `insertTransactionSQL` na ordem das colunas. `nonisolated`
@@ -812,6 +729,7 @@ final class TransactionRepository: Sendable {
             transaction.externalId,
             transaction.destinationAccountId?.uuidString,
             transaction.statementId?.uuidString,
+            transaction.refundOfTransactionId?.uuidString,
             Converters.dateToString(transaction.createdAt),
             Converters.dateToString(transaction.updatedAt),
         ]
@@ -903,6 +821,16 @@ final class TransactionRepository: Sendable {
             statementId = nil
         }
 
+        let refundOfTransactionId: UUID?
+        if let s = try cursor.getStringOptional(name: "refund_of_transaction_id") {
+            guard let uuid = UUID(uuidString: s) else {
+                throw DatabaseError.invalidUUID(column: "refund_of_transaction_id", value: s)
+            }
+            refundOfTransactionId = uuid
+        } else {
+            refundOfTransactionId = nil
+        }
+
         let createdAtString = try cursor.getString(name: "created_at")
         guard let createdAt = Converters.stringToDate(createdAtString) else {
             throw DatabaseError.invalidDate(column: "created_at", value: createdAtString)
@@ -926,6 +854,7 @@ final class TransactionRepository: Sendable {
             externalId: externalId,
             destinationAccountId: destinationAccountId,
             statementId: statementId,
+            refundOfTransactionId: refundOfTransactionId,
             createdAt: createdAt,
             updatedAt: updatedAt
         )

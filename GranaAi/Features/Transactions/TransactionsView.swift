@@ -94,11 +94,30 @@ struct TransactionsView: View {
                 }
                 Button("Cancelar", role: .cancel) { pendingDelete = nil }
             } message: { transaction in
-                Text("\(transaction.description) — \(transaction.amount.formatted(.currency(code: "BRL")))")
+                Text(deletePreview(for: transaction, store: store))
             }
             .task {
                 await store.start()
             }
+    }
+
+    private func deletePreview(
+        for transaction: Transaction,
+        store: TransactionStore
+    ) -> String {
+        var message = "\(transaction.description) — \(transaction.amount.formatted(.currency(code: "BRL")))"
+        let affectsCard = store.account(for: transaction.accountId)?.type == .creditCard
+            || transaction.destinationAccountId.flatMap(store.account(for:))?.type == .creditCard
+        if affectsCard {
+            message += "\n\nFaturas, créditos, pagamentos e quitações posteriores serão recalculados antes da exclusão."
+        }
+        let linkedRefundCount = store.transactions.filter {
+            $0.refundOfTransactionId == transaction.id
+        }.count
+        if linkedRefundCount > 0 {
+            message += "\nA exclusão será rejeitada enquanto houver \(linkedRefundCount) estorno(s) vinculado(s)."
+        }
+        return message
     }
 
     private func list(store: TransactionStore) -> some View {

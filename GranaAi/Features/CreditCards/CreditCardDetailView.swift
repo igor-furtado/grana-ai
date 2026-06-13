@@ -38,7 +38,9 @@ struct CreditCardDetailView: View {
     /// fechamento (próxima a vencer); cai pra última paga se tudo já foi
     /// pago. `nil` apenas quando não há nenhuma fatura — cartão sem compras.
     private var defaultStatementId: UUID? {
-        if let open = statements.first(where: { $0.paidAt == nil }) {
+        if let open = statements.first(where: {
+            $0.status() == .forming || $0.remainingAmount > 0
+        }) {
             return open.id
         }
         return statements.last?.id
@@ -197,8 +199,9 @@ struct CreditCardDetailView: View {
             }
 
             if let selectedId = selectedStatementId,
-               statements.contains(where: { $0.id == selectedId })
+               let statement = statements.first(where: { $0.id == selectedId })
             {
+                statementSummary(statement)
                 StatementTransactionsList(
                     statementId: selectedId,
                     container: store.container
@@ -208,6 +211,32 @@ struct CreditCardDetailView: View {
                 // não há transações pra listar.
                 emptyTransactions
             }
+        }
+    }
+
+    private func statementSummary(_ statement: Statement) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 6) {
+            summaryRow("Compras menos estornos", value: statement.netAmount)
+            summaryRow("Créditos recebidos", value: statement.creditReceived)
+            summaryRow("Pagamentos", value: statement.paymentApplied)
+            summaryRow("Total a quitar", value: statement.totalAmount)
+            summaryRow("Saldo restante", value: statement.remainingAmount)
+            summaryRow("Saldo credor", value: statement.creditBalance)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.secondary.opacity(0.06))
+        )
+    }
+
+    private func summaryRow(_ label: String, value: Decimal) -> some View {
+        GridRow {
+            Text(label)
+                .foregroundStyle(.secondary)
+            Text(value.formatted(.currency(code: account.currency)))
+                .monospacedDigit()
+                .gridColumnAlignment(.trailing)
         }
     }
 
@@ -367,7 +396,12 @@ private struct StatementTimelineChart: View {
                 id: s.id,
                 label: Self.monthFormatter.string(from: s.closingDate),
                 total: s.totalAmount,
-                status: s.paidAt == nil ? .open : .paid,
+                status: {
+                    switch s.status() {
+                    case .forming, .closed: .open
+                    case .paid, .settled: .paid
+                    }
+                }(),
                 closingDate: s.closingDate
             )
         }
@@ -584,10 +618,12 @@ private struct StatementCyclePanel: View {
             StatementCycleCard(
                 title: monthTitle(s.closingDate),
                 amount: s.totalAmount,
-                statusLabel: s.paidAt == nil ? "Aberta" : "Paga",
-                statusTint: s.paidAt == nil ? .info : .neutral,
+                statusLabel: s.status().displayName,
+                statusTint: s.status() == .forming ? .info : .neutral,
                 dueDate: s.dueDate,
-                bestPurchaseDay: role == .selected && s.paidAt == nil ? bestPurchaseDay : nil,
+                bestPurchaseDay: role == .selected && s.status() == .forming
+                    ? bestPurchaseDay
+                    : nil,
                 currency: currency,
                 isHighlighted: role == .selected,
                 isMuted: role != .selected,

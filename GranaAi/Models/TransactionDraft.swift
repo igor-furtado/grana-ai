@@ -29,6 +29,7 @@ struct TransactionDraft: Identifiable, Hashable {
     /// taxonomia** — vai pra IA só como hint adicional pra reduzir incerteza.
     /// `nil` quando a fonte não fornece (OFX, planilhas genéricas).
     let sourceCategoryHint: String?
+    let refundOfTransactionId: UUID?
 
     init(
         id: UUID,
@@ -39,7 +40,8 @@ struct TransactionDraft: Identifiable, Hashable {
         description: String,
         notes: String?,
         externalId: String?,
-        sourceCategoryHint: String? = nil
+        sourceCategoryHint: String? = nil,
+        refundOfTransactionId: UUID? = nil
     ) {
         self.id = id
         self.accountId = accountId
@@ -50,5 +52,6 @@ struct TransactionDraft: Identifiable, Hashable {
         self.notes = notes
         self.externalId = externalId
         self.sourceCategoryHint = sourceCategoryHint
+        self.refundOfTransactionId = refundOfTransactionId
     }
 }

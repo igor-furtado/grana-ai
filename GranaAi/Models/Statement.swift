@@ -12,31 +12,60 @@ import Foundation
 /// mas Statements já criadas mantêm o snapshot original — senão mudaria
 /// retroativamente a qual fatura uma compra antiga pertence.
 ///
-/// **`paidAt` é cache denormalizado:** populado quando
-/// `SUM(StatementPayment.appliedAmount) >= totalAmount`. Toda escrita em
-/// `statement_payments` ou em `transactions` que afete `total_amount_cents`
-/// recalcula este campo na mesma `writeTransaction`.
+/// Todos os valores são projeções denormalizadas e reconstruíveis a partir
+/// das transações, configurações de ciclo, pagamentos e créditos.
 struct Statement: Identifiable, Codable, Hashable {
     let id: UUID
     let accountId: UUID
     let closingDate: Date
     let dueDate: Date
-    /// Magnitude positiva (soma de `transactions.amount_cents` vinculadas).
-    /// `Decimal` no Swift, `Int64` centavos no banco (ver invariantes em
-    /// `AGENTS.md`). Recalculado a cada insert/update/delete em transactions
-    /// da conta-cartão.
-    var totalAmount: Decimal
-    /// `nil` quando ainda não foi totalmente paga. Quando preenchido,
-    /// reflete o momento em que a soma dos payments cobriu o total.
-    var paidAt: Date?
-    /// Arquivo CSV/OFX que originou esta Fatura (quando criada via import).
-    /// `nil` pra Statements criadas por transações manuais.
-    var sourceFilename: String?
+    /// Compras menos estornos do próprio ciclo. Pode ser negativo.
+    var netAmount: Decimal
+    /// Saldo credor trazido de faturas anteriores.
+    var creditReceived: Decimal
+    /// Soma das transferências aplicadas à fatura.
+    var paymentApplied: Decimal
+    /// Data efetiva em que uma fatura fechada ficou integralmente coberta.
+    var settledAt: Date?
     let createdAt: Date
     var updatedAt: Date
 
-    var isPaid: Bool {
-        paidAt != nil
+    var totalAmount: Decimal {
+        max(0, netAmount - creditReceived)
+    }
+
+    var creditBalance: Decimal {
+        max(0, creditReceived + paymentApplied - netAmount)
+    }
+
+    var remainingAmount: Decimal {
+        max(0, totalAmount - paymentApplied)
+    }
+
+    func status(referenceDate: Date = Date(), calendar: Calendar = .current) -> StatementStatus {
+        guard calendar.startOfDay(for: referenceDate) > calendar.startOfDay(for: closingDate) else {
+            return .forming
+        }
+        guard remainingAmount == 0, totalAmount > 0 else {
+            return .closed
+        }
+        return creditReceived == 0 && creditBalance == 0 ? .paid : .settled
+    }
+}
+
+enum StatementStatus: String, Codable, Hashable {
+    case forming
+    case closed
+    case paid
+    case settled
+
+    var displayName: String {
+        switch self {
+        case .forming: "Em formação"
+        case .closed: "Fechada"
+        case .paid: "Paga"
+        case .settled: "Quitada"
+        }
     }
 }
 
@@ -56,4 +85,14 @@ struct StatementPayment: Identifiable, Codable, Hashable {
     var appliedAmount: Decimal
     let createdAt: Date
     var updatedAt: Date
+}
+
+/// Parcela de saldo credor produzida por uma fatura fechada e consumida por
+/// uma fatura posterior do mesmo cartão.
+struct StatementCreditApplication: Identifiable, Codable, Hashable {
+    let id: UUID
+    let sourceStatementId: UUID
+    let destinationStatementId: UUID
+    let appliedAmount: Decimal
+    let createdAt: Date
 }

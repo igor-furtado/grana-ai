@@ -85,6 +85,7 @@ final class ImportStore {
     /// Carregadas no `loadInitialData` pra alimentar os pickers de
     /// categoria/subcategoria do preview OFX sem chamar o repo a cada View.
     private(set) var categories: [Category] = []
+    private(set) var csvRefundPurchases: [Transaction] = []
 
     /// Task que espera a categorização terminar pra avançar a fase. Guardada
     /// pra que `cancel()` consiga interromper o polling — sem isso, cancelar
@@ -543,11 +544,14 @@ final class ImportStore {
             sourceFilename: url.lastPathComponent,
             accountId: initialAccountId,
             rows: rows,
-            skippedNegatives: statement.skippedNegatives
+            negativeRows: statement.skippedNegatives.map {
+                CSVNegativePreviewRow(raw: $0, purchaseId: nil)
+            }
         )
 
         if let accId = initialAccountId {
             resolution = await applyCSVDedup(resolution, accountId: accId)
+            await loadCSVRefundPurchases(accountId: accId)
         }
 
         csvResolution = resolution
@@ -562,6 +566,7 @@ final class ImportStore {
 
         if let accId = accountId {
             resolution = await applyCSVDedup(resolution, accountId: accId)
+            await loadCSVRefundPurchases(accountId: accId)
         } else {
             // Sem conta selecionada → limpa flags de duplicata e deixa tudo
             // selecionado por default.
@@ -569,8 +574,36 @@ final class ImportStore {
                 resolution.rows[idx].isDuplicate = false
                 resolution.rows[idx].selected = true
             }
+            csvRefundPurchases = []
         }
         csvResolution = resolution
+    }
+
+    func setCSVRefundPurchase(rowId: UUID, purchaseId: UUID?) {
+        guard var resolution = csvResolution,
+              let index = resolution.negativeRows.firstIndex(where: { $0.id == rowId })
+        else { return }
+        resolution.negativeRows[index].purchaseId = purchaseId
+        csvResolution = resolution
+    }
+
+    func eligibleCSVRefundPurchases(
+        for row: CSVNegativePreviewRow
+    ) -> [Transaction] {
+        csvRefundPurchases.filter { purchase in
+            guard purchase.refundOfTransactionId == nil,
+                  purchase.occurredAt <= row.raw.date
+            else { return false }
+            let alreadyRefunded = csvRefundPurchases
+                .filter { $0.refundOfTransactionId == purchase.id }
+                .reduce(Decimal(0)) { $0 + $1.amount }
+            return purchase.amount - alreadyRefunded >= abs(row.raw.amount)
+        }
+    }
+
+    private func loadCSVRefundPurchases(accountId: UUID) async {
+        let all = (try? await container.transactions.getAll()) ?? []
+        csvRefundPurchases = all.filter { $0.accountId == accountId }
     }
 
     private func applyCSVDedup(
@@ -601,8 +634,11 @@ final class ImportStore {
             return
         }
 
-        let toImport = resolution.rows.filter { $0.selected }
-        guard !toImport.isEmpty else {
+        let purchasesToImport = resolution.rows.filter { $0.selected }
+        let refundsToImport = resolution.negativeRows.filter {
+            $0.raw.kind == .refund && $0.purchaseId != nil
+        }
+        guard !purchasesToImport.isEmpty || !refundsToImport.isEmpty else {
             fail(with: ImportError.noValidRows)
             return
         }
@@ -613,13 +649,13 @@ final class ImportStore {
             id: batchId,
             sourceFilename: resolution.sourceFilename,
             accountId: accountId,
-            rowCount: toImport.count,
+            rowCount: purchasesToImport.count + refundsToImport.count,
             importedAt: now,
             createdAt: now,
             updatedAt: now
         )
 
-        let drafts: [TransactionDraft] = toImport.map { row in
+        var drafts: [TransactionDraft] = purchasesToImport.map { row in
             TransactionDraft(
                 id: UUID(),
                 accountId: accountId,
@@ -638,6 +674,27 @@ final class ImportStore {
                 sourceCategoryHint: row.raw.interCategory
             )
         }
+        drafts.append(contentsOf: refundsToImport.compactMap { row in
+            guard let purchaseId = row.purchaseId,
+                  let purchase = csvRefundPurchases.first(where: { $0.id == purchaseId })
+            else { return nil }
+            return TransactionDraft(
+                id: UUID(),
+                accountId: accountId,
+                importBatchId: batchId,
+                signedAmount: abs(row.raw.amount),
+                occurredAt: row.raw.date,
+                description: row.raw.description,
+                notes: "Estorno importado do CSV Inter",
+                externalId: InterCreditCardCSVReader.makeExternalId(
+                    date: row.raw.date,
+                    description: row.raw.description,
+                    amount: abs(row.raw.amount),
+                    tipo: "Estorno"
+                ),
+                refundOfTransactionId: purchase.id
+            )
+        })
 
         pendingDrafts = drafts
         pendingBatchesWithDrafts = [(batch, drafts.map(\.id))]
@@ -771,6 +828,7 @@ final class ImportStore {
                         notes: draft.notes,
                         importBatchId: batch.id,
                         externalId: draft.externalId,
+                        refundOfTransactionId: draft.refundOfTransactionId,
                         createdAt: now,
                         updatedAt: now
                     )
@@ -924,18 +982,28 @@ struct CSVStatementResolution: Equatable {
     /// Linhas com valor negativo (pagamentos da fatura anterior + estornos)
     /// puladas no parse. Reportadas na UI num disclosure pra o usuário
     /// auditar o que foi filtrado.
-    let skippedNegatives: [InterCreditCardCSVReader.SkippedRow]
+    var negativeRows: [CSVNegativePreviewRow]
 
     var skippedNegativeCount: Int {
-        skippedNegatives.count
+        negativeRows.count
     }
 
     var selectedCount: Int {
         rows.filter(\.selected).count
+            + negativeRows.filter { $0.raw.kind == .refund && $0.purchaseId != nil }.count
     }
 
     var duplicateCount: Int {
         rows.filter(\.isDuplicate).count
+    }
+}
+
+struct CSVNegativePreviewRow: Identifiable, Equatable {
+    let raw: InterCreditCardCSVReader.SkippedRow
+    var purchaseId: UUID?
+
+    var id: UUID {
+        raw.id
     }
 }
 

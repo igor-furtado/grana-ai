@@ -45,6 +45,8 @@ let appSchema = Schema(tables: [
             // TransactionRepository — PowerSync não tem NOT NULL). Distinto
             // de `statement_payments` (transferência → fatura paga).
             .text("statement_id"), // nullable
+            // Estorno → compra original. Obrigatório apenas para estornos.
+            .text("refund_of_transaction_id"), // nullable
             .text("created_at"),
             .text("updated_at"),
         ]
@@ -107,32 +109,36 @@ let appSchema = Schema(tables: [
         ]
     ),
 
-    // Fase 4.7: Fatura (Statement) de cartão. Uma linha por ciclo de
-    // fechamento de uma conta-cartão. Criada **lazy** pelo
-    // TransactionRepository quando uma transação de cartão entra e ainda
-    // não há Statement cobrindo sua data. `closing_date`/`due_date` são
-    // snapshot imutável — não mudam se o usuário editar
-    // `statement_closing_day` na `credit_cards` depois. `paid_at` é cache
-    // denormalizado, setado quando `SUM(statement_payments.applied_amount_cents) >= total_amount_cents`.
+    Table(
+        name: "credit_card_cycle_configs",
+        columns: [
+            .text("account_id"),
+            .text("effective_from"),
+            .integer("statement_closing_day"),
+            .integer("payment_due_day"),
+            .text("created_at"),
+        ]
+    ),
+
+    // Projeção reconstruível de um ciclo que contém compra ou estorno.
+    // Datas e valores são materializados pelo replay cronológico do cartão.
     Table(
         name: "statements",
         columns: [
             .text("account_id"), // FK pra `accounts` (type=creditCard)
             .text("closing_date"), // ISO8601 — dia que a fatura fecha
             .text("due_date"), // ISO8601 — dia que vence
-            .integer("total_amount_cents"), // recalculado a cada write em transactions
-            .text("paid_at"), // nullable — cache; setado quando saldo é coberto
-            .text("source_filename"), // nullable — preenchido em CSV import
+            .integer("net_amount_cents"), // compras - estornos; pode ser negativo
+            .integer("credit_received_cents"),
+            .integer("payment_applied_cents"),
+            .text("settled_at"), // nullable — data efetiva da quitação
             .text("created_at"),
             .text("updated_at"),
         ]
     ),
 
-    // Fase 4.7: junction N:N entre Statements e transferências que pagam
-    // elas. Cobre 2 casos: (a) múltiplas transferências pagando a mesma
-    // fatura (adiantamento); (b) 1 transferência fatiada entre Faturas
-    // (split). Toda escrita aqui recalcula `statements.paid_at` da fatura
-    // afetada na mesma writeTransaction.
+    // Alocações derivadas entre transferências e faturas. O usuário não
+    // escolhe a distribuição; o projetor aplica cronologicamente.
     Table(
         name: "statement_payments",
         columns: [
@@ -141,6 +147,16 @@ let appSchema = Schema(tables: [
             .integer("applied_amount_cents"), // quanto desta transferência foi aplicado
             .text("created_at"),
             .text("updated_at"),
+        ]
+    ),
+
+    Table(
+        name: "statement_credit_applications",
+        columns: [
+            .text("source_statement_id"),
+            .text("destination_statement_id"),
+            .integer("applied_amount_cents"),
+            .text("created_at"),
         ]
     ),
 

@@ -37,6 +37,10 @@ struct Transaction: Identifiable, Codable, Hashable {
     /// **Distinto de `StatementPayment`**: aqui é compra→fatura; lá é
     /// transferência→fatura paga.
     var statementId: UUID?
+    /// Compra original revertida por este lançamento. Quando preenchido,
+    /// esta transação é um estorno de cartão: mantém magnitude positiva,
+    /// herda conta/categoria da compra e reduz a fatura do próprio ciclo.
+    var refundOfTransactionId: UUID?
     let createdAt: Date
     var updatedAt: Date
 
@@ -53,6 +57,7 @@ struct Transaction: Identifiable, Codable, Hashable {
         externalId: String? = nil,
         destinationAccountId: UUID? = nil,
         statementId: UUID? = nil,
+        refundOfTransactionId: UUID? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -68,6 +73,7 @@ struct Transaction: Identifiable, Codable, Hashable {
         self.externalId = externalId
         self.destinationAccountId = destinationAccountId
         self.statementId = statementId
+        self.refundOfTransactionId = refundOfTransactionId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

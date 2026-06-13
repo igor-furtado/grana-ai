@@ -35,7 +35,9 @@ final class AppContainer {
     /// - v1: schema inicial (Fase 0–4.5).
     /// - v2 (Fase 4.6): `accounts` perde `branch_id`, `account_number`,
     ///   `card_last_four`. Nascem `bank_accounts` e `credit_cards` 1:1.
-    static let schemaVersion = 2
+    /// - v3 (Fase 4.7 revisada): projeção determinística de faturas,
+    ///   estornos vinculados, créditos e histórico de configuração.
+    static let schemaVersion = 3
 
     private static let schemaVersionDefaultsKey = "GranaAi.schemaVersion"
 

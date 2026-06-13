@@ -93,6 +93,18 @@ struct CreditCardDetails: Codable, Hashable {
     var updatedAt: Date
 }
 
+/// Versão histórica da configuração de ciclo de um cartão. A vigência sempre
+/// começa numa fronteira de ciclo; o primeiro registro também cobre imports
+/// anteriores ao cadastro local.
+struct CreditCardCycleConfig: Identifiable, Codable, Hashable {
+    let id: UUID
+    let accountId: UUID
+    let effectiveFrom: Date
+    let statementClosingDay: Int
+    let paymentDueDay: Int
+    let createdAt: Date
+}
+
 extension Account {
     /// Compõe o nome amigável da conta a partir de `instituição + tipo +
     /// identificador específico` (número da conta pra banco, `••••last4` pra

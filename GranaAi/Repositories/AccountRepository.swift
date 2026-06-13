@@ -37,6 +37,19 @@ final class AccountRepository: Sendable {
                     sql: Self.insertCardSQL,
                     parameters: Self.insertCardParams(creditCardDetails)
                 )
+                try tx.execute(
+                    sql: Self.insertCycleConfigSQL,
+                    parameters: Self.insertCycleConfigParams(
+                        CreditCardCycleConfig(
+                            id: UUID(),
+                            accountId: account.id,
+                            effectiveFrom: .distantPast,
+                            statementClosingDay: creditCardDetails.statementClosingDay,
+                            paymentDueDay: creditCardDetails.paymentDueDay,
+                            createdAt: account.createdAt
+                        )
+                    )
+                )
             }
         }
     }
@@ -48,9 +61,15 @@ final class AccountRepository: Sendable {
     func update(
         _ account: Account,
         bankDetails: BankAccountDetails? = nil,
-        creditCardDetails: CreditCardDetails? = nil
+        creditCardDetails: CreditCardDetails? = nil,
+        cycleEffectiveFrom: Date? = nil
     ) async throws {
         try await db.writeTransaction { tx in
+            let previousCardDetails: CreditCardDetails? = try tx.getOptional(
+                sql: "SELECT * FROM credit_cards WHERE account_id = ? LIMIT 1",
+                parameters: [account.id.uuidString],
+                mapper: Self.mapCardDetails
+            )
             try tx.execute(
                 sql: Self.updateAccountSQL,
                 parameters: Self.updateAccountParams(account)
@@ -80,6 +99,46 @@ final class AccountRepository: Sendable {
                     sql: Self.insertCardSQL,
                     parameters: Self.insertCardParams(creditCardDetails)
                 )
+                let cycleChanged = previousCardDetails.map {
+                    $0.statementClosingDay != creditCardDetails.statementClosingDay
+                        || $0.paymentDueDay != creditCardDetails.paymentDueDay
+                } ?? true
+                if cycleChanged {
+                    let effectiveFrom = cycleEffectiveFrom
+                        ?? Self.nextCycleStart(
+                            details: previousCardDetails ?? creditCardDetails,
+                            referenceDate: account.updatedAt
+                        )
+                    try tx.execute(
+                        sql: """
+                        DELETE FROM credit_card_cycle_configs
+                        WHERE account_id = ? AND effective_from >= ?
+                        """,
+                        parameters: [
+                            account.id.uuidString,
+                            Converters.dateToString(effectiveFrom),
+                        ]
+                    )
+                    try tx.execute(
+                        sql: Self.insertCycleConfigSQL,
+                        parameters: Self.insertCycleConfigParams(
+                            CreditCardCycleConfig(
+                                id: UUID(),
+                                accountId: account.id,
+                                effectiveFrom: effectiveFrom,
+                                statementClosingDay: creditCardDetails.statementClosingDay,
+                                paymentDueDay: creditCardDetails.paymentDueDay,
+                                createdAt: account.updatedAt
+                            )
+                        )
+                    )
+                    try StatementProjector.rebuild(accountId: account.id, in: tx)
+                }
+            } else if previousCardDetails != nil {
+                try tx.execute(
+                    sql: "DELETE FROM credit_card_cycle_configs WHERE account_id = ?",
+                    parameters: [account.id.uuidString]
+                )
             }
         }
     }
@@ -95,6 +154,10 @@ final class AccountRepository: Sendable {
             )
             try tx.execute(
                 sql: "DELETE FROM credit_cards WHERE account_id = ?",
+                parameters: [id.uuidString]
+            )
+            try tx.execute(
+                sql: "DELETE FROM credit_card_cycle_configs WHERE account_id = ?",
                 parameters: [id.uuidString]
             )
             try tx.execute(
@@ -257,12 +320,16 @@ final class AccountRepository: Sendable {
                    a.initial_balance_cents
                    + COALESCE((
                        SELECT SUM(
-                           CASE c.kind
-                               WHEN 'income'   THEN  t.amount_cents
-                               WHEN 'expense'  THEN -t.amount_cents
-                               WHEN 'transfer' THEN
-                                   CASE WHEN t.destination_account_id IS NOT NULL
-                                        THEN -t.amount_cents ELSE 0 END
+                           CASE
+                               WHEN t.refund_of_transaction_id IS NOT NULL
+                                   THEN t.amount_cents
+                               WHEN c.kind = 'income'
+                                   THEN t.amount_cents
+                               WHEN c.kind = 'expense'
+                                   THEN -t.amount_cents
+                               WHEN c.kind = 'transfer'
+                                   THEN CASE WHEN t.destination_account_id IS NOT NULL
+                                             THEN -t.amount_cents ELSE 0 END
                                ELSE 0
                            END
                        )
@@ -327,6 +394,13 @@ final class AccountRepository: Sendable {
     VALUES (uuid(), ?, ?, ?, ?, ?, ?, ?)
     """
 
+    private nonisolated static let insertCycleConfigSQL = """
+    INSERT INTO credit_card_cycle_configs
+        (id, account_id, effective_from, statement_closing_day,
+         payment_due_day, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    """
+
     private nonisolated static func insertAccountParams(_ account: Account) -> [(any Sendable)?] {
         [
             account.id.uuidString,
@@ -372,6 +446,34 @@ final class AccountRepository: Sendable {
             Converters.dateToString(details.createdAt),
             Converters.dateToString(details.updatedAt),
         ]
+    }
+
+    private nonisolated static func insertCycleConfigParams(
+        _ config: CreditCardCycleConfig
+    ) -> [(any Sendable)?] {
+        [
+            config.id.uuidString,
+            config.accountId.uuidString,
+            Converters.dateToString(config.effectiveFrom),
+            Int64(config.statementClosingDay),
+            Int64(config.paymentDueDay),
+            Converters.dateToString(config.createdAt),
+        ]
+    }
+
+    private nonisolated static func nextCycleStart(
+        details: CreditCardDetails,
+        referenceDate: Date,
+        calendar: Calendar = .current
+    ) -> Date {
+        let window = StatementWindow.resolve(
+            closingDay: details.statementClosingDay,
+            paymentDueDay: details.paymentDueDay,
+            on: referenceDate,
+            calendar: calendar
+        )
+        return calendar.date(byAdding: .day, value: 1, to: window.closingDate)
+            ?? window.closingDate
     }
 
     // MARK: - Mappers

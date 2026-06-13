@@ -96,25 +96,25 @@ custom_rules:
     # `value` e `total` ficaram fora porque colidiam com APIs SwiftUI (ProgressView, etc.) — risco
     # baixo de serem nomes de propriedade monetária de fato.
     regex: '(?:let|var)\s+(amount|balance|price|cost|initialBalance|cents|fee|subtotal|grandTotal)\s*:\s*Double\b'
-    message: "Dinheiro é Decimal no Swift, Int64 (centavos) no banco. Nunca Double. Ver CLAUDE.md."
+    message: "Dinheiro é Decimal no Swift, Int64 (centavos) no banco. Nunca Double. Ver AGENTS.md."
     severity: error
 
   no_observable_object:
     name: "ObservableObject proibido"
     regex: ':\s*ObservableObject\b'
-    message: "Use @Observable em vez de ObservableObject. Ver CLAUDE.md."
+    message: "Use @Observable em vez de ObservableObject. Ver AGENTS.md."
     severity: error
 
   no_substr_occurred_at:
     name: "SUBSTR em data UTC"
     regex: 'SUBSTR\s*\(\s*occurred_at'
-    message: "SUBSTR(occurred_at, 1, 10) quebra perto da meia-noite (banco é UTC). Use janela com Calendar local. Ver CLAUDE.md."
+    message: "SUBSTR(occurred_at, 1, 10) quebra perto da meia-noite (banco é UTC). Use janela com Calendar local. Ver AGENTS.md."
     severity: error
 
   no_raw_print:
     name: "print proibido"
     regex: '^\s*print\('
-    message: "Use Logger (OSLog): log.<categoria>.info(\"...\"). Ver CLAUDE.md."
+    message: "Use Logger (OSLog): log.<categoria>.info(\"...\"). Ver AGENTS.md."
     severity: warning
 
   todo_needs_phase:

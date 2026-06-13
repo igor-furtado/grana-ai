@@ -7,11 +7,8 @@ import SwiftUI
 /// novo registro. O título do sheet e o botão "Salvar" adaptam o
 /// comportamento sem precisar de duas Views diferentes.
 ///
-/// **Pagamento de fatura (Fase 4.7):** quando a categoria é transferência e
-/// o destino é uma conta-cartão, aparece uma section com picker de Fatura
-/// (sugere a Fatura cujo saldo restante mais se aproxima do valor da
-/// transferência). DisclosureGroup "Aplicar em mais de uma fatura" expõe o
-/// modo split, distribuindo o valor entre N Faturas.
+/// Pagamentos destinados a cartão são distribuídos automaticamente pelo
+/// projetor, da dívida elegível mais antiga para a mais recente.
 struct TransactionFormView: View {
     @Environment(TransactionStore.self) private var store
     @Environment(\.dismiss) private var dismiss
@@ -33,21 +30,10 @@ struct TransactionFormView: View {
     /// `selectedCategoryKind == .transfer`. Ao trocar a categoria pra qualquer
     /// outro kind, o valor é limpo (`onChange` em `categoryId`).
     @State private var destinationAccountId: UUID?
+    @State private var refundOfTransactionId: UUID?
     @State private var notes: String = ""
     @State private var saveError: String?
-
-    // MARK: - Statement payment (Fase 4.7)
-
-    /// Fatura selecionada no modo simples (1 transferência → 1 Fatura).
-    /// `nil` quando não há cartão de destino ou usuário ainda não escolheu.
-    @State private var selectedStatementId: UUID?
-    /// Toggle do DisclosureGroup. Quando true, `splitAmountsCents` vira a
-    /// fonte da verdade; `selectedStatementId` é ignorado.
-    @State private var splitMode: Bool = false
-    /// Valores aplicados por Statement no modo split (em centavos).
-    /// Statements ausentes do dict = 0 aplicado. Entries com valor 0 são
-    /// filtradas no save.
-    @State private var splitAmountsCents: [UUID: Int] = [:]
+    @State private var showsRetroactivePreview = false
 
     init(existing: Transaction? = nil) {
         self.existing = existing
@@ -68,9 +54,6 @@ struct TransactionFormView: View {
                 LabeledContent("Valor") {
                     CurrencyField(cents: $amountCents)
                 }
-                .onChange(of: amountCents) { _, _ in
-                    autoSelectClosestStatementIfNeeded()
-                }
 
                 // Sem opção "Selecione" — o usuário escolhe da lista direto.
                 // `accountId` é defaultado pra primeira conta em `loadExisting`.
@@ -86,6 +69,9 @@ struct TransactionFormView: View {
                     // na lista).
                     if destinationAccountId == newValue {
                         destinationAccountId = nil
+                    }
+                    if !refundablePurchases.contains(where: { $0.id == refundOfTransactionId }) {
+                        refundOfTransactionId = nil
                     }
                 }
 
@@ -106,7 +92,6 @@ struct TransactionFormView: View {
                         // preserva o destino porque `oldValue == nil` nesse caso.
                         if selectedCategoryKind != .transfer {
                             destinationAccountId = nil
-                            resetStatementPayment()
                         }
                     }
                 }
@@ -134,12 +119,14 @@ struct TransactionFormView: View {
                         }
                     }
                     .onChange(of: destinationAccountId) { _, _ in
-                        resetStatementPayment()
-                        autoSelectClosestStatementIfNeeded()
                     }
                 }
 
-                if shouldShowStatementPicker {
+                if selectedAccountIsCreditCard, selectedCategoryKind != .transfer {
+                    refundSection
+                }
+
+                if isPayingCreditCard {
                     statementPaymentSection
                 }
 
@@ -184,9 +171,17 @@ struct TransactionFormView: View {
                     Button("Cancelar") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Salvar") { Task { await save() } }
+                    Button("Salvar", action: requestSave)
                         .disabled(!canSave)
                 }
+            }
+            .alert("Prévia do recálculo", isPresented: $showsRetroactivePreview) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Confirmar alteração") {
+                    Task { await save() }
+                }
+            } message: {
+                Text(retroactivePreviewText)
             }
             .onAppear(perform: loadExisting)
             // `loadExisting` define os defaults no `onAppear`, mas
@@ -210,75 +205,48 @@ struct TransactionFormView: View {
 
     // MARK: - Statement payment UI (Fase 4.7)
 
-    private var shouldShowStatementPicker: Bool {
-        isPayingCreditCard && !openStatementsForDestination.isEmpty
-    }
-
     private var statementPaymentSection: some View {
         Section {
-            if !splitMode {
-                Picker("Aplicar à fatura", selection: $selectedStatementId) {
-                    Text("(nenhuma)").tag(UUID?.none)
-                    ForEach(openStatementsForDestination) { statement in
-                        Text(statementPickerLabel(statement))
-                            .tag(UUID?.some(statement.id))
+            if automaticPaymentPreview.isEmpty {
+                Text("Nenhuma dívida elegível nessa data.")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(automaticPaymentPreview, id: \.statement.id) { item in
+                    LabeledContent(statementPickerLabel(item.statement)) {
+                        Text(item.amount.formatted(.currency(code: "BRL")))
+                            .monospacedDigit()
                     }
-                }
-            }
-
-            DisclosureGroup(isExpanded: $splitMode) {
-                ForEach(openStatementsForDestination) { statement in
-                    LabeledContent(statementPickerLabel(statement)) {
-                        CurrencyField(cents: Binding(
-                            get: { splitAmountsCents[statement.id] ?? 0 },
-                            set: { splitAmountsCents[statement.id] = $0 }
-                        ))
-                    }
-                }
-                splitSummary
-            } label: {
-                Text("Aplicar em mais de uma fatura")
-                    .font(.callout)
-            }
-            .onChange(of: splitMode) { _, expanded in
-                // Ao abrir o split, popula com a seleção atual no valor
-                // cheio — usuário começa de algum lugar coerente em vez de
-                // todos zerados.
-                if expanded, splitAmountsCents.isEmpty,
-                   let id = selectedStatementId
-                {
-                    splitAmountsCents[id] = amountCents
-                }
-                // Ao fechar, descarta os valores de split (volta pro modo
-                // simples com `selectedStatementId` que estava).
-                if !expanded {
-                    splitAmountsCents = [:]
                 }
             }
         } header: {
-            Text("Pagamento da fatura")
+            Text("Distribuição automática")
         } footer: {
-            footerText
+            Text(
+                "O valor inteiro será aplicado às dívidas elegíveis mais antigas. O salvamento será rejeitado se sobrar valor."
+            )
         }
     }
 
-    private var splitSummary: some View {
-        let totalCents = splitAmountsCents.values.reduce(0, +)
-        let transferCents = amountCents
-        let totalDecimal = Decimal(totalCents) / 100
-        let transferDecimal = Decimal(transferCents) / 100
-        let isExact = totalCents == transferCents
-        let isOver = totalCents > transferCents
-        return HStack {
-            Text("Total aplicado")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(
-                "\(totalDecimal.formatted(.currency(code: "BRL"))) de \(transferDecimal.formatted(.currency(code: "BRL")))"
-            )
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(isOver ? .danger : (isExact ? .success : .secondary))
+    private var refundSection: some View {
+        Section {
+            Picker("Estorno de", selection: $refundOfTransactionId) {
+                Text("Não é estorno").tag(UUID?.none)
+                ForEach(refundablePurchases) { purchase in
+                    Text(
+                        "\(purchase.description) · \(store.remainingRefundableAmount(for: purchase).formatted(.currency(code: "BRL")))"
+                    )
+                    .tag(UUID?.some(purchase.id))
+                }
+            }
+            .onChange(of: refundOfTransactionId) { _, purchaseId in
+                guard let purchase = refundablePurchases.first(where: { $0.id == purchaseId }) else { return }
+                categoryId = purchase.categoryId
+                subcategoryId = purchase.subcategoryId
+            }
+        } header: {
+            Text("Estorno")
+        } footer: {
+            Text("Estornos herdam conta e categoria da compra e pertencem ao ciclo da própria data.")
         }
     }
 
@@ -294,18 +262,51 @@ struct TransactionFormView: View {
         return "Fatura \(monthYear) · Faltam \(remainingStr) de \(totalStr)"
     }
 
-    private var footerText: Text {
-        if splitMode {
-            return Text(
-                "Distribua o valor da transferência entre as Faturas. A soma não precisa cobrir o total, mas não pode passar."
-            )
+    // MARK: - Save
+
+    private func requestSave() {
+        if requiresRetroactivePreview {
+            showsRetroactivePreview = true
+        } else {
+            Task { await save() }
         }
-        return Text(
-            "A transferência vai aplicar o valor cheio à Fatura selecionada. Ative o modo split pra dividir entre várias."
-        )
     }
 
-    // MARK: - Save
+    private var requiresRetroactivePreview: Bool {
+        let isPast = occurredAt < Calendar.current.startOfDay(for: Date())
+        guard isPast else { return false }
+        return selectedAccountIsCreditCard || isPayingCreditCard
+    }
+
+    private var retroactivePreviewText: String {
+        var effects: [String] = []
+        if selectedAccountIsCreditCard {
+            let closing = StatementWindow.resolve(
+                closingDay: selectedCardDetails?.statementClosingDay ?? 1,
+                paymentDueDay: selectedCardDetails?.paymentDueDay ?? 1,
+                on: occurredAt
+            ).closingDate
+            effects
+                .append(
+                    "A fatura que fecha em \(closing.formatted(date: .abbreviated, time: .omitted)) será reconstruída."
+                )
+        }
+        if isPayingCreditCard {
+            effects
+                .append(
+                    "Pagamentos serão redistribuídos cronologicamente e a alteração será rejeitada se houver sobra."
+                )
+        }
+        if let existing {
+            let linkedRefunds = store.transactions.filter {
+                $0.refundOfTransactionId == existing.id
+            }.count
+            if linkedRefunds > 0 {
+                effects.append("\(linkedRefunds) estorno(s) vinculado(s) serão revalidados.")
+            }
+        }
+        return effects.joined(separator: "\n")
+    }
 
     private var canSave: Bool {
         guard !description.trimmingCharacters(in: .whitespaces).isEmpty,
@@ -322,11 +323,11 @@ struct TransactionFormView: View {
         {
             return false
         }
-        // Em split mode, soma não pode exceder o valor da transferência —
-        // pagar mais que se transferiu é incoerente.
-        if splitMode, shouldShowStatementPicker {
-            let totalSplit = splitAmountsCents.values.reduce(0, +)
-            if totalSplit > amountCents { return false }
+        if let purchaseId = refundOfTransactionId,
+           let purchase = refundablePurchases.first(where: { $0.id == purchaseId }),
+           Decimal(amountCents) / 100 > store.remainingRefundableAmount(for: purchase)
+        {
+            return false
         }
         return true
     }
@@ -362,34 +363,31 @@ struct TransactionFormView: View {
         return account.type == .creditCard
     }
 
-    private var openStatementsForDestination: [Statement] {
-        guard let dest = destinationAccountId else { return [] }
-        return store.openStatements(for: dest)
+    private var selectedAccountIsCreditCard: Bool {
+        guard let accountId, let account = store.account(for: accountId) else { return false }
+        return account.type == .creditCard
     }
 
-    /// Limpa estado de pagamento de fatura (split e single). Chamado quando
-    /// destination muda ou categoria deixa de ser transfer — evita carregar
-    /// estado stale entre alternâncias.
-    private func resetStatementPayment() {
-        selectedStatementId = nil
-        splitMode = false
-        splitAmountsCents = [:]
+    private var selectedCardDetails: CreditCardDetails? {
+        guard let accountId else { return nil }
+        return store.creditCards.first { $0.accountId == accountId }
     }
 
-    /// Auto-sugere a Fatura cujo saldo restante mais se aproxima do valor da
-    /// transferência. Roda quando o destino muda, quando o valor da
-    /// transferência muda, ou quando o stream de statements chega no momento
-    /// certo. Só age em modo simples (split é controlado manualmente) e só
-    /// quando ainda não há seleção (não sobrescreve escolha do usuário).
-    private func autoSelectClosestStatementIfNeeded() {
-        guard !splitMode, isPayingCreditCard, selectedStatementId == nil else { return }
-        let target = Decimal(amountCents) / 100
-        let closest = openStatementsForDestination.min(by: { lhs, rhs in
-            let lhsDiff = (store.remainingAmount(of: lhs) - target).magnitude
-            let rhsDiff = (store.remainingAmount(of: rhs) - target).magnitude
-            return lhsDiff < rhsDiff
-        })
-        selectedStatementId = closest?.id
+    private var refundablePurchases: [Transaction] {
+        store.refundablePurchases(
+            accountId: accountId,
+            occurredAt: occurredAt,
+            excluding: existing?.id
+        )
+    }
+
+    private var automaticPaymentPreview: [(statement: Statement, amount: Decimal)] {
+        guard let destinationAccountId else { return [] }
+        return store.automaticPaymentPreview(
+            accountId: destinationAccountId,
+            amount: Decimal(amountCents) / 100,
+            occurredAt: occurredAt
+        )
     }
 
     private func loadExisting() {
@@ -407,25 +405,8 @@ struct TransactionFormView: View {
         categoryId = existing.categoryId
         subcategoryId = existing.subcategoryId
         destinationAccountId = existing.destinationAccountId
+        refundOfTransactionId = existing.refundOfTransactionId
         notes = existing.notes ?? ""
-
-        // Carregar payments existentes pra preservar a alocação na edição.
-        // `store.statementPayments` é streamado — em race, fica vazio e o
-        // form começa "limpo"; usuário re-escolhe no save.
-        let existingPayments = store.statementPayments.filter { $0.transactionId == existing.id }
-        switch existingPayments.count {
-        case 0:
-            break // nada a fazer
-        case 1:
-            selectedStatementId = existingPayments[0].statementId
-        default:
-            splitMode = true
-            splitAmountsCents = Dictionary(
-                uniqueKeysWithValues: existingPayments.map { payment in
-                    (payment.statementId, Int(truncatingIfNeeded: Converters.decimalToCents(payment.appliedAmount)))
-                }
-            )
-        }
     }
 
     private func save() async {
@@ -441,11 +422,6 @@ struct TransactionFormView: View {
             ? destinationAccountId
             : nil
 
-        // Build allocations pro hook de StatementPayment. Vazio quando não é
-        // pagamento de fatura — replacePayments aceita array vazio e apaga
-        // payments antigos (necessário se usuário re-categorizou).
-        let allocations: [UUID: Decimal] = buildAllocationsForSave()
-
         do {
             if let existing {
                 var updated = existing
@@ -457,7 +433,8 @@ struct TransactionFormView: View {
                 updated.description = description
                 updated.notes = notesValue
                 updated.destinationAccountId = resolvedDestination
-                try await store.update(updated, statementAllocations: allocations)
+                updated.refundOfTransactionId = refundOfTransactionId
+                try await store.update(updated)
             } else {
                 try await store.add(
                     accountId: accountId,
@@ -468,7 +445,7 @@ struct TransactionFormView: View {
                     description: description,
                     notes: notesValue,
                     destinationAccountId: resolvedDestination,
-                    statementAllocations: allocations
+                    refundOfTransactionId: refundOfTransactionId
                 )
             }
             dismiss()
@@ -476,21 +453,5 @@ struct TransactionFormView: View {
             saveError = error.localizedDescription
             NoticeCenter.shared.report(error, title: "Falha ao salvar transação")
         }
-    }
-
-    private func buildAllocationsForSave() -> [UUID: Decimal] {
-        guard isPayingCreditCard else { return [:] }
-        if splitMode {
-            // Filtra zerados pra não criar StatementPayment com applied = 0.
-            return splitAmountsCents
-                .filter { $0.value > 0 }
-                .reduce(into: [UUID: Decimal]()) { dict, entry in
-                    dict[entry.key] = Decimal(entry.value) / 100
-                }
-        }
-        if let id = selectedStatementId {
-            return [id: Decimal(amountCents) / 100]
-        }
-        return [:]
     }
 }

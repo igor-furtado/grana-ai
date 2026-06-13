@@ -13,6 +13,18 @@ import SwiftUI
 /// **Sem campo "Nome".** O nome amigável é derivado em runtime via
 /// `Account.displayName(for:institutions:bankAccounts:creditCards:)`.
 struct AccountFormView: View {
+    private enum CycleChangeScope: String, CaseIterable {
+        case current
+        case future
+
+        var label: String {
+            switch self {
+            case .current: "Ciclo atual"
+            case .future: "Próximo ciclo"
+            }
+        }
+    }
+
     @Environment(AccountStore.self) private var store
 
     let existing: Account?
@@ -40,9 +52,11 @@ struct AccountFormView: View {
     @State private var hasCreditLimit: Bool = false
     @State private var statementClosingDay: Int = 1
     @State private var paymentDueDay: Int = 10
+    @State private var cycleChangeScope: CycleChangeScope = .future
 
     @State private var saveError: String?
     @State private var isSaving: Bool = false
+    @State private var showsCurrentCyclePreview = false
 
     init(
         existing: Account? = nil,
@@ -67,7 +81,9 @@ struct AccountFormView: View {
                 if type == .checking {
                     bankIdentitySection
                 }
-                balanceSection
+                if type != .creditCard {
+                    balanceSection
+                }
                 if let saveError {
                     errorSection(message: saveError)
                 }
@@ -80,10 +96,24 @@ struct AccountFormView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(existing == nil ? "Cadastrar" : "Salvar") {
-                        Task { await save() }
+                        if cycleConfigurationChanged, cycleChangeScope == .current {
+                            showsCurrentCyclePreview = true
+                        } else {
+                            Task { await save() }
+                        }
                     }
                     .disabled(!canSave || isSaving)
                 }
+            }
+            .alert("Prévia do recálculo", isPresented: $showsCurrentCyclePreview) {
+                Button("Cancelar", role: .cancel) {}
+                Button("Confirmar alteração") {
+                    Task { await save() }
+                }
+            } message: {
+                Text(
+                    "O ciclo atual e todos os ciclos posteriores serão reconstruídos. Compras, estornos, créditos, pagamentos e datas de quitação podem ser redistribuídos; a alteração será rejeitada se algum pagamento ficar sem dívida elegível."
+                )
             }
         }
         .frame(minWidth: 520, idealWidth: 520, maxWidth: 520, minHeight: 520)
@@ -134,12 +164,9 @@ struct AccountFormView: View {
                         creditLimitCents = 0
                         hasCreditLimit = false
                     }
-                    // Default de saldo: cartão começa "negativo" (dívida da
-                    // fatura) e banco começa positivo. Só aplica quando o
-                    // usuário ainda não digitou um valor — preserva input
-                    // explícito se já tiver algo.
-                    if balanceCents == 0 {
-                        balanceIsNegative = (newValue == .creditCard)
+                    if newValue == .creditCard {
+                        balanceCents = 0
+                        balanceIsNegative = false
                     }
                 }
             }
@@ -207,11 +234,18 @@ struct AccountFormView: View {
                     Text("\(day)").tag(day)
                 }
             }
+            if existing != nil, cycleConfigurationChanged {
+                Picker("Aplicar a partir de", selection: $cycleChangeScope) {
+                    ForEach(CycleChangeScope.allCases, id: \.rawValue) { scope in
+                        Text(scope.label).tag(scope)
+                    }
+                }
+            }
         } header: {
             Text("Ciclo da fatura")
         } footer: {
             Text(
-                "Dia do mês em que a fatura fecha (consolida compras do ciclo) e dia em que ela vence. Necessários pra agrupar compras na fatura correta a partir da Fase 4.7."
+                "Dias inexistentes usam o último dia do mês. Alterar o ciclo atual recalcula faturas, créditos e pagamentos retroativamente."
             )
         }
     }
@@ -259,12 +293,7 @@ struct AccountFormView: View {
     // MARK: - Lógica
 
     private var balanceFooterText: String {
-        switch type {
-        case .creditCard:
-            return "Informe a dívida atual da fatura aberta (se houver). Desmarque “Saldo negativo” se o cartão tiver crédito a receber (caso raro)."
-        default:
-            return "Quanto você já tem nessa conta hoje. Ative “Saldo negativo” se a conta está no vermelho (cheque especial)."
-        }
+        "Quanto você já tem nessa conta hoje. Ative “Saldo negativo” se a conta está no vermelho (cheque especial)."
     }
 
     /// `true` quando o usuário começou a digitar o last4 mas não chegou nos 4
@@ -296,14 +325,9 @@ struct AccountFormView: View {
     private func loadExisting() {
         guard let existing else {
             // Em "novo", aplica o tipo travado pela tela invocadora (se
-            // houver). Sem lockedType, mantém o default `.checking` do
-            // @State. Saldo negativo só flipa pra true automaticamente quando
-            // o tipo travado é cartão (espelha o `onChange` do picker).
+            // houver). Sem lockedType, mantém o default `.checking`.
             if let lockedType {
                 type = lockedType
-                if lockedType == .creditCard, balanceCents == 0 {
-                    balanceIsNegative = true
-                }
             }
             applyDefaultInstitutionIfNeeded()
             return
@@ -335,7 +359,9 @@ struct AccountFormView: View {
         defer { isSaving = false }
 
         let magnitude = Decimal(balanceCents) / 100
-        let amount = balanceIsNegative ? -magnitude : magnitude
+        let amount: Decimal = type == .creditCard
+            ? 0
+            : (balanceIsNegative ? -magnitude : magnitude)
 
         let bank: BankAccountDetailsInput? = {
             guard type == .checking else { return nil }
@@ -365,7 +391,12 @@ struct AccountFormView: View {
                 updated.initialBalance = amount
                 updated.institutionId = institutionId
                 updated.currency = currency
-                try await store.update(updated, bankDetails: bank, creditCardDetails: card)
+                try await store.update(
+                    updated,
+                    bankDetails: bank,
+                    creditCardDetails: card,
+                    cycleEffectiveFrom: cycleEffectiveFrom
+                )
             } else {
                 try await store.create(
                     type: type,
@@ -381,5 +412,22 @@ struct AccountFormView: View {
             saveError = error.localizedDescription
             NoticeCenter.shared.report(error, title: "Falha ao salvar conta")
         }
+    }
+
+    private var cycleConfigurationChanged: Bool {
+        guard let existing, let old = store.creditCard(for: existing.id) else { return false }
+        return old.statementClosingDay != statementClosingDay
+            || old.paymentDueDay != paymentDueDay
+    }
+
+    private var cycleEffectiveFrom: Date? {
+        guard cycleConfigurationChanged, cycleChangeScope == .current,
+              let existing, let old = store.creditCard(for: existing.id)
+        else { return nil }
+        return StatementWindow.resolve(
+            closingDay: old.statementClosingDay,
+            paymentDueDay: old.paymentDueDay,
+            on: Date()
+        ).openingDate
     }
 }

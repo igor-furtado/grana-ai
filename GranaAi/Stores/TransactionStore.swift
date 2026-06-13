@@ -188,10 +188,6 @@ final class TransactionStore {
     /// Cria uma transação nova. A UI só passa os campos do formulário;
     /// o store preenche id, createdAt e updatedAt.
     ///
-    /// `statementAllocations` (Fase 4.7) só faz sentido quando a transação é
-    /// transferência pra conta-cartão — UI pede ao usuário quais Faturas
-    /// estão sendo pagas. Mapeamento `statementId → applied`. Vazio = nenhuma
-    /// Fatura sendo paga (transferência avulsa entre contas).
     func add(
         accountId: UUID,
         categoryId: UUID,
@@ -201,12 +197,11 @@ final class TransactionStore {
         description: String,
         notes: String?,
         destinationAccountId: UUID? = nil,
-        statementAllocations: [UUID: Decimal] = [:]
+        refundOfTransactionId: UUID? = nil
     ) async throws {
         let now = Date()
-        let txId = UUID()
         let transaction = Transaction(
-            id: txId,
+            id: UUID(),
             accountId: accountId,
             categoryId: categoryId,
             subcategoryId: subcategoryId,
@@ -215,66 +210,23 @@ final class TransactionStore {
             description: description,
             notes: notes,
             destinationAccountId: destinationAccountId,
+            refundOfTransactionId: refundOfTransactionId,
             createdAt: now,
             updatedAt: now
         )
         try await container.transactions.insert(transaction)
-
-        if !statementAllocations.isEmpty {
-            try await applyStatementAllocations(
-                transactionId: txId,
-                allocations: statementAllocations,
-                now: now
-            )
-        }
         // Não precisamos atualizar `self.transactions` manualmente — o watch
         // stream emite o novo estado automaticamente.
     }
 
-    func update(
-        _ transaction: Transaction,
-        statementAllocations: [UUID: Decimal]? = nil
-    ) async throws {
+    func update(_ transaction: Transaction) async throws {
         var copy = transaction
         copy.updatedAt = Date()
         try await container.transactions.update(copy)
-
-        // `nil` = manter payments existentes (chamadas que não tocam em
-        // pagamento de fatura passam nil). `[:]` vazio = limpar todos os
-        // payments dessa transação (ex: usuário re-categorizou pra
-        // transferência sem destino).
-        if let statementAllocations {
-            try await applyStatementAllocations(
-                transactionId: transaction.id,
-                allocations: statementAllocations,
-                now: copy.updatedAt
-            )
-        }
     }
 
     func delete(id: UUID) async throws {
         try await container.transactions.delete(id: id)
-    }
-
-    private func applyStatementAllocations(
-        transactionId: UUID,
-        allocations: [UUID: Decimal],
-        now: Date
-    ) async throws {
-        let payments = allocations.map { statementId, amount in
-            StatementPayment(
-                id: UUID(),
-                statementId: statementId,
-                transactionId: transactionId,
-                appliedAmount: amount,
-                createdAt: now,
-                updatedAt: now
-            )
-        }
-        try await container.statements.replacePayments(
-            forTransaction: transactionId,
-            with: payments
-        )
     }
 
     // MARK: - Helpers para a UI
@@ -314,8 +266,53 @@ final class TransactionStore {
     /// crescente (mais antiga primeiro). Usada pelo picker de pagamento.
     func openStatements(for accountId: UUID) -> [Statement] {
         statements
-            .filter { $0.accountId == accountId && $0.paidAt == nil }
+            .filter { $0.accountId == accountId && $0.remainingAmount > 0 }
             .sorted { $0.closingDate < $1.closingDate }
+    }
+
+    func refundablePurchases(
+        accountId: UUID?,
+        occurredAt: Date,
+        excluding transactionId: UUID? = nil
+    ) -> [Transaction] {
+        guard let accountId else { return [] }
+        return transactions
+            .filter {
+                $0.accountId == accountId
+                    && $0.id != transactionId
+                    && $0.refundOfTransactionId == nil
+                    && $0.destinationAccountId == nil
+                    && $0.occurredAt <= occurredAt
+                    && remainingRefundableAmount(for: $0) > 0
+            }
+            .sorted { $0.occurredAt > $1.occurredAt }
+    }
+
+    func remainingRefundableAmount(for purchase: Transaction) -> Decimal {
+        let refunded = transactions
+            .filter { $0.refundOfTransactionId == purchase.id }
+            .reduce(Decimal(0)) { $0 + $1.amount }
+        return max(0, purchase.amount - refunded)
+    }
+
+    func automaticPaymentPreview(
+        accountId: UUID,
+        amount: Decimal,
+        occurredAt: Date
+    ) -> [(statement: Statement, amount: Decimal)] {
+        var remaining = amount
+        var result: [(Statement, Decimal)] = []
+        for statement in openStatements(for: accountId) where remaining > 0 {
+            let hasEntryByPaymentDate = transactions.contains {
+                $0.statementId == statement.id && $0.occurredAt <= occurredAt
+            }
+            guard hasEntryByPaymentDate else { continue }
+            let applied = min(statement.remainingAmount, remaining)
+            guard applied > 0 else { continue }
+            result.append((statement, applied))
+            remaining -= applied
+        }
+        return result
     }
 
     /// Payments aplicados a uma Statement (lista de transferências que
@@ -334,7 +331,7 @@ final class TransactionStore {
     /// Saldo restante de uma Statement (`total - applied`). Pode ficar
     /// negativo em caso de overpayment.
     func remainingAmount(of statement: Statement) -> Decimal {
-        statement.totalAmount - appliedAmount(to: statement)
+        statement.remainingAmount
     }
 
     func institution(for id: UUID) -> Institution? {

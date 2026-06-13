@@ -146,7 +146,10 @@ final class AccountStore {
     /// teve nenhuma compra ainda (sem Statement criada).
     func nextStatement(for accountId: UUID) -> Statement? {
         statements
-            .filter { $0.accountId == accountId && $0.paidAt == nil }
+            .filter {
+                $0.accountId == accountId
+                    && ($0.status() == .forming || $0.remainingAmount > 0)
+            }
             .min(by: { $0.closingDate < $1.closingDate })
     }
 
@@ -184,10 +187,11 @@ final class AccountStore {
     ) async throws {
         let now = Date()
         let accountId = UUID()
+        let resolvedInitialBalance: Decimal = type == .creditCard ? 0 : initialBalance
         let account = Account(
             id: accountId,
             type: type,
-            initialBalance: initialBalance,
+            initialBalance: resolvedInitialBalance,
             archived: false,
             institutionId: institutionId,
             currency: currency,
@@ -226,9 +230,13 @@ final class AccountStore {
     func update(
         _ account: Account,
         bankDetails: BankAccountDetailsInput? = nil,
-        creditCardDetails: CreditCardDetailsInput? = nil
+        creditCardDetails: CreditCardDetailsInput? = nil,
+        cycleEffectiveFrom: Date? = nil
     ) async throws {
         var copy = account
+        if copy.type == .creditCard {
+            copy.initialBalance = 0
+        }
         copy.updatedAt = Date()
         let now = copy.updatedAt
 
@@ -256,7 +264,8 @@ final class AccountStore {
         try await container.accounts.update(
             copy,
             bankDetails: bank,
-            creditCardDetails: card
+            creditCardDetails: card,
+            cycleEffectiveFrom: cycleEffectiveFrom
         )
     }
 
