@@ -1,10 +1,10 @@
 import Foundation
 
-/// Erros tipados do shell-out pro `claude` CLI e do pipeline de categorização.
+/// Erros tipados do shell-out pro Codex CLI e do pipeline de categorização.
 /// Mensagens em PT-BR pra subir direto pra UI quando necessário.
 enum AIError: LocalizedError {
-    /// Não achou o executável `claude` em nenhum caminho conhecido nem no
-    /// `Config.claudeCLIPath`.
+    /// Não achou o executável `codex` em nenhum caminho conhecido nem no
+    /// `Config.codexCLIPath`.
     case cliNotFound(searchedPaths: [String])
     /// O processo terminou com exit code ≠ 0. Carrega stderr (truncado) pra
     /// diagnóstico — não é mostrado direto pro usuário.
@@ -21,15 +21,15 @@ enum AIError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .cliNotFound:
-            return "CLI do Claude Code não encontrado. Instale com `npm i -g @anthropic-ai/claude-code` ou configure `Config.claudeCLIPath`."
+            return "Codex CLI não encontrado. Instale e autentique o Codex ou configure `Config.codexCLIPath`."
         case let .cliExitCode(code, _):
-            return "Claude CLI terminou com erro (exit \(code))."
+            return "Codex CLI terminou com erro (exit \(code))."
         case let .cliTimeout(seconds):
-            return "Claude CLI não respondeu em \(Int(seconds))s."
+            return "Codex CLI não respondeu em \(Int(seconds))s."
         case .responseParse:
-            return "Resposta do Claude CLI veio em formato inesperado."
+            return "Resposta do Codex CLI veio em formato inesperado."
         case .decoding:
-            return "Não foi possível interpretar a resposta do Claude CLI."
+            return "Não foi possível interpretar a resposta do Codex CLI."
         case let .unknownCategorySlug(slug):
             return "A IA sugeriu uma categoria desconhecida (\(slug))."
         case .cancelled:

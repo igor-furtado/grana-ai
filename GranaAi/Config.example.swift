@@ -2,10 +2,8 @@
 // 1. Copie este arquivo para `Config.swift` (mesma pasta).
 // 2. `Config.swift` está no `.gitignore` — nada do que está aqui vaza pro git.
 // 3. Preencha os placeholders conforme as fases:
-//      - Fase 4 (IA): `claudeCLIPath` (opcional), `claudeCLIModel`. A
-//        categorização usa `claude -p ...` shell-out na assinatura do
-//        usuário, então NÃO precisa de API key paga. Garanta que o CLI
-//        está instalado e logado: `claude /login`.
+//      - Fase 4 (IA): `codexCLIPath` (opcional), `codexCLIModel`. A
+//        categorização usa `codex exec ...` com a autenticação local.
 //      - Fase 5 (sync): `supabaseURL`, `supabaseAnonKey`, `powerSyncURL`.
 //
 // Por que `Config.example.swift` versus `.env`:
@@ -24,8 +22,9 @@
         static let supabaseAnonKey = "YOUR_ANON_KEY"
         static let powerSyncURL = "https://YOUR_INSTANCE.powersync.journeyapps.com"
 
-        /// Caminho absoluto pro binário `claude`. nil = auto-detect nos paths comuns.
-        static let claudeCLIPath: String? = nil
-        static let claudeCLIModel = "claude-haiku-4-5-20251001"
+        /// Caminho absoluto pro binário `codex`. nil = auto-detect nos paths comuns.
+        static let codexCLIPath: String? = nil
+        static let codexCLIModel = "gpt-5.4-mini"
+        static let categorizationTaxonomyVersion = 1
     }
 #endif

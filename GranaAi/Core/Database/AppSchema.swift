@@ -225,7 +225,7 @@ let appSchema = Schema(tables: [
             .text("category_id"),
             .text("subcategory_id"), // nullable
             .real("confidence"), // 0.0–1.0
-            .text("model"), // ex: "claude-haiku-4-5-20251001"
+            .text("model"), // ex: "gpt-5.4-mini"
             .text("created_at"),
             .text("updated_at"),
         ]

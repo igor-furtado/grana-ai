@@ -1,12 +1,8 @@
 import Foundation
 
 /// Correção explícita do usuário sobre uma sugestão de categorização da IA.
-/// Cada correção vira exemplo few-shot do prompt das próximas chamadas
-/// (`ORDER BY created_at DESC LIMIT N`), fechando o ciclo de aprendizado
-/// sem precisar de fine-tuning.
-///
-/// Histórico mantido completo (não-destrutivo) — uma correção nova substitui
-/// o cache mas não apaga a anterior, pra preservar o trail de auditoria.
+/// Histórico mantido completo para auditoria. Uma correção substitui apenas a
+/// entrada contextual correspondente no cache.
 struct CategorizationCorrection: Identifiable, Hashable {
     let id: UUID
     var descriptionHash: String

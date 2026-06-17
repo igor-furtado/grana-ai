@@ -6,7 +6,7 @@ import Foundation
 ///
 /// `source` distingue:
 /// - `.cache` — descrição já vista antes; não consultou IA (latência zero).
-/// - `.ai` — chamada Claude desta sessão.
+/// - `.ai` — chamada Codex desta sessão.
 /// - `.fallback` — IA falhou, confidence < threshold absoluto, ou slug
 ///   desconhecido; transação cai em "Não Classificado".
 ///

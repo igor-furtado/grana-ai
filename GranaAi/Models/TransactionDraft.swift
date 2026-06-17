@@ -19,6 +19,7 @@ struct TransactionDraft: Identifiable, Hashable {
     /// Valor com sinal original (negativo = saída, positivo = entrada). Vai
     /// pra IA como contexto. No commit final é `abs()`-eado.
     let signedAmount: Decimal
+    let isSignReliable: Bool
     let occurredAt: Date
     let description: String
     let notes: String?
@@ -36,6 +37,7 @@ struct TransactionDraft: Identifiable, Hashable {
         accountId: UUID,
         importBatchId: UUID,
         signedAmount: Decimal,
+        isSignReliable: Bool = true,
         occurredAt: Date,
         description: String,
         notes: String?,
@@ -47,6 +49,7 @@ struct TransactionDraft: Identifiable, Hashable {
         self.accountId = accountId
         self.importBatchId = importBatchId
         self.signedAmount = signedAmount
+        self.isSignReliable = isSignReliable
         self.occurredAt = occurredAt
         self.description = description
         self.notes = notes

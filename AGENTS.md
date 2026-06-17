@@ -18,7 +18,7 @@ mostram o estado atual. Em divergências, não normalize silenciosamente: corrij
 - Target macOS `26.1`, isolamento padrão `MainActor`.
 - Persistência local-first via produto estático `PowerSync`, versão mínima `1.13.1`.
 - Testes com Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`).
-- IA via shell-out ao `claude`, usando a assinatura local do usuário.
+- IA via shell-out ao `codex exec`, usando a autenticação local da assinatura do usuário.
 - App Sandbox permanece desativado para permitir `Process`.
 - Não adicione dependências nem troque a stack sem pedido explícito.
 
@@ -99,7 +99,7 @@ Detalhes PowerSync:
 - Cada `STMTRS` OFX gera um `ImportBatch`; múltiplos extratos são persistidos em uma única `writeTransaction`.
 - `ImportBatch` permanece reversível, sem transações órfãs.
 - A categorização assistida ocorre antes do commit final.
-- Não substitua o shell-out `claude` por API HTTP paga sem decisão explícita.
+- Não substitua o shell-out `codex exec` por API HTTP paga sem decisão explícita.
 
 ## Onde alterar
 

@@ -2,7 +2,7 @@ import Foundation
 
 /// Entrada do cache de categorização. Chave de lookup é `descriptionHash`
 /// (SHA256 hex da descrição normalizada). Hit = O(1), evita uma chamada à
-/// Claude API pra descrições idênticas.
+/// Codex CLI para contextos idênticos.
 ///
 /// `model` é guardado pra invalidar quando trocarmos a configuração — o
 /// service filtra por `model = Config.anthropicCategorizationModel`, então

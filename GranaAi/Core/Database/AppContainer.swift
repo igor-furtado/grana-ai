@@ -66,19 +66,17 @@ final class AppContainer {
     lazy var categorizationCorrections: CategorizationCorrectionRepository =
         .init(db: db)
 
-    /// Shell-out pro `claude` CLI usando a assinatura Claude do usuário.
-    /// Compartilhado pelo `CategorizationService` (Fase 4) e, futuramente,
-    /// pelo chat IA (Fase 7).
-    lazy var claudeCLIClient: ClaudeCLIClient = .init(
-        executablePath: Config.claudeCLIPath,
-        model: Config.claudeCLIModel
+    /// Shell-out pro Codex CLI usando a autenticação local do usuário.
+    lazy var codexCLIClient: CodexCLIClient = .init(
+        executablePath: Config.codexCLIPath,
+        model: Config.codexCLIModel
     )
 
     /// Pipeline de categorização automática (Fase 4). Usa cache + correções
-    /// + Claude CLI com `--json-schema` pra output estruturado. Disparado em
+    /// + Codex CLI com schema de saída estruturada. Disparado em
     /// background pelos importadores após `writeTransaction`.
     lazy var categorization: CategorizationService = .init(
-        client: claudeCLIClient,
+        client: codexCLIClient,
         transactions: transactions,
         categories: categories,
         accounts: accounts,

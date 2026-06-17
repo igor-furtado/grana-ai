@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Monta os argumentos do `claude` CLI pro pipeline de categorização.
+/// Monta a entrada do Codex CLI pro pipeline de categorização.
 ///
 /// **Estratégia:**
 /// - `system` lista TODAS as categorias raiz do `CategorySeedData` com suas
@@ -21,8 +21,7 @@ nonisolated enum CategorizationPrompt {
         /// Valor com sinal pra IA inferir kind do contexto (CSV/XLSX trazem
         /// sinal antes de normalizar; isso ajuda o modelo a decidir income vs
         /// expense quando a descrição é ambígua, ex: "PIX RECEBIDO" vs "PIX ENVIADO").
-        let signedAmount: String
-        let date: String // "yyyy-MM-dd"
+        let sign: String // "income" | "expense" | "unknown"
         /// Conta onde a transação está sendo registrada (nome + tipo). Permite
         /// à IA entender o contexto: ex. uma compra dentro de uma conta-cartão
         /// nunca é transferência — é despesa direta no cartão.
@@ -36,8 +35,7 @@ nonisolated enum CategorizationPrompt {
         enum CodingKeys: String, CodingKey {
             case index
             case description
-            case signedAmount = "signed_amount"
-            case date
+            case sign
             case accountContext = "account_context"
             case sourceHint = "source_hint"
         }
@@ -68,7 +66,7 @@ nonisolated enum CategorizationPrompt {
         let institutionName: String?
     }
 
-    /// Empacota tudo que o `ClaudeCLIClient.runStructured(...)` precisa.
+    /// Empacota tudo que o `CodexCLIClient.runStructured(...)` precisa.
     struct CLIInvocation {
         let systemPrompt: String
         let userPrompt: String
@@ -113,7 +111,7 @@ nonisolated enum CategorizationPrompt {
         lines.append("- Sem encaixe na taxonomia → slug `nao-classificado` + confidence 0.0.")
         lines.append("")
         lines.append("CAMPOS DE ENTRADA:")
-        lines.append("- `signed_amount`: positivo=entrada (income), negativo=saída (expense).")
+        lines.append("- `sign`: `income`, `expense` ou `unknown`.")
         lines.append("- `account_context` (nome · tipo da conta):")
         lines
             .append(
@@ -161,26 +159,9 @@ nonisolated enum CategorizationPrompt {
 
     private static func renderUserPrompt(
         items: [Item],
-        fewShots: [FewShotExample]
+        fewShots _: [FewShotExample]
     ) throws -> String {
         var sections: [String] = []
-
-        if !fewShots.isEmpty {
-            sections
-                .append(
-                    "Exemplos de correções recentes do usuário (use-as como referência forte para padrões semelhantes):"
-                )
-            var fewShotLines: [String] = []
-            for shot in fewShots {
-                var line = "- \"\(shot.normalizedDescription)\" → \(shot.correctedCategorySlug)"
-                if let sub = shot.correctedSubcategoryName {
-                    line += " / \(sub)"
-                }
-                fewShotLines.append(line)
-            }
-            sections.append(fewShotLines.joined(separator: "\n"))
-            sections.append("")
-        }
 
         sections.append("Classifique as transações abaixo. Devolva um item de saída para CADA `index`.")
         sections.append("")
@@ -235,7 +216,7 @@ nonisolated enum CategorizationPrompt {
                                 "description": "Confiança da classificação entre 0 e 1.",
                             ],
                         ],
-                        "required": ["index", "category_slug", "confidence"],
+                        "required": ["index", "category_slug", "subcategory_name", "confidence"],
                     ],
                 ],
             ],
@@ -267,7 +248,7 @@ nonisolated enum CategorizationPrompt {
             let index: Int
             let categorySlug: String
             let subcategoryName: String?
-            let confidence: Double
+            let confidence: Double?
 
             enum CodingKeys: String, CodingKey {
                 case index
@@ -307,7 +288,7 @@ nonisolated enum CategorizationPrompt {
         let preview = String(data: data, encoding: .utf8)?.prefix(500) ?? "<não-UTF8>"
         log.ai
             .error(
-                "CategorizationPrompt: resposta não-JSON do Claude CLI — preview: \(String(preview), privacy: .public)"
+                "CategorizationPrompt: resposta não-JSON do Codex CLI — preview: \(String(preview), privacy: .public)"
             )
         throw AIError.decoding(firstError)
     }
@@ -317,7 +298,7 @@ nonisolated enum CategorizationPrompt {
             index: item.index,
             categorySlug: item.categorySlug,
             subcategoryName: item.subcategoryName.flatMap { $0.isEmpty ? nil : $0 },
-            confidence: max(0.0, min(1.0, item.confidence))
+            confidence: item.confidence.map { max(0.0, min(1.0, $0)) } ?? 0.0
         )
     }
 

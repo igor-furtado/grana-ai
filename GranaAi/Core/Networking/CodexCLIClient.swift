@@ -2,32 +2,27 @@ import Darwin
 import Foundation
 import OSLog
 
-/// Shell-out pro binário `claude` (Claude Code CLI) em modo não-interativo.
+/// Shell-out pro binário `codex` em modo não-interativo.
 ///
-/// **Por que CLI e não API HTTP:** a assinatura Claude (Pro/Max) cobre uso via
-/// CLI/Desktop com auth OAuth da conta — não cobre `api.anthropic.com`, que
-/// é faturado à parte. Pra um app pessoal cujo objetivo é economizar dinheiro,
-/// shell-out aproveita a assinatura sem custo adicional por categorização.
+/// Usa a autenticação local da assinatura Codex, sem API key ou cobrança
+/// variável durante o MVP.
 ///
 /// **Como funciona:**
-/// 1. Spawna `claude -p --output-format json --json-schema ... --system-prompt ...`.
-/// 2. CLI usa o token OAuth do usuário (lido do keychain) e devolve um wrapper
-///    `{"type":"result","result":"<inner JSON>"}` no stdout.
-/// 3. Cliente extrai o `result`, decodifica o JSON interno e devolve raw `Data`.
-/// 4. Caller (`CategorizationPrompt.parseResults`) decodifica a estrutura final.
+/// Executa `codex exec --ephemeral` em diretório temporário, com sandbox
+/// restrito ao diretório de trabalho + `~/.codex`, raciocínio mínimo e schema
+/// de saída.
 ///
 /// **App Sandbox precisa estar OFF** (`ENABLE_APP_SANDBOX = NO` no
 /// `project.pbxproj`). Sandbox bloqueia `Process` de executar binários
 /// fora do bundle. Decisão consciente: app single-user, local-first; o
 /// isolamento adicional não justifica a complexidade de `NSUserUnixTask`.
-final class ClaudeCLIClient: Sendable {
-    /// Caminhos onde a gente procura o `claude` se `Config.claudeCLIPath` for
-    /// nil. Ordem importa — `~/.local/bin` é o default do instalador oficial.
+final class CodexCLIClient: Sendable {
+    /// Caminhos onde procuramos o `codex` quando não há configuração explícita.
     private static let defaultSearchPaths: [String] = [
-        "~/.local/bin/claude",
-        "/opt/homebrew/bin/claude",
-        "/usr/local/bin/claude",
-        "/usr/bin/claude",
+        "~/.local/bin/codex",
+        "/opt/homebrew/bin/codex",
+        "/usr/local/bin/codex",
+        "/usr/bin/codex",
     ]
 
     private let configuredPath: String?
@@ -37,7 +32,10 @@ final class ClaudeCLIClient: Sendable {
     init(
         executablePath: String? = nil,
         model: String,
-        timeoutSeconds: TimeInterval = 120
+        // O Codex 0.139.0 pode passar por vários reconnects antes de cair
+        // pro caminho HTTP; em testes mínimos isso já consumiu ~118s.
+        // 120s vira timeout espúrio mesmo quando a chamada acabaria bem.
+        timeoutSeconds: TimeInterval = 300
     ) {
         self.configuredPath = executablePath
         self.model = model
@@ -61,28 +59,56 @@ final class ClaudeCLIClient: Sendable {
         jsonSchema: String
     ) async throws -> Data {
         let executable = try resolveExecutable()
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("grana-ai-codex-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
 
-        // `--tools ""` zera o toolset — o classificador não precisa de Bash/Edit/etc.
-        // `--no-session-persistence` evita poluir o histórico do CLI do usuário.
-        // `--disable-slash-commands` evita que substrings tipo `/foo` no
-        // user prompt sejam interpretadas como skills.
+        let schemaURL = temporaryDirectory.appendingPathComponent("schema.json")
+        try Data(jsonSchema.utf8).write(to: schemaURL, options: .atomic)
+
         let args: [String] = [
-            "-p",
-            "--no-session-persistence",
-            "--disable-slash-commands",
-            "--output-format", "json",
-            "--json-schema", jsonSchema,
-            "--system-prompt", systemPrompt,
+            "exec",
+            "--ephemeral",
+            "--ignore-user-config",
+            "--ignore-rules",
+            // `codex exec` inicializa estado em `~/.codex/sqlite` e o app usa
+            // um diretório temporário fora de qualquer repositório Git.
+            // `read-only` quebra a abertura desse state DB; sem
+            // `--skip-git-repo-check`, o bootstrap também falha no tmp dir.
+            "--skip-git-repo-check",
+            "--sandbox", "workspace-write",
+            "--add-dir", Self.codexHomeDirectoryPath(),
             "--model", model,
-            "--tools", "",
+            // `minimal` quebra no Codex 0.139.0 quando o toolset padrão inclui
+            // `image_gen`/`web_search`; o backend rejeita a combinação antes
+            // mesmo de gerar resposta estruturada.
+            "--config", "model_reasoning_effort=\"low\"",
+            "--output-schema", schemaURL.path,
         ]
 
-        let result = try await runProcess(
+        let prompt = """
+        \(systemPrompt)
+
+        \(userPrompt)
+
+        IMPORTANTE:
+        - Responda diretamente com o objeto JSON final.
+        - Não use ferramentas.
+        - Não execute comandos.
+        - Não leia arquivos.
+        - Não navegue na web.
+        """
+
+        return try await runProcess(
             executable: executable,
             arguments: args,
-            stdin: userPrompt
+            stdin: prompt,
+            currentDirectory: temporaryDirectory
         )
-        return try unwrapResultField(rawStdout: result)
     }
 
     // MARK: - Process plumbing
@@ -90,16 +116,16 @@ final class ClaudeCLIClient: Sendable {
     private func runProcess(
         executable: URL,
         arguments: [String],
-        stdin: String
+        stdin: String,
+        currentDirectory: URL
     ) async throws -> Data {
         let process = Process()
         process.executableURL = executable
         process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
 
-        // GUI apps herdam um PATH minúsculo. O `claude` v2.1 pode invocar
-        // `node`/`bun` internamente — expandir PATH cobre o caso. Filtramos
-        // paths que já estão no PATH herdado pra evitar duplicatas (que poluem
-        // o env em diagnósticos sem trazer benefício).
+        // GUI apps herdam um PATH minúsculo. Expandimos caminhos comuns e
+        // filtramos paths já herdados para evitar duplicatas no ambiente.
         var env = ProcessInfo.processInfo.environment
         let inheritedPath = env["PATH"] ?? ""
         let inheritedComponents = Set(inheritedPath.split(separator: ":").map(String.init))
@@ -203,7 +229,7 @@ final class ClaudeCLIClient: Sendable {
 
         log.ai
             .debug(
-                "claude CLI exit=\(process.terminationStatus) latency=\(String(format: "%.2f", elapsed))s stdout=\(stdout.count)B stderr=\(stderr.count)B"
+                "codex CLI exit=\(process.terminationStatus) latency=\(String(format: "%.2f", elapsed))s stdout=\(stdout.count)B stderr=\(stderr.count)B"
             )
 
         guard process.terminationStatus == 0 else {
@@ -238,50 +264,14 @@ final class ClaudeCLIClient: Sendable {
         }.value
     }
 
-    // MARK: - Output parsing
-
-    /// `--output-format json` devolve um wrapper. Quando `--json-schema` é
-    /// usado, o JSON validado vem em `structured_output` (já como objeto JSON,
-    /// não string). Sem schema, o texto livre do modelo vem em `result`.
-    ///
-    /// Estratégia: prefere `structured_output` (caminho rápido + tipado);
-    /// cai pra `result` quando o schema não foi aplicado.
-    private func unwrapResultField(rawStdout: Data) throws -> Data {
-        guard let object = try JSONSerialization.jsonObject(with: rawStdout) as? [String: Any] else {
-            throw AIError
-                .responseParse(
-                    "stdout não é objeto JSON: \(String(data: rawStdout, encoding: .utf8)?.prefix(200) ?? "")"
-                )
-        }
-
-        if let isError = object["is_error"] as? Bool, isError {
-            let result = (object["result"] as? String) ?? "(sem detalhe)"
-            throw AIError.responseParse("Claude CLI reportou is_error=true: \(result.prefix(500))")
-        }
-
-        // Caminho preferido: `structured_output` quando o CLI aplica o
-        // `--json-schema`. Vem como objeto JSON aninhado — re-serializa
-        // pra Data antes de devolver.
-        if let structured = object["structured_output"] as? [String: Any] {
-            return try JSONSerialization.data(withJSONObject: structured, options: [])
-        }
-
-        // Fallback: campo `result` como string (modo sem schema, ou versão
-        // antiga do CLI).
-        if let inner = object["result"] as? String, !inner.isEmpty,
-           let data = inner.data(using: .utf8)
-        {
-            return data
-        }
-
-        // Nem `structured_output` nem `result` utilizáveis — dumpa pro log
-        // pra diagnóstico e lança.
-        let dump = String(data: rawStdout, encoding: .utf8)?.prefix(1500) ?? "<não-UTF8>"
-        log.ai.error("claude CLI sem output utilizável. Wrapper: \(String(dump), privacy: .public)")
-        throw AIError.responseParse("Nem 'structured_output' nem 'result' utilizáveis")
-    }
-
     // MARK: - Executable resolution
+
+    private static func codexHomeDirectoryPath() -> String {
+        if let configured = ProcessInfo.processInfo.environment["CODEX_HOME"], !configured.isEmpty {
+            return (configured as NSString).expandingTildeInPath
+        }
+        return "\(NSHomeDirectory())/.codex"
+    }
 
     private func resolveExecutable() throws -> URL {
         var attempted: [String] = []

@@ -7,8 +7,7 @@ import Foundation
 ///    duplo, acento) devem cair no mesmo cache hit. Caso contrário a IA é
 ///    chamada várias vezes pro mesmo lançamento recorrente (ex: "iFood",
 ///    "IFOOD", "iFood ").
-/// 2. **Few-shot examples** — texto normalizado é o que vai no prompt
-///    pra correção, mantendo consistência com a chave usada na busca.
+/// 2. **Contexto da IA** — texto normalizado reduz ruído no prompt.
 ///
 /// **Estratégia:**
 /// - Folding diacrítico + lowercase (Locale-aware pra português).

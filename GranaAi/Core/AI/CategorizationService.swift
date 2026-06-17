@@ -17,18 +17,15 @@ import OSLog
 ///    está acima do auto-approved threshold.
 ///
 /// **Único batch.** Para um import inteiro, mandamos todas as transações que
-/// deram cache miss numa só chamada ao Claude CLI. Se o CLI estourar tempo ou
+/// deram cache miss numa chamada ao Codex CLI. Se o CLI estourar tempo ou
 /// truncar, aí dividimos — não antes.
 ///
 /// **Off-main.** Marca `Sendable`; chamada de Tasks em background.
 final class CategorizationService: Sendable {
-    /// Tamanho máximo do batch enviado por chamada ao Claude CLI. Imports
-    /// grandes (fatura de cartão com 100+ linhas, OFX anual) estouravam o
-    /// timeout de 120s. 30 itens por chunk: rápido o suficiente e reduz a
-    /// taxa de "modelo preguiçoso" (em batches maiores ele tende a pular
-    /// índices, gerando fallback). Chunks rodam em paralelo — N chunks
-    /// pequenos preferíveis a 1 chunk grande.
-    private static let maxAIBatchSize = 30
+    /// Tamanho máximo do batch enviado por chamada ao Codex CLI.
+    /// grandes ainda podem ser divididos, mas começamos maior para não repetir
+    /// taxonomia e instruções em excesso.
+    private static let maxAIBatchSize = 100
 
     /// Thresholds usados pelo UI pra agrupar sugestões em alta/média/baixa.
     /// `absoluteMinimum` ainda é usado: AI retornando confidence abaixo dele
@@ -53,7 +50,14 @@ final class CategorizationService: Sendable {
         let pendingCacheEntries: [CategorizationCacheEntry]
     }
 
-    private let client: ClaudeCLIClient
+    private struct AIChunkResult {
+        var suggestions: [CategorizationSuggestion]
+        var cacheEntries: [CategorizationCacheEntry]
+        var unresolvedDrafts: [TransactionDraft]
+        var failedChunks: Int
+    }
+
+    private let client: CodexCLIClient
     private let transactions: TransactionRepository
     private let categories: CategoryRepository
     private let accounts: AccountRepository
@@ -64,18 +68,16 @@ final class CategorizationService: Sendable {
     /// Store grave entries de correção com o mesmo identificador que o
     /// service usa pra buscar — divergência aqui causa cache miss silencioso.
     let model: String
-    private let fewShotLimit: Int
 
     init(
-        client: ClaudeCLIClient,
+        client: CodexCLIClient,
         transactions: TransactionRepository,
         categories: CategoryRepository,
         accounts: AccountRepository,
         institutions: InstitutionRepository,
         cache: CategorizationCacheRepository,
         corrections: CategorizationCorrectionRepository,
-        model: String = Config.claudeCLIModel,
-        fewShotLimit: Int = 30
+        model: String = Config.codexCLIModel
     ) {
         self.client = client
         self.transactions = transactions
@@ -85,7 +87,6 @@ final class CategorizationService: Sendable {
         self.cache = cache
         self.corrections = corrections
         self.model = model
-        self.fewShotLimit = fewShotLimit
     }
 
     typealias ProgressHandler = @Sendable (Progress) -> Void
@@ -107,7 +108,7 @@ final class CategorizationService: Sendable {
     // MARK: - Pré-commit (wizard de import)
 
     /// Classifica drafts (transações ainda não persistidas). Cache hit é O(1);
-    /// misses entram numa única chamada à Claude API.
+    /// misses entram em chamadas sequenciais ao Codex CLI.
     ///
     /// Devolve sugestões + cache entries a persistir no commit final. Não
     /// toca banco aqui (exceto leitura).
@@ -120,21 +121,16 @@ final class CategorizationService: Sendable {
             progress?(.finished(total: 0, fromCache: 0, fromAI: 0, fallback: 0))
             return DraftClassificationResult(suggestions: [], pendingCacheEntries: [])
         }
+        let startedAt = Date()
 
         async let allCategoriesTask = categories.getAll()
         async let allAccountsTask = accounts.getAll()
         async let allInstitutionsTask = institutions.getAll()
-        async let allBankDetailsTask = accounts.getAllBankDetails()
-        async let allCreditCardsTask = accounts.getAllCreditCardDetails()
-        async let recentCorrectionsTask = corrections.recent(limit: fewShotLimit)
-        let (allCategories, allAccounts, allInstitutions, allBankDetails, allCreditCards, fewShotCorrections) =
+        let (allCategories, allAccounts, allInstitutions) =
             try await (
                 allCategoriesTask,
                 allAccountsTask,
-                allInstitutionsTask,
-                allBankDetailsTask,
-                allCreditCardsTask,
-                recentCorrectionsTask
+                allInstitutionsTask
             )
 
         let institutionNamesById: [UUID: String] = Dictionary(
@@ -144,12 +140,7 @@ final class CategorizationService: Sendable {
             .filter { !$0.archived }
             .map { account in
                 CategorizationPrompt.OwnAccountInfo(
-                    name: Account.displayName(
-                        for: account,
-                        institutions: allInstitutions,
-                        bankAccounts: allBankDetails,
-                        creditCards: allCreditCards
-                    ),
+                    name: account.institutionId.flatMap { institutionNamesById[$0] } ?? account.type.displayName,
                     typeDisplay: account.type.displayName,
                     institutionName: account.institutionId.flatMap { institutionNamesById[$0] }
                 )
@@ -162,14 +153,7 @@ final class CategorizationService: Sendable {
         // (ex: "Inter Cartão · ••••1234"), então não concatenamos o
         // `type.displayName` de novo — economiza tokens e evita ruído.
         let accountContextById: [UUID: String] = Dictionary(
-            uniqueKeysWithValues: allAccounts.map { acc in
-                (acc.id, Account.displayName(
-                    for: acc,
-                    institutions: allInstitutions,
-                    bankAccounts: allBankDetails,
-                    creditCards: allCreditCards
-                ))
-            }
+            uniqueKeysWithValues: allAccounts.map { ($0.id, $0.type.displayName) }
         )
 
         let taxonomy = Taxonomy(categories: allCategories)
@@ -180,8 +164,15 @@ final class CategorizationService: Sendable {
         progress?(.started(total: drafts.count))
 
         // Cache lookup batched.
+        let accountTypeById = Dictionary(uniqueKeysWithValues: allAccounts.map { ($0.id, $0.type.rawValue) })
         let hashByDraftId: [UUID: String] = Dictionary(uniqueKeysWithValues:
-            drafts.map { ($0.id, DescriptionNormalizer.hash($0.description)) }
+            drafts.map { draft in
+                let normalized = DescriptionNormalizer.normalize(draft.description)
+                let accountType = accountTypeById[draft.accountId] ?? "unknown"
+                let sign = draft.isSignReliable ? (draft.signedAmount < 0 ? "expense" : "income") : "unknown"
+                let context = "\(normalized)|\(accountType)|\(sign)|taxonomy-\(Config.categorizationTaxonomyVersion)"
+                return (draft.id, DescriptionNormalizer.hashNormalized(context))
+            }
         )
         let uniqueHashes = Array(Set(hashByDraftId.values))
         let cacheHits = try await cache.lookupMany(descriptionHashes: uniqueHashes, model: model)
@@ -210,131 +201,52 @@ final class CategorizationService: Sendable {
 
         var fromAI = 0
         var fromFallback = 0
+        var failedChunks = 0
         var pendingCacheEntries: [String: CategorizationCacheEntry] = [:]
 
         if !pendingForAI.isEmpty {
             progress?(.aiCallStarted(misses: pendingForAI.count))
 
-            // **Chunking + paralelismo pra reduzir latência total.** Batches
-            // grandes estouravam o timeout do CLI; chunks menores rodam em
-            // paralelo via `withTaskGroup`. Pra 114 tx em 4 chunks de ~30:
-            // sequencial ≈ 4×30s = 120s; paralelo ≈ max(30s) ≈ 30s.
-            //
-            // Fallback per-chunk: cada Task captura sua própria falha e
-            // devolve `.failure(chunk)` — não derruba os outros chunks.
+            // Chunks sequenciais reduzem pressão nos limites da assinatura e
+            // preservam métricas simples.
             let chunks = pendingForAI.chunked(into: Self.maxAIBatchSize)
-            let fewShots = buildFewShots(corrections: fewShotCorrections, taxonomy: taxonomy)
-
-            // Estrutura local pro retorno de cada Task — `Result` aqui não dá
-            // porque a "falha" precisa carregar o chunk original pro fallback.
-            // `chunkSize` é sempre o tamanho do chunk original — pra progresso
-            // não travar se a IA devolver menos itens que o esperado.
-            enum ChunkOutcome {
-                case success(
-                    chunkSize: Int,
-                    suggestions: [CategorizationSuggestion],
-                    cacheEntries: [CategorizationCacheEntry]
-                )
-                case failure(drafts: [TransactionDraft], error: Error)
-
-                var chunkSize: Int {
-                    switch self {
-                    case let .success(size, _, _): size
-                    case let .failure(drafts, _): drafts.count
-                    }
-                }
-            }
 
             let totalItems = drafts.count
-            // `fromCache` aqui já é a contagem final de hits — base inicial
-            // da barra de progresso. Cada chunk soma seus `chunk.count`
-            // itens em cima disso.
-            let baseProcessed = fromCache
 
-            let outcomes: [ChunkOutcome] = await withTaskGroup(of: ChunkOutcome.self) { group in
-                for chunk in chunks {
-                    let chunkSize = chunk.count
-                    group.addTask { [self] in
-                        do {
-                            let (aiSuggestions, aiCacheEntries) = try await self.runSingleAICall(
-                                drafts: chunk,
-                                hashByDraftId: hashByDraftId,
-                                taxonomy: taxonomy,
-                                fallbackId: fallbackId,
-                                ownAccounts: ownAccounts,
-                                accountContextById: accountContextById,
-                                fewShots: fewShots,
-                                thresholds: thresholds
-                            )
-                            return .success(
-                                chunkSize: chunkSize,
-                                suggestions: aiSuggestions,
-                                cacheEntries: aiCacheEntries
-                            )
-                        } catch {
-                            return .failure(drafts: chunk, error: error)
-                        }
+            var processedSoFar = fromCache
+            for chunk in chunks {
+                let result = await classifyChunk(
+                    drafts: chunk,
+                    hashByDraftId: hashByDraftId,
+                    taxonomy: taxonomy,
+                    fallbackId: fallbackId,
+                    ownAccounts: ownAccounts,
+                    accountContextById: accountContextById,
+                    thresholds: thresholds
+                )
+                failedChunks += result.failedChunks
+                for suggestion in result.suggestions {
+                    switch suggestion.source {
+                    case .ai: fromAI += 1
+                    case .fallback: fromFallback += 1
+                    case .cache: break
                     }
                 }
-
-                var collected: [ChunkOutcome] = []
-                var processedSoFar = baseProcessed
-                for await outcome in group {
-                    processedSoFar += outcome.chunkSize
-                    progress?(.aiChunkFinished(processed: processedSoFar, total: totalItems))
-                    collected.append(outcome)
+                suggestions.append(contentsOf: result.suggestions)
+                for entry in result.cacheEntries {
+                    pendingCacheEntries[entry.descriptionHash] = entry
                 }
-                return collected
+                processedSoFar += chunk.count
+                progress?(.aiChunkFinished(processed: processedSoFar, total: totalItems))
             }
-
-            // Agrega resultados de todos os chunks. Erros viram um único toast
-            // (em vez de N toasts pra N chunks falhos) — `NoticeCenter` faz
-            // dedup mas mesmo assim queremos ser explícitos.
-            var failedCount = 0
-            for outcome in outcomes {
-                switch outcome {
-                case let .success(_, aiSuggestions, aiCacheEntries):
-                    for s in aiSuggestions {
-                        switch s.source {
-                        case .ai: fromAI += 1
-                        case .fallback: fromFallback += 1
-                        case .cache: break
-                        }
-                    }
-                    suggestions.append(contentsOf: aiSuggestions)
-                    for entry in aiCacheEntries {
-                        pendingCacheEntries[entry.descriptionHash] = entry
-                    }
-                case let .failure(chunk, error):
-                    failedCount += 1
-                    // Loga o erro raw pra diagnóstico (não vira toast aqui;
-                    // o toast resumido vem depois do laço).
-                    log.ai
-                        .error(
-                            "Chunk de categorização falhou (\(chunk.count) drafts): \(error.localizedDescription, privacy: .public)"
-                        )
-                    for draft in chunk {
-                        let hash = hashByDraftId[draft.id] ?? DescriptionNormalizer.hash(draft.description)
-                        suggestions.append(buildSuggestion(
-                            draft: draft,
-                            hash: hash,
-                            categoryId: fallbackId,
-                            subcategoryId: nil,
-                            confidence: 0.0,
-                            source: .fallback
-                        ))
-                        fromFallback += 1
-                    }
-                }
-            }
-            if failedCount > 0 {
-                let title = failedCount == 1
+            if failedChunks > 0 {
+                let title = failedChunks == 1
                     ? "IA indisponível em 1 lote — usando fallback"
-                    : "IA indisponível em \(failedCount) lotes — usando fallback"
+                    : "IA indisponível em \(failedChunks) lotes — usando fallback"
                 // Toast sem `Error` tipado — a causa real (timeout, parse,
                 // rede) já está em `log.ai.error` por chunk acima. Usar um
                 // `AIError` específico aqui mentiria sobre a categoria do erro.
-                let message = "\(failedCount) lote(s) caíram pro fallback. Veja o console pra detalhes."
+                let message = "\(failedChunks) lote(s) caíram pro fallback. Veja o console pra detalhes."
                 Task { @MainActor in
                     NoticeCenter.shared.report(title: title, message: message)
                 }
@@ -353,6 +265,17 @@ final class CategorizationService: Sendable {
             .info(
                 "classifyDrafts total=\(drafts.count) cacheHits=\(fromCache) fromAI=\(fromAI) fallback=\(fromFallback)"
             )
+        await CategorizationMetricsRecorder.shared.record(.init(
+            id: UUID(),
+            startedAt: startedAt,
+            model: model,
+            total: drafts.count,
+            cacheHits: fromCache,
+            fromAI: fromAI,
+            fallback: fromFallback,
+            failedChunks: failedChunks,
+            latencySeconds: Date().timeIntervalSince(startedAt)
+        ))
 
         // Ordena por confidence ascendente — usuário revisa primeiro o que
         // mais precisa de atenção.
@@ -399,6 +322,7 @@ final class CategorizationService: Sendable {
                 accountId: tx.accountId,
                 importBatchId: tx.importBatchId ?? UUID(), // batch real não é usado nesse caminho
                 signedAmount: tx.amount,
+                isSignReliable: false,
                 occurredAt: tx.occurredAt,
                 description: tx.description,
                 notes: tx.notes,
@@ -476,6 +400,179 @@ final class CategorizationService: Sendable {
 
     // MARK: - Internos
 
+    private func classifyChunk(
+        drafts: [TransactionDraft],
+        hashByDraftId: [UUID: String],
+        taxonomy: Taxonomy,
+        fallbackId: UUID,
+        ownAccounts: [CategorizationPrompt.OwnAccountInfo],
+        accountContextById: [UUID: String],
+        thresholds: ConfidenceThresholds
+    ) async -> AIChunkResult {
+        do {
+            let result = try await runSingleAICall(
+                drafts: drafts,
+                hashByDraftId: hashByDraftId,
+                taxonomy: taxonomy,
+                fallbackId: fallbackId,
+                ownAccounts: ownAccounts,
+                accountContextById: accountContextById,
+                thresholds: thresholds
+            )
+
+            guard !result.unresolvedDrafts.isEmpty else { return result }
+
+            let retry = await retryUnresolvedDrafts(
+                result.unresolvedDrafts,
+                hashByDraftId: hashByDraftId,
+                taxonomy: taxonomy,
+                fallbackId: fallbackId,
+                ownAccounts: ownAccounts,
+                accountContextById: accountContextById,
+                thresholds: thresholds
+            )
+
+            return AIChunkResult(
+                suggestions: result.suggestions + retry.suggestions,
+                cacheEntries: result.cacheEntries + retry.cacheEntries,
+                unresolvedDrafts: [],
+                failedChunks: result.failedChunks + retry.failedChunks
+            )
+        } catch {
+            log.ai
+                .error(
+                    "Chunk de categorização falhou (\(drafts.count) drafts): \(error.localizedDescription, privacy: .public)"
+                )
+            return await retryFailedChunk(
+                drafts,
+                hashByDraftId: hashByDraftId,
+                taxonomy: taxonomy,
+                fallbackId: fallbackId,
+                ownAccounts: ownAccounts,
+                accountContextById: accountContextById,
+                thresholds: thresholds
+            )
+        }
+    }
+
+    private func retryUnresolvedDrafts(
+        _ drafts: [TransactionDraft],
+        hashByDraftId: [UUID: String],
+        taxonomy: Taxonomy,
+        fallbackId: UUID,
+        ownAccounts: [CategorizationPrompt.OwnAccountInfo],
+        accountContextById: [UUID: String],
+        thresholds: ConfidenceThresholds
+    ) async -> AIChunkResult {
+        guard drafts.count > 1 else {
+            return fallbackResult(drafts: drafts, hashByDraftId: hashByDraftId, fallbackId: fallbackId)
+        }
+
+        do {
+            let result = try await runSingleAICall(
+                drafts: drafts,
+                hashByDraftId: hashByDraftId,
+                taxonomy: taxonomy,
+                fallbackId: fallbackId,
+                ownAccounts: ownAccounts,
+                accountContextById: accountContextById,
+                thresholds: thresholds
+            )
+            if result.unresolvedDrafts.count == drafts.count {
+                return fallbackResult(drafts: drafts, hashByDraftId: hashByDraftId, fallbackId: fallbackId)
+            }
+            if result.unresolvedDrafts.isEmpty {
+                return result
+            }
+            let retry = await retryUnresolvedDrafts(
+                result.unresolvedDrafts,
+                hashByDraftId: hashByDraftId,
+                taxonomy: taxonomy,
+                fallbackId: fallbackId,
+                ownAccounts: ownAccounts,
+                accountContextById: accountContextById,
+                thresholds: thresholds
+            )
+            return AIChunkResult(
+                suggestions: result.suggestions + retry.suggestions,
+                cacheEntries: result.cacheEntries + retry.cacheEntries,
+                unresolvedDrafts: [],
+                failedChunks: result.failedChunks + retry.failedChunks
+            )
+        } catch {
+            log.ai
+                .error(
+                    "Reenvio parcial falhou (\(drafts.count) drafts): \(error.localizedDescription, privacy: .public)"
+                )
+            return fallbackResult(drafts: drafts, hashByDraftId: hashByDraftId, fallbackId: fallbackId)
+        }
+    }
+
+    private func retryFailedChunk(
+        _ drafts: [TransactionDraft],
+        hashByDraftId: [UUID: String],
+        taxonomy: Taxonomy,
+        fallbackId: UUID,
+        ownAccounts: [CategorizationPrompt.OwnAccountInfo],
+        accountContextById: [UUID: String],
+        thresholds: ConfidenceThresholds
+    ) async -> AIChunkResult {
+        guard drafts.count > 25 else {
+            var result = fallbackResult(drafts: drafts, hashByDraftId: hashByDraftId, fallbackId: fallbackId)
+            result.failedChunks = 1
+            return result
+        }
+
+        let midpoint = drafts.count / 2
+        let left = await classifyChunk(
+            drafts: Array(drafts[..<midpoint]),
+            hashByDraftId: hashByDraftId,
+            taxonomy: taxonomy,
+            fallbackId: fallbackId,
+            ownAccounts: ownAccounts,
+            accountContextById: accountContextById,
+            thresholds: thresholds
+        )
+        let right = await classifyChunk(
+            drafts: Array(drafts[midpoint...]),
+            hashByDraftId: hashByDraftId,
+            taxonomy: taxonomy,
+            fallbackId: fallbackId,
+            ownAccounts: ownAccounts,
+            accountContextById: accountContextById,
+            thresholds: thresholds
+        )
+        return AIChunkResult(
+            suggestions: left.suggestions + right.suggestions,
+            cacheEntries: left.cacheEntries + right.cacheEntries,
+            unresolvedDrafts: [],
+            failedChunks: left.failedChunks + right.failedChunks
+        )
+    }
+
+    private func fallbackResult(
+        drafts: [TransactionDraft],
+        hashByDraftId: [UUID: String],
+        fallbackId: UUID
+    ) -> AIChunkResult {
+        let suggestions = drafts.map { draft in
+            buildSuggestion(
+                draft: draft,
+                hash: hashByDraftId[draft.id] ?? DescriptionNormalizer.hash(draft.description),
+                categoryId: fallbackId,
+                subcategoryId: nil,
+                confidence: 0,
+                source: .fallback
+            )
+        }
+        return AIChunkResult(
+            suggestions: suggestions,
+            cacheEntries: [],
+            unresolvedDrafts: [],
+            failedChunks: 0
+        )
+    }
+
     private func runSingleAICall(
         drafts: [TransactionDraft],
         hashByDraftId: [UUID: String],
@@ -483,14 +580,8 @@ final class CategorizationService: Sendable {
         fallbackId: UUID,
         ownAccounts: [CategorizationPrompt.OwnAccountInfo],
         accountContextById: [UUID: String],
-        fewShots: [CategorizationPrompt.FewShotExample],
         thresholds: ConfidenceThresholds
-    ) async throws -> ([CategorizationSuggestion], [CategorizationCacheEntry]) {
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        dateFormatter.timeZone = TimeZone.current
-        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
-
+    ) async throws -> AIChunkResult {
         let items: [CategorizationPrompt.Item] = drafts.enumerated().map { idx, draft in
             // Trim do hint pra não passar string vazia ou só whitespace.
             // Vazio vira `nil` (= `null` no JSON), evitando ruído no prompt.
@@ -499,8 +590,7 @@ final class CategorizationService: Sendable {
             return CategorizationPrompt.Item(
                 index: idx,
                 description: DescriptionNormalizer.normalize(draft.description),
-                signedAmount: NSDecimalNumber(decimal: draft.signedAmount).stringValue,
-                date: dateFormatter.string(from: draft.occurredAt),
+                sign: draft.isSignReliable ? (draft.signedAmount < 0 ? "expense" : "income") : "unknown",
                 accountContext: accountContextById[draft.accountId] ?? "Desconhecida",
                 sourceHint: hint
             )
@@ -510,7 +600,7 @@ final class CategorizationService: Sendable {
             items: items,
             categories: taxonomy.promptOptions(),
             ownAccounts: ownAccounts,
-            fewShots: fewShots
+            fewShots: []
         )
         let responseData = try await client.runStructured(
             systemPrompt: invocation.systemPrompt,
@@ -519,19 +609,16 @@ final class CategorizationService: Sendable {
         )
         let results = try CategorizationPrompt.parseResults(from: responseData)
 
-        // Valida indices antes de aplicar — se a IA devolve duplicatas, o
-        // dicionário abaixo sobrescreveria silenciosamente e dois drafts
-        // diferentes receberiam a mesma categoria. Indices faltantes seguem
-        // pro path de fallback no laço abaixo (comportamento aceitável).
-        let returnedIndices = results.map(\.index)
-        if Set(returnedIndices).count != returnedIndices.count {
-            throw AIError.responseParse(
-                "IA devolveu indices duplicados (\(returnedIndices.count) resultados pra \(drafts.count) drafts)"
-            )
-        }
-
+        var duplicateIndices: Set<Int> = []
+        var seenIndices: Set<Int> = []
         var byIndex: [Int: CategorizationPrompt.ClassificationResult] = [:]
         for r in results {
+            guard drafts.indices.contains(r.index) else { continue }
+            if !seenIndices.insert(r.index).inserted {
+                duplicateIndices.insert(r.index)
+                byIndex.removeValue(forKey: r.index)
+                continue
+            }
             byIndex[r.index] = r
         }
 
@@ -557,37 +644,61 @@ final class CategorizationService: Sendable {
         // Mantemos o número pra reportar na sugestão de fallback (telemetria);
         // não vira winner.
         var lowConfidenceByDraft: [UUID: Double] = [:]
+        var unresolvedDraftIds: Set<UUID> = []
         // Slugs desconhecidos viram um único toast por slug — N drafts com o
         // mesmo erro não geram N toasts.
         var reportedUnknownSlugs: Set<String> = []
 
         for (idx, draft) in drafts.enumerated() {
-            guard let result = byIndex[idx] else { continue }
+            guard !duplicateIndices.contains(idx), let result = byIndex[idx] else {
+                unresolvedDraftIds.insert(draft.id)
+                continue
+            }
             let hash = hashByDraftId[draft.id] ?? DescriptionNormalizer.hash(draft.description)
 
             guard let resolvedCategoryId = taxonomy.uuid(forSlug: result.categorySlug) else {
                 if reportedUnknownSlugs.insert(result.categorySlug).inserted {
                     NoticeCenter.capture(AIError.unknownCategorySlug(result.categorySlug))
                 }
+                unresolvedDraftIds.insert(draft.id)
                 continue
             }
 
-            guard result.confidence >= thresholds.absoluteMinimum else {
-                lowConfidenceByDraft[draft.id] = result.confidence
+            let expectedKind: CategoryKind = draft.signedAmount < 0 ? .expense : .income
+            guard let categoryKind = taxonomy.kind(for: resolvedCategoryId),
+                  !draft.isSignReliable || categoryKind == expectedKind || categoryKind == .transfer
+            else {
+                unresolvedDraftIds.insert(draft.id)
                 continue
             }
 
-            if let existing = bestByHash[hash], existing.confidence >= result.confidence {
-                continue
-            }
-
+            var effectiveConfidence = result.confidence
             let subcategoryId = result.subcategoryName.flatMap {
                 taxonomy.subcategoryUUID(parentId: resolvedCategoryId, name: $0)
             }
+            if result.subcategoryName != nil, subcategoryId == nil {
+                effectiveConfidence = 0
+            }
+            if categoryKind == .transfer {
+                effectiveConfidence = min(effectiveConfidence, thresholds.autoApproved.nextDown)
+            }
+            if !draft.isSignReliable {
+                effectiveConfidence = min(effectiveConfidence, thresholds.autoApproved.nextDown)
+            }
+
+            guard effectiveConfidence >= thresholds.absoluteMinimum else {
+                lowConfidenceByDraft[draft.id] = effectiveConfidence
+                continue
+            }
+
+            if let existing = bestByHash[hash], existing.confidence >= effectiveConfidence {
+                continue
+            }
+
             bestByHash[hash] = HashWinner(
                 categoryId: resolvedCategoryId,
                 subcategoryId: subcategoryId,
-                confidence: result.confidence,
+                confidence: effectiveConfidence,
                 normalizedDescription: DescriptionNormalizer.normalize(draft.description)
             )
         }
@@ -595,11 +706,14 @@ final class CategorizationService: Sendable {
         let now = Date()
         var cacheByHash: [String: CategorizationCacheEntry] = [:]
         var suggestions: [CategorizationSuggestion] = []
+        var unresolvedDrafts: [TransactionDraft] = []
 
         for draft in drafts {
             let hash = hashByDraftId[draft.id] ?? DescriptionNormalizer.hash(draft.description)
 
-            if let winner = bestByHash[hash] {
+            if unresolvedDraftIds.contains(draft.id), bestByHash[hash] == nil {
+                unresolvedDrafts.append(draft)
+            } else if let winner = bestByHash[hash] {
                 suggestions.append(buildSuggestion(
                     draft: draft,
                     hash: hash,
@@ -633,7 +747,12 @@ final class CategorizationService: Sendable {
             }
         }
 
-        return (suggestions, Array(cacheByHash.values))
+        return AIChunkResult(
+            suggestions: suggestions,
+            cacheEntries: Array(cacheByHash.values),
+            unresolvedDrafts: unresolvedDrafts,
+            failedChunks: 0
+        )
     }
 
     private func buildSuggestion(
@@ -762,6 +881,10 @@ private struct Taxonomy {
         return subcategoriesByParent[parentId]?.first(where: {
             $0.name.folding(options: .diacriticInsensitive, locale: nil).lowercased() == needle
         })?.id
+    }
+
+    func kind(for id: UUID) -> CategoryKind? {
+        categoriesById[id]?.kind
     }
 
     func subcategoryName(for id: UUID) -> String? {
