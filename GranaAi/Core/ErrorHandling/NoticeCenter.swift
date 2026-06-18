@@ -118,6 +118,18 @@ final class NoticeCenter {
         ))
     }
 
+    @discardableResult
+    func error(title: String, message: String? = nil, actions: [Action] = []) -> UUID {
+        post(Notice(
+            kind: .error,
+            title: title,
+            message: message,
+            createdAt: Date(),
+            actions: actions,
+            dismissAfter: actions.isEmpty ? .seconds(6) : .seconds(10)
+        ))
+    }
+
     // MARK: - API: Sucesso
 
     /// Toast verde de confirmação. Timeout maior (10s) quando há ações pra

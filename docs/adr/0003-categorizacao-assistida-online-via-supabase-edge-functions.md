@@ -1,0 +1,3 @@
+# Categorização assistida online via Supabase Edge Functions
+
+A categorização assistida deixa de depender de harness local e passa a ser executada por uma função server-side no Supabase, chamada diretamente pelo app durante a importação e responsável por montar o prompt, aplicar validações, consultar cache e correções do usuário e chamar um único provider ativo por vez. O app continua como fonte única da taxonomia e mantém o contrato funcional atual: processamento em batch antes do commit final, split recursivo em caso de falha parcial, mesma resposta estruturada por item e fallback silencioso para **Não Classificado** quando a tentativa remota falhar.

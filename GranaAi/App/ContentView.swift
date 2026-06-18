@@ -155,6 +155,12 @@ struct ContentView: View {
         }
         .navigationTitle("Grana AI")
         .preferredColorScheme(themeOverride)
+        .onReceive(NotificationCenter.default.publisher(for: .appSectionNavigationRequested)) { notification in
+            guard let rawValue = notification.object as? String,
+                  let section = AppSection(rawValue: rawValue)
+            else { return }
+            selectionRaw = section.rawValue
+        }
         // Mínimo global da janela. A tela mais "gulosa" hoje é Cartões
         // (sidebar interna 240 + detalhe 520 = 760), somado à sidebar do
         // app (200), exige ~960. Arredondado pra 1000 dá folga; 640 de

@@ -1,18 +1,12 @@
 import Foundation
 
-/// Erros tipados do shell-out pro Codex CLI e do pipeline de categorização.
+/// Erros tipados do transporte remoto e do pipeline de categorização.
 /// Mensagens em PT-BR pra subir direto pra UI quando necessário.
 enum AIError: LocalizedError {
-    /// Não achou o executável `codex` em nenhum caminho conhecido nem no
-    /// `Config.codexCLIPath`.
-    case cliNotFound(searchedPaths: [String])
-    /// O processo terminou com exit code ≠ 0. Carrega stderr (truncado) pra
-    /// diagnóstico — não é mostrado direto pro usuário.
-    case cliExitCode(Int, stderr: String)
-    /// Timeout estourou antes do CLI responder.
-    case cliTimeout(seconds: TimeInterval)
-    /// Stdout do CLI veio mas não bateu com o formato esperado (wrapper
-    /// `{"result":"..."}` ou JSON interno do schema).
+    case invalidConfiguration(String)
+    case requestFailed(Error)
+    case invalidResponse(String)
+    case httpStatus(Int, body: String?)
     case responseParse(String)
     case decoding(Error)
     case unknownCategorySlug(String)
@@ -20,16 +14,18 @@ enum AIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .cliNotFound:
-            return "Codex CLI não encontrado. Instale e autentique o Codex ou configure `Config.codexCLIPath`."
-        case let .cliExitCode(code, _):
-            return "Codex CLI terminou com erro (exit \(code))."
-        case let .cliTimeout(seconds):
-            return "Codex CLI não respondeu em \(Int(seconds))s."
+        case let .invalidConfiguration(key):
+            return "Configuração ausente ou inválida para \(key)."
+        case .requestFailed:
+            return "Não foi possível falar com o serviço de categorização."
+        case let .invalidResponse(message):
+            return "O serviço de categorização respondeu em formato inválido: \(message)"
+        case let .httpStatus(code, _):
+            return "O serviço de categorização respondeu com HTTP \(code)."
         case .responseParse:
-            return "Resposta do Codex CLI veio em formato inesperado."
+            return "Resposta do serviço de categorização veio em formato inesperado."
         case .decoding:
-            return "Não foi possível interpretar a resposta do Codex CLI."
+            return "Não foi possível interpretar a resposta do serviço de categorização."
         case let .unknownCategorySlug(slug):
             return "A IA sugeriu uma categoria desconhecida (\(slug))."
         case .cancelled:

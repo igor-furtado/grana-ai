@@ -13,6 +13,13 @@ import SwiftUI
 struct CategorizingStepView: View {
     @Bindable var store: ImportStore
 
+    private enum LoadingStage {
+        case preparing
+        case cache
+        case ai
+        case finishing
+    }
+
     var body: some View {
         VStack(spacing: 20) {
             loadingCard
@@ -60,10 +67,67 @@ struct CategorizingStepView: View {
         switch store.categorization.status {
         case .idle:
             Text("Preparando categorização…").foregroundStyle(.secondary)
-        case let .classifying(_, _, message):
-            Text(message).foregroundStyle(.secondary)
+        case let .classifying(processed, total, message):
+            TimelineView(.periodic(from: .now, by: 1.8)) { context in
+                Text(rotatingMessage(
+                    for: loadingStage(
+                        processed: processed,
+                        total: total,
+                        message: message
+                    ),
+                    date: context.date
+                ))
+                .foregroundStyle(.secondary)
+            }
         case .ready, .failed:
             EmptyView()
         }
+    }
+
+    private func loadingStage(processed: Int, total: Int, message: String) -> LoadingStage {
+        if message.contains("cache") {
+            return .cache
+        }
+        if message.contains("Finalizando") || (total > 0 && processed >= total) {
+            return .finishing
+        }
+        if message.contains("IA") || message.contains("prontas") {
+            return .ai
+        }
+        return .preparing
+    }
+
+    private func rotatingMessage(for stage: LoadingStage, date: Date) -> String {
+        let messages: [String]
+        switch stage {
+        case .preparing:
+            messages = [
+                "Preparando categorização…",
+                "Organizando transações…",
+                "Separando descrições…",
+            ]
+        case .cache:
+            messages = [
+                "Verificando cache…",
+                "Buscando sugestões salvas…",
+                "Reaproveitando padrões…",
+            ]
+        case .ai:
+            messages = [
+                "Lendo descrições…",
+                "Sugerindo categorias…",
+                "Comparando padrões…",
+                "Agrupando parecidas…",
+            ]
+        case .finishing:
+            messages = [
+                "Finalizando…",
+                "Conferindo respostas…",
+                "Aplicando sugestões…",
+            ]
+        }
+
+        let slot = Int(date.timeIntervalSinceReferenceDate / 1.8)
+        return messages[abs(slot) % messages.count]
     }
 }

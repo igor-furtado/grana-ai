@@ -1,6 +1,7 @@
 # Triage Labels
 
-Os skills usam cinco papéis canônicos de triagem. Este arquivo mapeia esses papéis para os rótulos usados no issue tracker deste repositório.
+Os skills usam cinco papéis canônicos de triagem. Neste repositório, o GitHub
+Issues usa esses mesmos nomes sem renomeações.
 
 | Rótulo em mattpocock/skills | Rótulo no tracker | Significado |
 | --- | --- | --- |
@@ -10,6 +11,8 @@ Os skills usam cinco papéis canônicos de triagem. Este arquivo mapeia esses pa
 | `ready-for-human` | `ready-for-human` | Requer implementação humana |
 | `wontfix` | `wontfix` | Não será implementada |
 
-Quando um skill mencionar um papel, use o rótulo correspondente desta tabela.
+Quando um skill mencionar um papel, aplique exatamente o rótulo correspondente
+na tabela acima.
 
-Edite a coluna do tracker se o vocabulário do repositório mudar.
+Os rótulos canônicos existem no GitHub do repositório. Se o vocabulário do
+tracker mudar no futuro, atualize este arquivo para refletir os nomes reais.

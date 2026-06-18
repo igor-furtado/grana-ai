@@ -131,3 +131,7 @@ _Evite_: Arquivo, upload
 **Categorização assistida**:
 Sugestão de categorias para transações importadas antes de sua incorporação definitiva, sujeita à revisão do usuário.
 _Evite_: Categorização automática, quando houver revisão humana
+
+**Pseudonimização semântica**:
+Substituição determinística de trechos identificáveis de uma descrição financeira por marcadores genéricos que preservam pistas úteis para classificação.
+_Evite_: Faker, anonimização total, texto aleatório

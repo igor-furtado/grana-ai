@@ -26,7 +26,6 @@ struct CategorizationSettingsView: View {
     @State private var showingReview = false
     @State private var isSyncingSeed = false
     @State private var seedSyncMessage: String?
-
     var body: some View {
         Form {
             Section {
@@ -102,7 +101,7 @@ struct CategorizationSettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle("Categorização")
-        .navigationSubtitle("Pipeline de categorização automática via IA")
+        .navigationSubtitle("Operação da categorização assistida")
         .task {
             if store == nil {
                 let newStore = CategorizationStore(container: environment.container)

@@ -18,7 +18,7 @@ mostram o estado atual. Em divergências, não normalize silenciosamente: corrij
 - Target macOS `26.1`, isolamento padrão `MainActor`.
 - Persistência local-first via produto estático `PowerSync`, versão mínima `1.13.1`.
 - Testes com Swift Testing (`import Testing`, `@Suite`, `@Test`, `#expect`).
-- IA via shell-out ao `codex exec`, usando a autenticação local da assinatura do usuário.
+- IA via backend online de categorização assistida, com provider ativo configurável e integração inicial prevista para OpenAI `gpt-5.4-mini`.
 - App Sandbox permanece desativado para permitir `Process`.
 - Não adicione dependências nem troque a stack sem pedido explícito.
 
@@ -99,7 +99,7 @@ Detalhes PowerSync:
 - Cada `STMTRS` OFX gera um `ImportBatch`; múltiplos extratos são persistidos em uma única `writeTransaction`.
 - `ImportBatch` permanece reversível, sem transações órfãs.
 - A categorização assistida ocorre antes do commit final.
-- Não substitua o shell-out `codex exec` por API HTTP paga sem decisão explícita.
+- Não troque o backend online de categorização assistida, o provider inicial suportado nem a política de pseudonimização sem decisão explícita.
 
 ## Onde alterar
 
@@ -160,7 +160,7 @@ Issues e PRDs são rastreados no GitHub Issues via `gh`. Veja `docs/agents/issue
 
 ### Triage labels
 
-Usa os cinco rótulos canônicos sem renomeações. Veja `docs/agents/triage-labels.md`.
+Usa os cinco rótulos canônicos no GitHub Issues. Veja `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

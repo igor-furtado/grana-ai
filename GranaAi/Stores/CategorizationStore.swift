@@ -128,8 +128,7 @@ final class CategorizationStore {
                 // do polling sem ficar preso em `.classifying`.
                 self?.status = .idle
             } catch {
-                self?.status = .failed(message: error.localizedDescription)
-                NoticeCenter.shared.report(error, title: "Falha ao categorizar")
+                self?.handleCategorizationFailure(error)
             }
         }
     }
@@ -159,8 +158,7 @@ final class CategorizationStore {
             } catch is CancellationError {
                 self?.status = .idle
             } catch {
-                self?.status = .failed(message: error.localizedDescription)
-                NoticeCenter.shared.report(error, title: "Falha ao categorizar")
+                self?.handleCategorizationFailure(error)
             }
         }
     }
@@ -365,5 +363,23 @@ final class CategorizationStore {
         case let .failed(error):
             status = .failed(message: error.localizedDescription)
         }
+    }
+
+    private func handleCategorizationFailure(_ error: Error) {
+        if CategorizationHarnessSupport.isHarnessIssue(error) {
+            status = .failed(message: CategorizationHarnessSupport.recoveryMessage)
+            CategorizationHarnessStatusCenter.shared.markUnavailable(
+                message: CategorizationHarnessSupport.recoveryMessage
+            )
+            NoticeCenter.shared.error(
+                title: "Categorização online indisponível",
+                message: "A importação continua com Não Classificado porque o serviço de categorização não respondeu.",
+                actions: [CategorizationHarnessSupport.recoveryAction()]
+            )
+            return
+        }
+
+        status = .failed(message: error.localizedDescription)
+        NoticeCenter.shared.report(error, title: "Falha ao categorizar")
     }
 }

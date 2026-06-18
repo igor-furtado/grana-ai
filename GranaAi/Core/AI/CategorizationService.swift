@@ -17,15 +17,14 @@ import OSLog
 ///    está acima do auto-approved threshold.
 ///
 /// **Único batch.** Para um import inteiro, mandamos todas as transações que
-/// deram cache miss numa chamada ao Codex CLI. Se o CLI estourar tempo ou
-/// truncar, aí dividimos — não antes.
+/// deram cache miss numa chamada ao backend online. Se a chamada falhar ou
+/// vier incompleta, aí dividimos — não antes.
 ///
 /// **Off-main.** Marca `Sendable`; chamada de Tasks em background.
 final class CategorizationService: Sendable {
-    /// Tamanho máximo do batch enviado por chamada ao Codex CLI.
-    /// grandes ainda podem ser divididos, mas começamos maior para não repetir
-    /// taxonomia e instruções em excesso.
-    private static let maxAIBatchSize = 100
+    /// Abaixo deste tamanho, um lote que já falhou passa direto pro fallback
+    /// em vez de continuar subdividindo.
+    private static let minimumSplitSizeBeforeFallback = 25
 
     /// Thresholds usados pelo UI pra agrupar sugestões em alta/média/baixa.
     /// `absoluteMinimum` ainda é usado: AI retornando confidence abaixo dele
@@ -48,6 +47,7 @@ final class CategorizationService: Sendable {
         /// Uma entrada por hash distinto que veio da IA com confidence ≥
         /// absoluteMinimum. Cache hits não geram nova entrada (já existem).
         let pendingCacheEntries: [CategorizationCacheEntry]
+        let hadHarnessFailures: Bool
     }
 
     private struct AIChunkResult {
@@ -57,7 +57,7 @@ final class CategorizationService: Sendable {
         var failedChunks: Int
     }
 
-    private let client: CodexCLIClient
+    private let client: CategorizationAPIClient
     private let transactions: TransactionRepository
     private let categories: CategoryRepository
     private let accounts: AccountRepository
@@ -70,14 +70,14 @@ final class CategorizationService: Sendable {
     let model: String
 
     init(
-        client: CodexCLIClient,
+        client: CategorizationAPIClient,
         transactions: TransactionRepository,
         categories: CategoryRepository,
         accounts: AccountRepository,
         institutions: InstitutionRepository,
         cache: CategorizationCacheRepository,
         corrections: CategorizationCorrectionRepository,
-        model: String = Config.codexCLIModel
+        model: String = "openai/gpt-5.4-mini"
     ) {
         self.client = client
         self.transactions = transactions
@@ -95,10 +95,10 @@ final class CategorizationService: Sendable {
         case started(total: Int)
         case cacheChecked(hits: Int, misses: Int)
         case aiCallStarted(misses: Int)
-        /// Emitido depois de cada chunk paralelo da IA completar (sucesso
-        /// OU fallback). `processed` é cumulativo: hits do cache + itens já
-        /// resolvidos pela IA até agora. `total` é `drafts.count` (todos
-        /// os itens do import).
+        /// Emitido depois de cada tentativa relevante da IA completar
+        /// (lote único inicial, sublotes após split, ou fallback). `processed`
+        /// é cumulativo: hits do cache + itens já resolvidos até agora.
+        /// `total` é `drafts.count` (todos os itens do import).
         case aiChunkFinished(processed: Int, total: Int)
         case aiCallFinished
         case finished(total: Int, fromCache: Int, fromAI: Int, fallback: Int)
@@ -108,7 +108,8 @@ final class CategorizationService: Sendable {
     // MARK: - Pré-commit (wizard de import)
 
     /// Classifica drafts (transações ainda não persistidas). Cache hit é O(1);
-    /// misses entram em chamadas sequenciais ao Codex CLI.
+    /// misses entram primeiro em uma única chamada ao backend online. Se essa
+    /// execução falhar, o lote é subdividido recursivamente antes do fallback.
     ///
     /// Devolve sugestões + cache entries a persistir no commit final. Não
     /// toca banco aqui (exceto leitura).
@@ -119,7 +120,11 @@ final class CategorizationService: Sendable {
     ) async throws -> DraftClassificationResult {
         guard !drafts.isEmpty else {
             progress?(.finished(total: 0, fromCache: 0, fromAI: 0, fallback: 0))
-            return DraftClassificationResult(suggestions: [], pendingCacheEntries: [])
+            return DraftClassificationResult(
+                suggestions: [],
+                pendingCacheEntries: [],
+                hadHarnessFailures: false
+            )
         }
         let startedAt = Date()
 
@@ -206,49 +211,45 @@ final class CategorizationService: Sendable {
 
         if !pendingForAI.isEmpty {
             progress?(.aiCallStarted(misses: pendingForAI.count))
-
-            // Chunks sequenciais reduzem pressão nos limites da assinatura e
-            // preservam métricas simples.
-            let chunks = pendingForAI.chunked(into: Self.maxAIBatchSize)
-
             let totalItems = drafts.count
 
-            var processedSoFar = fromCache
-            for chunk in chunks {
-                let result = await classifyChunk(
-                    drafts: chunk,
-                    hashByDraftId: hashByDraftId,
-                    taxonomy: taxonomy,
-                    fallbackId: fallbackId,
-                    ownAccounts: ownAccounts,
-                    accountContextById: accountContextById,
-                    thresholds: thresholds
-                )
-                failedChunks += result.failedChunks
-                for suggestion in result.suggestions {
-                    switch suggestion.source {
-                    case .ai: fromAI += 1
-                    case .fallback: fromFallback += 1
-                    case .cache: break
-                    }
+            let result = await classifyChunk(
+                drafts: pendingForAI,
+                hashByDraftId: hashByDraftId,
+                taxonomy: taxonomy,
+                fallbackId: fallbackId,
+                ownAccounts: ownAccounts,
+                accountContextById: accountContextById,
+                thresholds: thresholds
+            )
+            failedChunks += result.failedChunks
+            for suggestion in result.suggestions {
+                switch suggestion.source {
+                case .ai: fromAI += 1
+                case .fallback: fromFallback += 1
+                case .cache: break
                 }
-                suggestions.append(contentsOf: result.suggestions)
-                for entry in result.cacheEntries {
-                    pendingCacheEntries[entry.descriptionHash] = entry
-                }
-                processedSoFar += chunk.count
-                progress?(.aiChunkFinished(processed: processedSoFar, total: totalItems))
             }
+            suggestions.append(contentsOf: result.suggestions)
+            for entry in result.cacheEntries {
+                pendingCacheEntries[entry.descriptionHash] = entry
+            }
+            progress?(.aiChunkFinished(processed: totalItems, total: totalItems))
+
             if failedChunks > 0 {
-                let title = failedChunks == 1
-                    ? "IA indisponível em 1 lote — usando fallback"
-                    : "IA indisponível em \(failedChunks) lotes — usando fallback"
-                // Toast sem `Error` tipado — a causa real (timeout, parse,
-                // rede) já está em `log.ai.error` por chunk acima. Usar um
-                // `AIError` específico aqui mentiria sobre a categoria do erro.
-                let message = "\(failedChunks) lote(s) caíram pro fallback. Veja o console pra detalhes."
                 Task { @MainActor in
-                    NoticeCenter.shared.report(title: title, message: message)
+                    CategorizationHarnessStatusCenter.shared.markUnavailable(
+                        message: CategorizationHarnessSupport.recoveryMessage
+                    )
+                    NoticeCenter.shared.error(
+                        title: "Categorização online indisponível",
+                        message: "A importação continua com Não Classificado porque o serviço de categorização não respondeu.",
+                        actions: [CategorizationHarnessSupport.recoveryAction()]
+                    )
+                }
+            } else {
+                Task { @MainActor in
+                    CategorizationHarnessStatusCenter.shared.clear()
                 }
             }
             progress?(.aiCallFinished)
@@ -283,7 +284,8 @@ final class CategorizationService: Sendable {
 
         return DraftClassificationResult(
             suggestions: sortedSuggestions,
-            pendingCacheEntries: Array(pendingCacheEntries.values)
+            pendingCacheEntries: Array(pendingCacheEntries.values),
+            hadHarnessFailures: failedChunks > 0
         )
     }
 
@@ -517,15 +519,16 @@ final class CategorizationService: Sendable {
         accountContextById: [UUID: String],
         thresholds: ConfidenceThresholds
     ) async -> AIChunkResult {
-        guard drafts.count > 25 else {
+        guard Self.shouldSplitFailedChunk(drafts.count),
+              let split = Self.splitDraftsForRetry(drafts)
+        else {
             var result = fallbackResult(drafts: drafts, hashByDraftId: hashByDraftId, fallbackId: fallbackId)
             result.failedChunks = 1
             return result
         }
 
-        let midpoint = drafts.count / 2
         let left = await classifyChunk(
-            drafts: Array(drafts[..<midpoint]),
+            drafts: split.left,
             hashByDraftId: hashByDraftId,
             taxonomy: taxonomy,
             fallbackId: fallbackId,
@@ -534,7 +537,7 @@ final class CategorizationService: Sendable {
             thresholds: thresholds
         )
         let right = await classifyChunk(
-            drafts: Array(drafts[midpoint...]),
+            drafts: split.right,
             hashByDraftId: hashByDraftId,
             taxonomy: taxonomy,
             fallbackId: fallbackId,
@@ -547,6 +550,21 @@ final class CategorizationService: Sendable {
             cacheEntries: left.cacheEntries + right.cacheEntries,
             unresolvedDrafts: [],
             failedChunks: left.failedChunks + right.failedChunks
+        )
+    }
+
+    static func shouldSplitFailedChunk(_ count: Int) -> Bool {
+        count > minimumSplitSizeBeforeFallback
+    }
+
+    static func splitDraftsForRetry(
+        _ drafts: [TransactionDraft]
+    ) -> (left: [TransactionDraft], right: [TransactionDraft])? {
+        guard shouldSplitFailedChunk(drafts.count) else { return nil }
+        let midpoint = drafts.count / 2
+        return (
+            left: Array(drafts[..<midpoint]),
+            right: Array(drafts[midpoint...])
         )
     }
 
@@ -596,17 +614,15 @@ final class CategorizationService: Sendable {
             )
         }
 
-        let invocation = try CategorizationPrompt.buildInvocation(
+        let corrections = try await corrections.recent(limit: 10)
+        let requestBody = CategorizationPrompt.buildRequest(
             items: items,
             categories: taxonomy.promptOptions(),
             ownAccounts: ownAccounts,
-            fewShots: []
+            fewShots: buildFewShots(corrections: corrections, taxonomy: taxonomy),
+            taxonomyVersion: Config.categorizationTaxonomyVersion
         )
-        let responseData = try await client.runStructured(
-            systemPrompt: invocation.systemPrompt,
-            userPrompt: invocation.userPrompt,
-            jsonSchema: invocation.jsonSchema
-        )
+        let responseData = try await client.categorize(requestBody)
         let results = try CategorizationPrompt.parseResults(from: responseData)
 
         var duplicateIndices: Set<Int> = []
@@ -814,20 +830,6 @@ final class CategorizationService: Sendable {
                 correctedCategorySlug: slug,
                 correctedSubcategoryName: subName
             )
-        }
-    }
-}
-
-// MARK: - Array chunking helper
-
-private extension Array {
-    /// Divide o array em sub-arrays de tamanho máximo `size`. O último chunk
-    /// pode ser menor. Usado pra fatiar batches grandes da IA em pedaços que
-    /// caibam no timeout do CLI.
-    func chunked(into size: Int) -> [[Element]] {
-        guard size > 0 else { return [self] }
-        return stride(from: 0, to: count, by: size).map {
-            Array(self[$0 ..< Swift.min($0 + size, count)])
         }
     }
 }

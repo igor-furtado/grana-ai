@@ -66,17 +66,13 @@ final class AppContainer {
     lazy var categorizationCorrections: CategorizationCorrectionRepository =
         .init(db: db)
 
-    /// Shell-out pro Codex CLI usando a autenticação local do usuário.
-    lazy var codexCLIClient: CodexCLIClient = .init(
-        executablePath: Config.codexCLIPath,
-        model: Config.codexCLIModel
-    )
+    /// Cliente HTTP da categorização assistida online.
+    lazy var categorizationAPIClient: CategorizationAPIClient = .init()
 
-    /// Pipeline de categorização automática (Fase 4). Usa cache + correções
-    /// + Codex CLI com schema de saída estruturada. Disparado em
-    /// background pelos importadores após `writeTransaction`.
+    /// Pipeline de categorização automática. Preserva cache e correções
+    /// locais do app enquanto a inferência é executada pelo backend online.
     lazy var categorization: CategorizationService = .init(
-        client: codexCLIClient,
+        client: categorizationAPIClient,
         transactions: transactions,
         categories: categories,
         accounts: accounts,

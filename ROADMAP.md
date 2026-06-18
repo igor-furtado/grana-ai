@@ -16,24 +16,6 @@
 
 ## Fase 4.7 — Faturas (Statements) de cartão ✅
 
-Implementada como consolidação do domínio de cartão:
-
-- Compras e estornos vinculados são materializados no ciclo da própria data.
-- Estornos podem ser parciais e múltiplos, herdam conta/categoria e não ultrapassam a compra original.
-- `Statement` armazena valor líquido assinado, créditos recebidos, pagamentos aplicados e `settled_at`.
-- Saldo credor é propagado explicitamente após o fechamento e permanece pendente quando não existe próxima fatura.
-- Transferências destinadas a cartão são distribuídas integralmente entre as dívidas elegíveis mais antigas.
-- Inserções, edições, exclusões, importações e mudanças de ciclo executam replay cronológico atômico.
-- Configurações de fechamento e vencimento são versionadas por ciclo; dias inexistentes usam o último dia do mês.
-- CSV Inter ignora pagamentos e exige seleção da compra original para cada estorno importado.
-- Cartões começam sem saldo inicial; histórico existente é reconstruído por transações importadas.
-- A UI distingue compras líquidas, créditos, pagamentos, total a quitar, saldo restante e saldo credor.
-
-Decisões: [ADR 0001](docs/adr/0001-propagacao-de-saldo-credor-entre-faturas.md) e
-[ADR 0002](docs/adr/0002-recalculo-cronologico-de-faturas.md).
-
----
-
 ## Fase 5 — Sync via PowerSync + Supabase
 
 **Objetivo:** dados ficam num backend remoto (Postgres via Supabase) com sync bidirecional, garantindo backup off-machine e abrindo caminho pra outros clientes no futuro se o roadmap mudar.
