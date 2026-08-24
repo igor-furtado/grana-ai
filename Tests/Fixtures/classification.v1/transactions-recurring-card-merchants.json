@@ -1,0 +1,42 @@
+[
+  {
+    "id": "tx-uber",
+    "description": "Uber   *UBER   *TRIP",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-99app",
+    "description": "99APP       *99App",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-99ride",
+    "description": "PG  99 RIDE",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-ifood",
+    "description": "ifood  *IFD*Restaurante",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-latam",
+    "description": "LATAM AIR",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-azul",
+    "description": "Azul We",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-luxor-hotel",
+    "description": "LUXOR HOTEL",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-hotel-casa-de-praia",
+    "description": "HOTEL CASA DE PRAIA",
+    "currencyCode": "BRL"
+  }
+]

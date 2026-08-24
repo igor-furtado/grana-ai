@@ -15,8 +15,8 @@
         "name": "Alimentação",
         "subcategories": [
           {
-            "id": "padaria",
-            "name": "Padaria"
+            "id": "padarias",
+            "name": "Padarias"
           }
         ]
       }

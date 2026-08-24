@@ -47,6 +47,78 @@ import GranaAITestSupport
     #expect(response == expected)
 }
 
+@Test func padariaRuleClassifiesWithGranaAppTaxonomyFixture() throws {
+    let service = ClassificationService()
+    let request = ClassificationRequest(
+        version: .current,
+        transactions: [
+            Transaction(
+                id: "tx-padaria-real-taxonomy",
+                description: "PADARIA CENTRAL",
+                amountInMinorUnits: -1890,
+                currencyCode: "BRL"
+            ),
+        ],
+        taxonomy: try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json"),
+        context: ClassificationContext(locale: "pt-BR")
+    )
+
+    let response = try service.classify(request)
+
+    #expect(response == ClassificationResponse(version: .current, results: [
+        ClassificationResult(
+            transactionID: "tx-padaria-real-taxonomy",
+            outcome: .classified(categoryID: "alimentacao", subcategoryID: "padarias")
+        ),
+    ]))
+}
+
+@Test func recurringCardMerchantRulesClassifyWithGranaAppTaxonomyFixture() throws {
+    let service = ClassificationService()
+    let request = ClassificationRequest(
+        version: .current,
+        transactions: try FixtureStore.classificationV1Transactions("transactions-recurring-card-merchants.json"),
+        taxonomy: try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json"),
+        context: ClassificationContext(locale: "pt-BR")
+    )
+    let expected = try FixtureStore.classificationV1Response("response-recurring-card-merchants.json")
+
+    let response = try service.classify(request)
+
+    #expect(response == expected)
+}
+
+@Test func broadTravelWordsDoNotClassifyWhenTheyAreNotMerchantPrefixes() throws {
+    let service = ClassificationService()
+    let request = ClassificationRequest(
+        version: .current,
+        transactions: [
+            Transaction(id: "tx-blue-shirt", description: "CAMISA AZUL", currencyCode: "BRL"),
+            Transaction(id: "tx-hotel-course", description: "HOTELARIA CURSO", currencyCode: "BRL"),
+        ],
+        taxonomy: try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json"),
+        context: ClassificationContext(locale: "pt-BR")
+    )
+
+    let response = try service.classify(request)
+
+    #expect(response == ClassificationResponse(version: .current, results: [
+        ClassificationResult(transactionID: "tx-blue-shirt", outcome: .fallback(reason: .unknown)),
+        ClassificationResult(transactionID: "tx-hotel-course", outcome: .fallback(reason: .unknown)),
+    ]))
+}
+
+@Test func granaAppTaxonomyFixtureDecodesToContractShape() throws {
+    let taxonomy = try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json")
+
+    #expect(taxonomy.categories.count == 15)
+    #expect(taxonomy.categories.flatMap(\.subcategories).count == 85)
+
+    let alimentacao = try #require(taxonomy.categories.first { $0.id == "alimentacao" })
+    #expect(alimentacao.name == "Alimentação")
+    #expect(alimentacao.subcategories.contains(Subcategory(id: "padarias", name: "Padarias")))
+}
+
 @Test func requestDecodesFromJSONContract() throws {
     let data = try FixtureStore.classificationV1Data("request-padaria.json")
 
@@ -54,7 +126,7 @@ import GranaAITestSupport
 
     #expect(request.version == .current)
     #expect(request.transactions.first?.id == "tx-padaria")
-    #expect(request.taxonomy.categories.first?.subcategories.first?.id == "padaria")
+    #expect(request.taxonomy.categories.first?.subcategories.first?.id == "padarias")
     #expect(request.context.locale == "pt-BR")
 }
 
@@ -117,7 +189,7 @@ import GranaAITestSupport
     let json = String(data: data, encoding: .utf8)
 
     #expect(json == """
-    {"results":[{"categoryId":"alimentacao","outcome":"classified","subcategoryId":"padaria","transactionId":"tx-padaria"}],"version":"classification.v1"}
+    {"results":[{"categoryId":"alimentacao","outcome":"classified","subcategoryId":"padarias","transactionId":"tx-padaria"}],"version":"classification.v1"}
     """)
 }
 

@@ -19,6 +19,14 @@ public enum FixtureStore {
         try JSONDecoder().decode(ClassificationResponse.self, from: classificationV1Data(name))
     }
 
+    public static func classificationV1Transactions(_ name: String) throws -> [Transaction] {
+        try JSONDecoder().decode([Transaction].self, from: classificationV1Data(name))
+    }
+
+    public static func classificationV1Taxonomy(_ name: String) throws -> Taxonomy {
+        try JSONDecoder().decode(Taxonomy.self, from: classificationV1Data(name))
+    }
+
     public static func packageRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

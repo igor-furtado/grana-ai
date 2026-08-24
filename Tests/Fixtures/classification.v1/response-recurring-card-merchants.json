@@ -1,0 +1,53 @@
+{
+  "version": "classification.v1",
+  "results": [
+    {
+      "transactionId": "tx-uber",
+      "outcome": "classified",
+      "categoryId": "mobilidade",
+      "subcategoryId": "uber-e-99"
+    },
+    {
+      "transactionId": "tx-99app",
+      "outcome": "classified",
+      "categoryId": "mobilidade",
+      "subcategoryId": "uber-e-99"
+    },
+    {
+      "transactionId": "tx-99ride",
+      "outcome": "classified",
+      "categoryId": "mobilidade",
+      "subcategoryId": "uber-e-99"
+    },
+    {
+      "transactionId": "tx-ifood",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "delivery-de-comida"
+    },
+    {
+      "transactionId": "tx-latam",
+      "outcome": "classified",
+      "categoryId": "viagem",
+      "subcategoryId": "passagens-aereas"
+    },
+    {
+      "transactionId": "tx-azul",
+      "outcome": "classified",
+      "categoryId": "viagem",
+      "subcategoryId": "passagens-aereas"
+    },
+    {
+      "transactionId": "tx-luxor-hotel",
+      "outcome": "classified",
+      "categoryId": "viagem",
+      "subcategoryId": "hospedagem"
+    },
+    {
+      "transactionId": "tx-hotel-casa-de-praia",
+      "outcome": "classified",
+      "categoryId": "viagem",
+      "subcategoryId": "hospedagem"
+    }
+  ]
+}

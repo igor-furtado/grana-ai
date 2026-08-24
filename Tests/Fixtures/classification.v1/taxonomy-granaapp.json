@@ -1,0 +1,434 @@
+{
+  "categories": [
+    {
+      "id": "renda-e-pagamentos",
+      "name": "Renda e Pagamentos",
+      "subcategories": [
+        {
+          "id": "salario",
+          "name": "Salário"
+        },
+        {
+          "id": "freelance",
+          "name": "Freelance"
+        },
+        {
+          "id": "13o-salario",
+          "name": "13º Salário"
+        },
+        {
+          "id": "ferias",
+          "name": "Férias"
+        },
+        {
+          "id": "plr",
+          "name": "PLR"
+        },
+        {
+          "id": "juros-de-investimentos",
+          "name": "Juros de Investimentos"
+        },
+        {
+          "id": "dividendos",
+          "name": "Dividendos"
+        },
+        {
+          "id": "restituicao-de-ir",
+          "name": "Restituição de IR"
+        },
+        {
+          "id": "cashback",
+          "name": "Cashback"
+        },
+        {
+          "id": "reembolso",
+          "name": "Reembolso"
+        }
+      ]
+    },
+    {
+      "id": "compras",
+      "name": "Compras",
+      "subcategories": [
+        {
+          "id": "roupas-e-calcados",
+          "name": "Roupas e Calçados"
+        },
+        {
+          "id": "acessorios-e-joias",
+          "name": "Acessórios e Joias"
+        },
+        {
+          "id": "presentes",
+          "name": "Presentes"
+        },
+        {
+          "id": "artigos-esportivos",
+          "name": "Artigos Esportivos"
+        },
+        {
+          "id": "hobbies-e-colecoes",
+          "name": "Hobbies e Coleções"
+        }
+      ]
+    },
+    {
+      "id": "cuidados-pessoais",
+      "name": "Cuidados Pessoais",
+      "subcategories": [
+        {
+          "id": "barbearia",
+          "name": "Barbearia"
+        },
+        {
+          "id": "massagem",
+          "name": "Massagem"
+        },
+        {
+          "id": "cosmeticos-e-higiene",
+          "name": "Cosméticos e Higiene"
+        }
+      ]
+    },
+    {
+      "id": "mobilidade",
+      "name": "Mobilidade",
+      "subcategories": [
+        {
+          "id": "uber-e-99",
+          "name": "Uber e 99"
+        },
+        {
+          "id": "taxi",
+          "name": "Táxi"
+        },
+        {
+          "id": "transporte-publico",
+          "name": "Transporte Público"
+        },
+        {
+          "id": "pedagio",
+          "name": "Pedágio"
+        }
+      ]
+    },
+    {
+      "id": "moto",
+      "name": "Moto",
+      "subcategories": [
+        {
+          "id": "combustivel",
+          "name": "Combustível"
+        },
+        {
+          "id": "manutencao-e-mecanica",
+          "name": "Manutenção e Mecânica"
+        },
+        {
+          "id": "estacionamento",
+          "name": "Estacionamento"
+        },
+        {
+          "id": "licenciamento",
+          "name": "Licenciamento"
+        },
+        {
+          "id": "multas-de-transito",
+          "name": "Multas de Trânsito"
+        },
+        {
+          "id": "seguro-moto",
+          "name": "Seguro Moto"
+        },
+        {
+          "id": "equipamentos-e-acessorios",
+          "name": "Equipamentos e Acessórios"
+        }
+      ]
+    },
+    {
+      "id": "viagem",
+      "name": "Viagem",
+      "subcategories": [
+        {
+          "id": "passagens-aereas",
+          "name": "Passagens Aéreas"
+        },
+        {
+          "id": "hospedagem",
+          "name": "Hospedagem"
+        },
+        {
+          "id": "pacotes-de-viagem",
+          "name": "Pacotes de Viagem"
+        },
+        {
+          "id": "bagagem",
+          "name": "Bagagem"
+        },
+        {
+          "id": "seguro-viagem",
+          "name": "Seguro Viagem"
+        },
+        {
+          "id": "passeios-e-atracoes",
+          "name": "Passeios e Atrações"
+        },
+        {
+          "id": "cambio",
+          "name": "Câmbio"
+        }
+      ]
+    },
+    {
+      "id": "entretenimento",
+      "name": "Entretenimento",
+      "subcategories": [
+        {
+          "id": "cinema",
+          "name": "Cinema"
+        },
+        {
+          "id": "teatro",
+          "name": "Teatro"
+        },
+        {
+          "id": "parques-e-diversoes",
+          "name": "Parques e Diversões"
+        },
+        {
+          "id": "loterias",
+          "name": "Loterias"
+        }
+      ]
+    },
+    {
+      "id": "festas",
+      "name": "Festas",
+      "subcategories": [
+        {
+          "id": "bares",
+          "name": "Bares"
+        },
+        {
+          "id": "baladas-e-boates",
+          "name": "Baladas e Boates"
+        },
+        {
+          "id": "festas-e-eventos",
+          "name": "Festas e Eventos"
+        },
+        {
+          "id": "shows-e-festivais",
+          "name": "Shows e Festivais"
+        }
+      ]
+    },
+    {
+      "id": "danca",
+      "name": "Dança",
+      "subcategories": [
+        {
+          "id": "escola-de-danca",
+          "name": "Escola de Dança"
+        },
+        {
+          "id": "bailes",
+          "name": "Bailes"
+        },
+        {
+          "id": "workshops",
+          "name": "Workshops"
+        },
+        {
+          "id": "congressos",
+          "name": "Congressos"
+        }
+      ]
+    },
+    {
+      "id": "trabalho",
+      "name": "Trabalho",
+      "subcategories": [
+        {
+          "id": "hardware",
+          "name": "Hardware"
+        },
+        {
+          "id": "conferencias-e-eventos-tech",
+          "name": "Conferências e Eventos Tech"
+        }
+      ]
+    },
+    {
+      "id": "educacao",
+      "name": "Educação",
+      "subcategories": [
+        {
+          "id": "mensalidades",
+          "name": "Mensalidades"
+        },
+        {
+          "id": "cursos",
+          "name": "Cursos"
+        },
+        {
+          "id": "certificacoes",
+          "name": "Certificações"
+        },
+        {
+          "id": "livros",
+          "name": "Livros"
+        },
+        {
+          "id": "material-escolar",
+          "name": "Material Escolar"
+        }
+      ]
+    },
+    {
+      "id": "alimentacao",
+      "name": "Alimentação",
+      "subcategories": [
+        {
+          "id": "supermercados",
+          "name": "Supermercados"
+        },
+        {
+          "id": "mercearias",
+          "name": "Mercearias"
+        },
+        {
+          "id": "acougues",
+          "name": "Açougues"
+        },
+        {
+          "id": "padarias",
+          "name": "Padarias"
+        },
+        {
+          "id": "restaurantes",
+          "name": "Restaurantes"
+        },
+        {
+          "id": "lanchonetes",
+          "name": "Lanchonetes"
+        },
+        {
+          "id": "delivery-de-comida",
+          "name": "Delivery de Comida"
+        },
+        {
+          "id": "cafeterias",
+          "name": "Cafeterias"
+        },
+        {
+          "id": "feira-e-hortifruti",
+          "name": "Feira e Hortifrúti"
+        }
+      ]
+    },
+    {
+      "id": "moradia",
+      "name": "Moradia",
+      "subcategories": [
+        {
+          "id": "aluguel",
+          "name": "Aluguel"
+        },
+        {
+          "id": "entrada-e-encargos",
+          "name": "Entrada e Encargos"
+        },
+        {
+          "id": "condominio",
+          "name": "Condomínio"
+        },
+        {
+          "id": "energia-eletrica",
+          "name": "Energia Elétrica"
+        },
+        {
+          "id": "agua",
+          "name": "Água"
+        },
+        {
+          "id": "gas",
+          "name": "Gás"
+        },
+        {
+          "id": "iptu",
+          "name": "IPTU"
+        },
+        {
+          "id": "financiamento-imobiliario",
+          "name": "Financiamento Imobiliário"
+        },
+        {
+          "id": "reforma",
+          "name": "Reforma"
+        },
+        {
+          "id": "moveis",
+          "name": "Móveis"
+        },
+        {
+          "id": "decoracao",
+          "name": "Decoração"
+        },
+        {
+          "id": "eletronicos",
+          "name": "Eletrônicos"
+        },
+        {
+          "id": "utensilios-domesticos",
+          "name": "Utensílios Domésticos"
+        },
+        {
+          "id": "ferramentas",
+          "name": "Ferramentas"
+        }
+      ]
+    },
+    {
+      "id": "streaming-e-apps",
+      "name": "Streaming e Apps",
+      "subcategories": [
+        {
+          "id": "streaming-de-video",
+          "name": "Streaming de Vídeo"
+        },
+        {
+          "id": "streaming-de-musica",
+          "name": "Streaming de Música"
+        },
+        {
+          "id": "ia-e-produtividade",
+          "name": "IA e Produtividade"
+        },
+        {
+          "id": "apps-e-softwares",
+          "name": "Apps e Softwares"
+        },
+        {
+          "id": "jogos",
+          "name": "Jogos"
+        }
+      ]
+    },
+    {
+      "id": "conectividade",
+      "name": "Conectividade",
+      "subcategories": [
+        {
+          "id": "internet-banda-larga",
+          "name": "Internet Banda Larga"
+        },
+        {
+          "id": "celular",
+          "name": "Celular"
+        }
+      ]
+    }
+  ]
+}
