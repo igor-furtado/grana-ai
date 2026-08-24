@@ -14,6 +14,7 @@ public struct ClassificationContractError: Codable, Equatable, Error, Sendable {
         case malformedPayload = "malformed_payload"
         case unsupportedVersion = "unsupported_version"
         case invalidTaxonomy = "invalid_taxonomy"
+        case invalidCommand = "invalid_command"
         case internalError = "internal_error"
     }
 }

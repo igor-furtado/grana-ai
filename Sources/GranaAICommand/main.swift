@@ -6,14 +6,26 @@ import GranaAICore
 struct GranaAICommand {
     static func main() {
         let codec = ClassificationJSONCodec()
-        let service = ClassificationService()
+        let memory = LocalClassificationMemory.configured()
         let input = FileHandle.standardInput.readDataToEndOfFile()
 
         do {
-            let request = try codec.decodeRequest(from: input)
-            let response = try service.classify(request)
-            let output = try codec.encodeResponse(response)
-            writeJSON(output, to: .standardOutput)
+            switch Array(CommandLine.arguments.dropFirst()) {
+            case []:
+                let service = ClassificationService(memory: memory)
+                let request = try codec.decodeRequest(from: input)
+                let response = try service.classify(request)
+                let output = try codec.encodeResponse(response)
+                writeJSON(output, to: .standardOutput)
+            case ["learn"]:
+                let request = try codec.decodeLearningRequest(from: input)
+                try memory.learn(request)
+            default:
+                throw ClassificationContractError(
+                    code: .invalidCommand,
+                    message: "Unsupported command."
+                )
+            }
         } catch let error as ClassificationContractError {
             writeContractError(error, using: codec)
             exit(1)

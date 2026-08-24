@@ -28,6 +28,10 @@ _Evite_: lote de importação, sincronização com Supabase, dados de treino
 Resultado por transação que o GranaAI devolve ao GranaApp, incluindo sugestões bem-sucedidas e resultados de fallback.
 _Evite_: transações commitadas, classificações persistidas
 
+**Fonte de Classificação**:
+Indicação opcional no resultado que explica qual estratégia produziu uma classificação. No momento, `memory` identifica classificações vindas da memória local.
+_Evite_: confiança do modelo, categoria, origem da transação
+
 **Transação**:
 Candidata a transação financeira enviada pelo GranaApp para classificação antes de o GranaApp fazer commit na fonte de verdade financeira.
 _Evite_: categoria, lançamento contábil, linha do Supabase
@@ -45,8 +49,16 @@ Fluxo sob responsabilidade do GranaApp em que o usuário resolve transações qu
 _Evite_: UI de correção do GranaAI, etapa de treinamento do modelo
 
 **Memória Global**:
-Capacidade futura do GranaAI que pode persistir sinais locais de classificação entre requests. Ela não é a fonte de verdade financeira.
+Capacidade do GranaAI que persiste sinais locais de classificação confirmados pelo usuário entre requests, com escopo global neste Mac. Ela não é a fonte de verdade financeira.
 _Evite_: réplica do Supabase, store de transações, livro financeiro do usuário
+
+**Sinal de Classificação**:
+Associação aprendida entre uma descrição normalizada inteira e uma categoria/subcategoria confirmada pelo usuário. Não inclui valor, data, conta, cartão ou transação completa.
+_Evite_: transação salva, dado de treino remoto, lançamento financeiro
+
+**Descrição Normalizada**:
+Descrição de transação após normalização local para comparação exata, removendo diferenças de caixa, acentos e espaços repetidos.
+_Evite_: merchant canônico, descrição original, hash opaco
 
 **Regra Determinística**:
 Estratégia local explícita que classifica uma transação por padrões previsíveis na descrição e pela taxonomia recebida. Ela só pode sugerir categoria/subcategoria existentes na taxonomia do request.

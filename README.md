@@ -59,6 +59,26 @@ O client do GranaApp deve:
 5. aplicar timeout e cancelamento;
 6. tratar erros estruturados sem depender de texto livre.
 
+Para registrar classificações confirmadas pelo usuário, o GranaApp deve executar:
+
+```bash
+grana-ai learn
+```
+
+Esse comando também lê JSON pelo `stdin`, mas não escreve resposta no `stdout` quando conclui com sucesso. O comando sem argumentos continua sendo o caminho de classificação.
+
+A memória local padrão fica em:
+
+```text
+~/Library/Application Support/GranaAI/memory.v1.json
+```
+
+Durante desenvolvimento e testes, o caminho pode ser sobrescrito com:
+
+```bash
+GRANA_AI_MEMORY_PATH=/tmp/grana-ai-memory.v1.json .build/debug/grana-ai
+```
+
 ## Contrato Atual
 
 Versão atual:
@@ -116,6 +136,23 @@ Response classificada:
 }
 ```
 
+Quando a classificação vier da memória local, o resultado inclui `source`:
+
+```json
+{
+  "version": "classification.v1",
+  "results": [
+    {
+      "transactionId": "tx-steam",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "jogos",
+      "source": "memory"
+    }
+  ]
+}
+```
+
 Response fallback:
 
 ```json
@@ -140,6 +177,35 @@ Erro estruturado:
 }
 ```
 
+Request de aprendizado:
+
+```json
+{
+  "version": "classification.v1",
+  "taxonomy": {
+    "categories": [
+      {
+        "id": "streaming-e-apps",
+        "name": "Streaming e apps",
+        "subcategories": [
+          {
+            "id": "jogos",
+            "name": "Jogos"
+          }
+        ]
+      }
+    ]
+  },
+  "confirmedClassifications": [
+    {
+      "description": "PAG Steam Sao Paulo BRA",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "jogos"
+    }
+  ]
+}
+```
+
 ## Guardrails
 
 - A taxonomia sempre vem do GranaApp.
@@ -148,3 +214,5 @@ Erro estruturado:
 - O GranaAI não faz commit de transações.
 - O GranaAI não chama provedores externos de IA.
 - Logs não devem registrar descrições completas, valores, credenciais ou payloads financeiros crus.
+- A memória local guarda apenas descrições normalizadas e destinos confirmados pelo usuário.
+- A memória nunca recria categoria/subcategoria ausente na taxonomia recebida.

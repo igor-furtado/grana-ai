@@ -63,6 +63,40 @@ import GranaAITestSupport
     )
 }
 
+@Test func learnCommandWritesMemoryWithoutStdout() throws {
+    let memoryURL = temporaryMemoryURL()
+    let learningInput = learningRequestJSON(
+        description: "PAG Steam Sao Paulo BRA",
+        categoryID: "streaming-e-apps",
+        subcategoryID: "jogos"
+    )
+
+    let result = try runCommand(
+        arguments: ["learn"],
+        input: learningInput,
+        memoryURL: memoryURL
+    )
+
+    #expect(result.exitCode == 0)
+    #expect(result.stdout.isEmpty)
+
+    let classificationInput = classificationRequestJSON(description: " pag steam  sao paulo bra ")
+    let classificationResult = try runCommand(
+        input: classificationInput,
+        memoryURL: memoryURL
+    )
+
+    #expect(classificationResult.exitCode == 0)
+
+    let response = try JSONDecoder().decode(ClassificationResponse.self, from: classificationResult.stdout)
+    #expect(response == ClassificationResponse(version: .current, results: [
+        ClassificationResult(
+            transactionID: "tx-memory",
+            outcome: .classified(categoryID: "streaming-e-apps", subcategoryID: "jogos", source: .memory)
+        ),
+    ]))
+}
+
 @Test func commandHarnessCanCancelHungProcess() throws {
     #expect(throws: CommandHarnessError.timedOut) {
         try runCommand(input: "", closeStdin: false, timeout: 0.1)
@@ -92,15 +126,22 @@ private func expectCommandError(
 }
 
 private func runCommand(
+    arguments: [String] = [],
     input: String,
     closeStdin: Bool = true,
-    timeout: TimeInterval = 2
+    timeout: TimeInterval = 2,
+    memoryURL: URL = temporaryMemoryURL()
 ) throws -> CommandResult {
     let process = Process()
     process.executableURL = FixtureStore.packageRoot()
         .appendingPathComponent(".build")
         .appendingPathComponent("debug")
         .appendingPathComponent("grana-ai")
+    process.arguments = arguments
+
+    var environment = ProcessInfo.processInfo.environment
+    environment[LocalClassificationMemory.pathEnvironmentKey] = memoryURL.path
+    process.environment = environment
 
     let stdin = Pipe()
     let stdout = Pipe()
@@ -136,4 +177,69 @@ private func runCommand(
 private func unsupportedVersionRequestJSON() throws -> String {
     try FixtureStore.classificationV1String("request-padaria.json")
         .replacingOccurrences(of: "classification.v1", with: "classification.v0")
+}
+
+private func classificationRequestJSON(description: String) -> String {
+    """
+    {
+      "version": "classification.v1",
+      "transactions": [
+        {
+          "id": "tx-memory",
+          "description": "\(description)",
+          "currencyCode": "BRL"
+        }
+      ],
+      "taxonomy": \(taxonomyJSON()),
+      "context": {
+        "locale": "pt-BR"
+      }
+    }
+    """
+}
+
+private func learningRequestJSON(
+    description: String,
+    categoryID: String,
+    subcategoryID: String
+) -> String {
+    """
+    {
+      "version": "classification.v1",
+      "taxonomy": \(taxonomyJSON()),
+      "confirmedClassifications": [
+        {
+          "description": "\(description)",
+          "categoryId": "\(categoryID)",
+          "subcategoryId": "\(subcategoryID)"
+        }
+      ]
+    }
+    """
+}
+
+private func taxonomyJSON() -> String {
+    """
+    {
+      "categories": [
+        {
+          "id": "streaming-e-apps",
+          "name": "Streaming e apps",
+          "subcategories": [
+            {
+              "id": "jogos",
+              "name": "Jogos"
+            }
+          ]
+        }
+      ]
+    }
+    """
+}
+
+private func temporaryMemoryURL() -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent("grana-ai-command-tests", isDirectory: true)
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        .appendingPathComponent("memory.v1.json")
 }

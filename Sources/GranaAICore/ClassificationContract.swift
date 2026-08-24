@@ -69,6 +69,7 @@ public struct ClassificationResult: Codable, Equatable, Sendable {
         case fallbackReason
         case categoryID = "categoryId"
         case subcategoryID = "subcategoryId"
+        case source
     }
 
     public init(from decoder: Decoder) throws {
@@ -80,9 +81,11 @@ public struct ClassificationResult: Codable, Equatable, Sendable {
         case "classified":
             let categoryID = try container.decode(String.self, forKey: .categoryID)
             let subcategoryID = try container.decodeIfPresent(String.self, forKey: .subcategoryID)
+            let source = try container.decodeIfPresent(ClassificationSource.self, forKey: .source)
             outcome = .classified(
                 categoryID: categoryID,
-                subcategoryID: subcategoryID
+                subcategoryID: subcategoryID,
+                source: source
             )
         case "fallback":
             let reason = try container.decode(FallbackReason.self, forKey: .fallbackReason)
@@ -101,10 +104,11 @@ public struct ClassificationResult: Codable, Equatable, Sendable {
         try container.encode(transactionID, forKey: .transactionID)
 
         switch outcome {
-        case let .classified(categoryID, subcategoryID):
+        case let .classified(categoryID, subcategoryID, source):
             try container.encode("classified", forKey: .outcome)
             try container.encode(categoryID, forKey: .categoryID)
             try container.encodeIfPresent(subcategoryID, forKey: .subcategoryID)
+            try container.encodeIfPresent(source, forKey: .source)
         case let .fallback(reason):
             try container.encode("fallback", forKey: .outcome)
             try container.encode(reason, forKey: .fallbackReason)
@@ -113,10 +117,48 @@ public struct ClassificationResult: Codable, Equatable, Sendable {
 }
 
 public enum ClassificationOutcome: Equatable, Sendable {
-    case classified(categoryID: String, subcategoryID: String?)
+    case classified(categoryID: String, subcategoryID: String?, source: ClassificationSource? = nil)
     case fallback(reason: FallbackReason)
+}
+
+public enum ClassificationSource: String, Codable, Equatable, Sendable {
+    case memory
 }
 
 public enum FallbackReason: String, Codable, Equatable, Sendable {
     case unknown
+}
+
+public struct LearningRequest: Codable, Equatable, Sendable {
+    public let version: ContractVersion
+    public let taxonomy: Taxonomy
+    public let confirmedClassifications: [ConfirmedClassification]
+
+    public init(
+        version: ContractVersion,
+        taxonomy: Taxonomy,
+        confirmedClassifications: [ConfirmedClassification]
+    ) {
+        self.version = version
+        self.taxonomy = taxonomy
+        self.confirmedClassifications = confirmedClassifications
+    }
+}
+
+public struct ConfirmedClassification: Codable, Equatable, Sendable {
+    public let description: String
+    public let categoryID: String
+    public let subcategoryID: String?
+
+    public init(description: String, categoryID: String, subcategoryID: String?) {
+        self.description = description
+        self.categoryID = categoryID
+        self.subcategoryID = subcategoryID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case description
+        case categoryID = "categoryId"
+        case subcategoryID = "subcategoryId"
+    }
 }

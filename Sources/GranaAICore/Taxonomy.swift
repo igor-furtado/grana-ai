@@ -47,11 +47,22 @@ extension Taxonomy {
     }
 
     func contains(_ selection: TaxonomySelection) -> Bool {
+        contains(categoryID: selection.categoryID, subcategoryID: selection.subcategoryID)
+    }
+
+    func contains(categoryID: String, subcategoryID: String?) -> Bool {
         categories.contains { category in
-            category.id == selection.categoryID
-                && category.subcategories.contains { subcategory in
-                    subcategory.id == selection.subcategoryID
-                }
+            guard category.id == categoryID else {
+                return false
+            }
+
+            guard let subcategoryID else {
+                return true
+            }
+
+            return category.subcategories.contains { subcategory in
+                subcategory.id == subcategoryID
+            }
         }
     }
 }

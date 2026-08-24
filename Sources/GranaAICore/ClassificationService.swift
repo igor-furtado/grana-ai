@@ -2,16 +2,22 @@ import Foundation
 
 public struct ClassificationService: Sendable {
     private let deterministicRules: [DeterministicRule]
+    private let memory: LocalClassificationMemory?
 
-    public init() {
+    public init(memory: LocalClassificationMemory? = nil) {
         self.deterministicRules = DeterministicRuleCatalog.current
+        self.memory = memory
     }
 
     public func classify(_ request: ClassificationRequest) throws -> ClassificationResponse {
         try validate(request)
+        let memorySnapshot = try memory?.loadSnapshot()
 
-        let results = request.transactions.map { transaction in
-            ClassificationResult(transactionID: transaction.id, outcome: classify(transaction, using: request.taxonomy))
+        let results = try request.transactions.map { transaction in
+            ClassificationResult(
+                transactionID: transaction.id,
+                outcome: try classify(transaction, using: request.taxonomy, memorySnapshot: memorySnapshot)
+            )
         }
 
         return ClassificationResponse(version: .current, results: results)
@@ -33,7 +39,15 @@ public struct ClassificationService: Sendable {
         }
     }
 
-    private func classify(_ transaction: Transaction, using taxonomy: Taxonomy) -> ClassificationOutcome {
+    private func classify(
+        _ transaction: Transaction,
+        using taxonomy: Taxonomy,
+        memorySnapshot: LocalClassificationMemorySnapshot?
+    ) throws -> ClassificationOutcome {
+        if let outcome = memorySnapshot?.outcome(for: transaction, taxonomy: taxonomy) {
+            return outcome
+        }
+
         for rule in deterministicRules {
             if let outcome = rule.outcome(for: transaction, taxonomy: taxonomy) {
                 return outcome

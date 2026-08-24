@@ -46,11 +46,3 @@ enum TransactionDescriptionPattern: Sendable {
         }
     }
 }
-
-private extension String {
-    func normalizedForRuleMatching() -> String {
-        components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
-    }
-}

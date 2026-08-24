@@ -123,6 +123,126 @@ import GranaAITestSupport
     #expect(response == expected)
 }
 
+@Test func memoryClassifiesBeforeDeterministicRules() throws {
+    let memory = LocalClassificationMemory(fileURL: temporaryMemoryURL())
+    try memory.learn(
+        LearningRequest(
+            version: .current,
+            taxonomy: try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json"),
+            confirmedClassifications: [
+                ConfirmedClassification(
+                    description: "  padaria   central  ",
+                    categoryID: "compras",
+                    subcategoryID: "roupas-e-calcados"
+                ),
+            ]
+        )
+    )
+
+    let service = ClassificationService(memory: memory)
+    let request = ClassificationRequest(
+        version: .current,
+        transactions: [
+            Transaction(id: "tx-padaria", description: "PADARIA CENTRAL", currencyCode: "BRL"),
+        ],
+        taxonomy: try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json"),
+        context: ClassificationContext(locale: "pt-BR")
+    )
+
+    let response = try service.classify(request)
+
+    #expect(response == ClassificationResponse(version: .current, results: [
+        ClassificationResult(
+            transactionID: "tx-padaria",
+            outcome: .classified(categoryID: "compras", subcategoryID: "roupas-e-calcados", source: .memory)
+        ),
+    ]))
+}
+
+@Test func memoryFallsThroughWhenSavedSelectionIsAbsentFromTaxonomy() throws {
+    let memory = LocalClassificationMemory(fileURL: temporaryMemoryURL())
+    try memory.learn(
+        LearningRequest(
+            version: .current,
+            taxonomy: try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json"),
+            confirmedClassifications: [
+                ConfirmedClassification(
+                    description: "PADARIA CENTRAL",
+                    categoryID: "compras",
+                    subcategoryID: "roupas-e-calcados"
+                ),
+            ]
+        )
+    )
+
+    let service = ClassificationService(memory: memory)
+    let request = try FixtureStore.classificationV1Request("request-padaria.json")
+    let expected = try FixtureStore.classificationV1Response("response-padaria.json")
+
+    let response = try service.classify(request)
+
+    #expect(response == expected)
+}
+
+@Test func memoryLearnOverwritesPreviousSelectionForSameNormalizedDescription() throws {
+    let memoryURL = temporaryMemoryURL()
+    let memory = LocalClassificationMemory(fileURL: memoryURL)
+    let taxonomy = try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json")
+
+    try memory.learn(
+        LearningRequest(
+            version: .current,
+            taxonomy: taxonomy,
+            confirmedClassifications: [
+                ConfirmedClassification(
+                    description: "Zara.com",
+                    categoryID: "streaming-e-apps",
+                    subcategoryID: "apps-e-softwares"
+                ),
+            ]
+        )
+    )
+    try memory.learn(
+        LearningRequest(
+            version: .current,
+            taxonomy: taxonomy,
+            confirmedClassifications: [
+                ConfirmedClassification(
+                    description: "  zara.com ",
+                    categoryID: "compras",
+                    subcategoryID: "roupas-e-calcados"
+                ),
+            ]
+        )
+    )
+
+    let snapshot = try JSONDecoder().decode(StoredClassificationMemory.self, from: Data(contentsOf: memoryURL))
+
+    #expect(snapshot.entries == [
+        StoredClassificationMemoryEntry(
+            normalizedDescription: "ZARA.COM",
+            categoryID: "compras",
+            subcategoryID: "roupas-e-calcados"
+        ),
+    ])
+}
+
+@Test func corruptedMemoryFailsClassificationInsteadOfFallingBackSilently() throws {
+    let memoryURL = temporaryMemoryURL()
+    try FileManager.default.createDirectory(
+        at: memoryURL.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+    )
+    try Data("not-json".utf8).write(to: memoryURL)
+
+    let service = ClassificationService(memory: LocalClassificationMemory(fileURL: memoryURL))
+    let request = try FixtureStore.classificationV1Request("request-padaria.json")
+
+    #expect(throws: DecodingError.self) {
+        try service.classify(request)
+    }
+}
+
 @Test func granaAppTaxonomyFixtureDecodesToContractShape() throws {
     let taxonomy = try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json")
 
@@ -132,6 +252,13 @@ import GranaAITestSupport
     let alimentacao = try #require(taxonomy.categories.first { $0.id == "alimentacao" })
     #expect(alimentacao.name == "Alimentação")
     #expect(alimentacao.subcategories.contains(Subcategory(id: "padarias", name: "Padarias")))
+}
+
+private func temporaryMemoryURL() -> URL {
+    FileManager.default.temporaryDirectory
+        .appendingPathComponent("grana-ai-tests", isDirectory: true)
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        .appendingPathComponent("memory.v1.json")
 }
 
 @Test func requestDecodesFromJSONContract() throws {

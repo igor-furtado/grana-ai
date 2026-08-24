@@ -4,6 +4,26 @@ public struct ClassificationJSONCodec: Sendable {
     public init() {}
 
     public func decodeRequest(from data: Data) throws -> ClassificationRequest {
+        try decodeJSONPayload(from: data) {
+            try JSONDecoder().decode(ClassificationRequest.self, from: data)
+        }
+    }
+
+    public func decodeLearningRequest(from data: Data) throws -> LearningRequest {
+        try decodeJSONPayload(from: data) {
+            try JSONDecoder().decode(LearningRequest.self, from: data)
+        }
+    }
+
+    public func encodeResponse(_ response: ClassificationResponse) throws -> Data {
+        try JSONEncoder().encode(response)
+    }
+
+    public func encodeError(_ error: ClassificationContractError) throws -> Data {
+        try JSONEncoder().encode(error)
+    }
+
+    private func decodeJSONPayload<T>(from data: Data, decode: () throws -> T) throws -> T {
         do {
             _ = try JSONSerialization.jsonObject(with: data)
         } catch {
@@ -14,7 +34,7 @@ public struct ClassificationJSONCodec: Sendable {
         }
 
         do {
-            return try JSONDecoder().decode(ClassificationRequest.self, from: data)
+            return try decode()
         } catch let error as DecodingError where error.isMissingTaxonomy {
             throw ClassificationContractError(
                 code: .missingTaxonomy,
@@ -31,14 +51,6 @@ public struct ClassificationJSONCodec: Sendable {
                 message: "Malformed classification request payload."
             )
         }
-    }
-
-    public func encodeResponse(_ response: ClassificationResponse) throws -> Data {
-        try JSONEncoder().encode(response)
-    }
-
-    public func encodeError(_ error: ClassificationContractError) throws -> Data {
-        try JSONEncoder().encode(error)
     }
 }
 
