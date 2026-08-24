@@ -2,19 +2,20 @@ import Dispatch
 import Foundation
 import Testing
 import GranaAICore
+import GranaAITestSupport
 
 @Test func commandReadsJSONFromStdinAndWritesResponseToStdout() throws {
-    let result = try runCommand(input: fixtureString("request-padaria.json"))
+    let result = try runCommand(input: FixtureStore.classificationV1String("request-padaria.json"))
 
     #expect(result.exitCode == 0)
 
     let response = try JSONDecoder().decode(ClassificationResponse.self, from: result.stdout)
-    let expected = try fixtureResponse("response-padaria.json")
+    let expected = try FixtureStore.classificationV1Response("response-padaria.json")
     #expect(response == expected)
 }
 
 @Test func commandWritesStructuredErrorForInvalidJSON() throws {
-    let result = try runCommand(input: fixtureString("error-invalid-json.txt"))
+    let result = try runCommand(input: FixtureStore.classificationV1String("error-invalid-json.txt"))
 
     #expect(result.exitCode == 1)
 
@@ -32,7 +33,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForMissingTaxonomy() throws {
     try expectCommandError(
-        input: fixtureString("error-missing-taxonomy.json"),
+        input: FixtureStore.classificationV1String("error-missing-taxonomy.json"),
         code: .missingTaxonomy,
         message: "Classification request must include taxonomy."
     )
@@ -40,7 +41,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForInvalidTaxonomy() throws {
     try expectCommandError(
-        input: fixtureString("error-invalid-taxonomy.json"),
+        input: FixtureStore.classificationV1String("error-invalid-taxonomy.json"),
         code: .invalidTaxonomy,
         message: "Taxonomy must include at least one valid category."
     )
@@ -48,7 +49,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForMalformedPayload() throws {
     try expectCommandError(
-        input: fixtureString("error-malformed-payload.json"),
+        input: FixtureStore.classificationV1String("error-malformed-payload.json"),
         code: .malformedPayload,
         message: "Malformed classification request payload."
     )
@@ -56,7 +57,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForMissingContext() throws {
     try expectCommandError(
-        input: fixtureString("error-missing-context.json"),
+        input: FixtureStore.classificationV1String("error-missing-context.json"),
         code: .missingContext,
         message: "Classification request must include context."
     )
@@ -96,7 +97,7 @@ private func runCommand(
     timeout: TimeInterval = 2
 ) throws -> CommandResult {
     let process = Process()
-    process.executableURL = packageRoot()
+    process.executableURL = FixtureStore.packageRoot()
         .appendingPathComponent(".build")
         .appendingPathComponent("debug")
         .appendingPathComponent("grana-ai")
@@ -132,35 +133,7 @@ private func runCommand(
     )
 }
 
-private func packageRoot() -> URL {
-    URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-}
-
-private func fixtureResponse(_ name: String) throws -> ClassificationResponse {
-    try JSONDecoder().decode(ClassificationResponse.self, from: fixtureData(name))
-}
-
-private func fixtureString(_ name: String) throws -> String {
-    let data = try fixtureData(name)
-    return String(decoding: data, as: UTF8.self)
-}
-
-private func fixtureData(_ name: String) throws -> Data {
-    try Data(contentsOf: fixtureURL(name))
-}
-
-private func fixtureURL(_ name: String) -> URL {
-    packageRoot()
-        .appendingPathComponent("Tests")
-        .appendingPathComponent("Fixtures")
-        .appendingPathComponent("classification.v1")
-        .appendingPathComponent(name)
-}
-
 private func unsupportedVersionRequestJSON() throws -> String {
-    try fixtureString("request-padaria.json")
+    try FixtureStore.classificationV1String("request-padaria.json")
         .replacingOccurrences(of: "classification.v1", with: "classification.v0")
 }

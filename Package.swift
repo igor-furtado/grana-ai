@@ -23,13 +23,18 @@ let package = Package(
             name: "GranaAICommand",
             dependencies: ["GranaAICore"]
         ),
+        .target(
+            name: "GranaAITestSupport",
+            dependencies: ["GranaAICore"],
+            path: "Tests/Support"
+        ),
         .testTarget(
             name: "GranaAICoreTests",
-            dependencies: ["GranaAICore"]
+            dependencies: ["GranaAICore", "GranaAITestSupport"]
         ),
         .testTarget(
             name: "GranaAICommandTests",
-            dependencies: ["GranaAICore"]
+            dependencies: ["GranaAICore", "GranaAITestSupport"]
         ),
     ],
     swiftLanguageModes: [.v6]

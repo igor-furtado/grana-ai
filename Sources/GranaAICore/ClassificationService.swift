@@ -1,7 +1,11 @@
 import Foundation
 
 public struct ClassificationService: Sendable {
-    public init() {}
+    private let deterministicRules: [DeterministicRule]
+
+    public init() {
+        self.deterministicRules = DeterministicRuleCatalog.current
+    }
 
     public func classify(_ request: ClassificationRequest) throws -> ClassificationResponse {
         try validate(request)
@@ -30,16 +34,10 @@ public struct ClassificationService: Sendable {
     }
 
     private func classify(_ transaction: Transaction, using taxonomy: Taxonomy) -> ClassificationOutcome {
-        if transaction.description.range(
-            of: "PADARIA",
-            options: [.caseInsensitive, .diacriticInsensitive]
-        ) != nil,
-            taxonomy.contains(categoryID: "alimentacao", subcategoryID: "padaria")
-        {
-            return .classified(
-                categoryID: "alimentacao",
-                subcategoryID: "padaria"
-            )
+        for rule in deterministicRules {
+            if let outcome = rule.outcome(for: transaction, taxonomy: taxonomy) {
+                return outcome
+            }
         }
 
         return .fallback(reason: .unknown)

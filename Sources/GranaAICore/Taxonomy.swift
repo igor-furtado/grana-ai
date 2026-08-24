@@ -46,11 +46,12 @@ extension Taxonomy {
         !categories.isEmpty && categories.allSatisfy(\.isValid)
     }
 
-    func contains(categoryID: String, subcategoryID: String) -> Bool {
+    func contains(_ selection: TaxonomySelection) -> Bool {
         categories.contains { category in
-            category.id == categoryID && category.subcategories.contains { subcategory in
-                subcategory.id == subcategoryID
-            }
+            category.id == selection.categoryID
+                && category.subcategories.contains { subcategory in
+                    subcategory.id == selection.subcategoryID
+                }
         }
     }
 }
