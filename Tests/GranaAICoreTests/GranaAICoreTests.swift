@@ -8,64 +8,51 @@ import Testing
 
 @Test func validRequestReturnsFallbackForEachTransaction() throws {
     let service = ClassificationService()
-    let request = ClassificationRequest(
-        version: .current,
-        transactions: [
-            Transaction(id: "tx-1", description: "PADARIA CENTRAL", amountInMinorUnits: -1890, currencyCode: "BRL"),
-            Transaction(id: "tx-2", description: "UBER TRIP", amountInMinorUnits: -2575, currencyCode: "BRL"),
-        ],
-        taxonomy: Taxonomy(categories: [
-            Category(
-                id: "alimentacao",
-                name: "Alimentação",
-                subcategories: [Subcategory(id: "padaria", name: "Padaria")]
-            ),
-        ]),
-        context: ClassificationContext(locale: "pt-BR")
-    )
+    let request = try fixtureRequest("request-fallback.json")
+    let expected = try fixtureResponse("response-fallback.json")
 
     let response = try service.classify(request)
 
-    #expect(response.version == .current)
-    #expect(response.results == [
-        ClassificationResult(transactionID: "tx-1", outcome: .fallback(reason: .noStrategyAvailable)),
-        ClassificationResult(transactionID: "tx-2", outcome: .fallback(reason: .noStrategyAvailable)),
-    ])
+    #expect(response == expected)
+}
+
+@Test func padariaRuleClassifiesWhenTaxonomyAllowsIt() throws {
+    let service = ClassificationService()
+    let request = try fixtureRequest("request-padaria.json")
+    let expected = try fixtureResponse("response-padaria.json")
+
+    let response = try service.classify(request)
+
+    #expect(response == expected)
+}
+
+@Test func padariaRuleFallsBackWhenTaxonomyDoesNotAllowIt() throws {
+    let service = ClassificationService()
+    let request = try fixtureRequest("request-padaria-without-padaria-taxonomy.json")
+    let expected = try fixtureResponse("response-padaria-without-padaria-taxonomy.json")
+
+    let response = try service.classify(request)
+
+    #expect(response == expected)
+}
+
+@Test func padariaRuleFallsBackWhenSubcategoryDoesNotExist() throws {
+    let service = ClassificationService()
+    let request = try fixtureRequest("request-padaria-without-padaria-subcategory.json")
+    let expected = try fixtureResponse("response-padaria-without-padaria-subcategory.json")
+
+    let response = try service.classify(request)
+
+    #expect(response == expected)
 }
 
 @Test func requestDecodesFromJSONContract() throws {
-    let data = """
-    {
-      "version": "classification.v1",
-      "transactions": [
-        {
-          "id": "tx-1",
-          "description": "PADARIA CENTRAL",
-          "amountInMinorUnits": -1890,
-          "currencyCode": "BRL"
-        }
-      ],
-      "taxonomy": {
-        "categories": [
-          {
-            "id": "alimentacao",
-            "name": "Alimentação",
-            "subcategories": [
-              { "id": "padaria", "name": "Padaria" }
-            ]
-          }
-        ]
-      },
-      "context": {
-        "locale": "pt-BR"
-      }
-    }
-    """.data(using: .utf8)!
+    let data = try fixtureData("request-padaria.json")
 
     let request = try JSONDecoder().decode(ClassificationRequest.self, from: data)
 
     #expect(request.version == .current)
-    #expect(request.transactions.first?.id == "tx-1")
+    #expect(request.transactions.first?.id == "tx-padaria")
     #expect(request.taxonomy.categories.first?.subcategories.first?.id == "padaria")
     #expect(request.context.locale == "pt-BR")
 }
@@ -85,7 +72,7 @@ import Testing
 
 @Test func codecRejectsInvalidJSONWithStableError() throws {
     let codec = ClassificationJSONCodec()
-    let data = "{".data(using: .utf8)!
+    let data = try fixtureData("error-invalid-json.txt")
 
     #expect(throws: ClassificationContractError(code: .invalidJSON, message: "Invalid JSON payload.")) {
         try codec.decodeRequest(from: data)
@@ -94,17 +81,7 @@ import Testing
 
 @Test func codecRejectsMissingTaxonomyWithStableError() throws {
     let codec = ClassificationJSONCodec()
-    let data = """
-    {
-      "version": "classification.v1",
-      "transactions": [
-        { "id": "tx-1", "description": "PADARIA CENTRAL" }
-      ],
-      "context": {
-        "locale": "pt-BR"
-      }
-    }
-    """.data(using: .utf8)!
+    let data = try fixtureData("error-missing-taxonomy.json")
 
     #expect(throws: ClassificationContractError(code: .missingTaxonomy, message: "Classification request must include taxonomy.")) {
         try codec.decodeRequest(from: data)
@@ -113,19 +90,7 @@ import Testing
 
 @Test func codecRejectsMissingContextWithStableError() throws {
     let codec = ClassificationJSONCodec()
-    let data = """
-    {
-      "version": "classification.v1",
-      "transactions": [
-        { "id": "tx-1", "description": "PADARIA CENTRAL" }
-      ],
-      "taxonomy": {
-        "categories": [
-          { "id": "alimentacao", "name": "Alimentação" }
-        ]
-      }
-    }
-    """.data(using: .utf8)!
+    let data = try fixtureData("error-missing-context.json")
 
     #expect(throws: ClassificationContractError(code: .missingContext, message: "Classification request must include context.")) {
         try codec.decodeRequest(from: data)
@@ -133,12 +98,7 @@ import Testing
 }
 
 @Test func responseEncodesToJSONContract() throws {
-    let response = ClassificationResponse(
-        version: .current,
-        results: [
-            ClassificationResult(transactionID: "tx-1", outcome: .fallback(reason: .noStrategyAvailable)),
-        ]
-    )
+    let response = try fixtureResponse("response-padaria.json")
 
     let data = try JSONEncoder().encode(response)
     let decoded = try JSONDecoder().decode(ClassificationResponse.self, from: data)
@@ -147,12 +107,7 @@ import Testing
 }
 
 @Test func responseUsesStableJSONFieldNames() throws {
-    let response = ClassificationResponse(
-        version: .current,
-        results: [
-            ClassificationResult(transactionID: "tx-1", outcome: .fallback(reason: .noStrategyAvailable)),
-        ]
-    )
+    let response = try fixtureResponse("response-padaria.json")
 
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.sortedKeys]
@@ -161,7 +116,7 @@ import Testing
     let json = String(data: data, encoding: .utf8)
 
     #expect(json == """
-    {"results":[{"fallbackReason":"no_strategy_available","outcome":"fallback","transactionId":"tx-1"}],"version":"classification.v1"}
+    {"results":[{"categoryId":"alimentacao","outcome":"classified","subcategoryId":"padaria","transactionId":"tx-padaria"}],"version":"classification.v1"}
     """)
 }
 
@@ -180,6 +135,33 @@ import Testing
     #expect(json == """
     {"code":"missing_taxonomy","message":"Classification request must include taxonomy."}
     """)
+}
+
+private func fixtureRequest(_ name: String) throws -> ClassificationRequest {
+    try JSONDecoder().decode(ClassificationRequest.self, from: fixtureData(name))
+}
+
+private func fixtureResponse(_ name: String) throws -> ClassificationResponse {
+    try JSONDecoder().decode(ClassificationResponse.self, from: fixtureData(name))
+}
+
+private func fixtureData(_ name: String) throws -> Data {
+    try Data(contentsOf: fixtureURL(name))
+}
+
+private func fixtureURL(_ name: String) -> URL {
+    packageRoot()
+        .appendingPathComponent("Tests")
+        .appendingPathComponent("Fixtures")
+        .appendingPathComponent("classification.v1")
+        .appendingPathComponent(name)
+}
+
+private func packageRoot() -> URL {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
 }
 
 @Test func unsupportedVersionReturnsStableError() throws {

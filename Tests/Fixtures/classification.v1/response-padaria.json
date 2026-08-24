@@ -1,0 +1,11 @@
+{
+  "version": "classification.v1",
+  "results": [
+    {
+      "transactionId": "tx-padaria",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "padaria"
+    }
+  ]
+}

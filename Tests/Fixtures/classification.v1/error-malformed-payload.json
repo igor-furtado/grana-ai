@@ -1,0 +1,15 @@
+{
+  "version": "classification.v1",
+  "transactions": "not-an-array",
+  "taxonomy": {
+    "categories": [
+      {
+        "id": "alimentacao",
+        "name": "Alimentação"
+      }
+    ]
+  },
+  "context": {
+    "locale": "pt-BR"
+  }
+}

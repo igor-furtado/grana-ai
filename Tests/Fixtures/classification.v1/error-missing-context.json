@@ -1,0 +1,17 @@
+{
+  "version": "classification.v1",
+  "transactions": [
+    {
+      "id": "tx-1",
+      "description": "PADARIA CENTRAL"
+    }
+  ],
+  "taxonomy": {
+    "categories": [
+      {
+        "id": "alimentacao",
+        "name": "Alimentação"
+      }
+    ]
+  }
+}

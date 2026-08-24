@@ -1,0 +1,12 @@
+{
+  "version": "classification.v1",
+  "transactions": [
+    {
+      "id": "tx-1",
+      "description": "PADARIA CENTRAL"
+    }
+  ],
+  "context": {
+    "locale": "pt-BR"
+  }
+}

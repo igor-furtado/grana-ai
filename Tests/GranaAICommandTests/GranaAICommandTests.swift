@@ -4,21 +4,17 @@ import Testing
 import GranaAICore
 
 @Test func commandReadsJSONFromStdinAndWritesResponseToStdout() throws {
-    let result = try runCommand(input: validRequestJSON())
+    let result = try runCommand(input: fixtureString("request-padaria.json"))
 
     #expect(result.exitCode == 0)
 
     let response = try JSONDecoder().decode(ClassificationResponse.self, from: result.stdout)
-    #expect(response == ClassificationResponse(
-        version: .current,
-        results: [
-            ClassificationResult(transactionID: "tx-1", outcome: .fallback(reason: .noStrategyAvailable)),
-        ]
-    ))
+    let expected = try fixtureResponse("response-padaria.json")
+    #expect(response == expected)
 }
 
 @Test func commandWritesStructuredErrorForInvalidJSON() throws {
-    let result = try runCommand(input: "{")
+    let result = try runCommand(input: fixtureString("error-invalid-json.txt"))
 
     #expect(result.exitCode == 1)
 
@@ -28,7 +24,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForUnsupportedVersion() throws {
     try expectCommandError(
-        input: validRequestJSON(version: "classification.v0"),
+        input: unsupportedVersionRequestJSON(),
         code: .unsupportedVersion,
         message: "Unsupported contract version: classification.v0"
     )
@@ -36,17 +32,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForMissingTaxonomy() throws {
     try expectCommandError(
-        input: """
-        {
-          "version": "classification.v1",
-          "transactions": [
-            { "id": "tx-1", "description": "PADARIA CENTRAL" }
-          ],
-          "context": {
-            "locale": "pt-BR"
-          }
-        }
-        """,
+        input: fixtureString("error-missing-taxonomy.json"),
         code: .missingTaxonomy,
         message: "Classification request must include taxonomy."
     )
@@ -54,20 +40,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForInvalidTaxonomy() throws {
     try expectCommandError(
-        input: """
-        {
-          "version": "classification.v1",
-          "transactions": [
-            { "id": "tx-1", "description": "PADARIA CENTRAL" }
-          ],
-          "taxonomy": {
-            "categories": []
-          },
-          "context": {
-            "locale": "pt-BR"
-          }
-        }
-        """,
+        input: fixtureString("error-invalid-taxonomy.json"),
         code: .invalidTaxonomy,
         message: "Taxonomy must include at least one valid category."
     )
@@ -75,20 +48,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForMalformedPayload() throws {
     try expectCommandError(
-        input: """
-        {
-          "version": "classification.v1",
-          "transactions": "not-an-array",
-          "taxonomy": {
-            "categories": [
-              { "id": "alimentacao", "name": "Alimentação" }
-            ]
-          },
-          "context": {
-            "locale": "pt-BR"
-          }
-        }
-        """,
+        input: fixtureString("error-malformed-payload.json"),
         code: .malformedPayload,
         message: "Malformed classification request payload."
     )
@@ -96,19 +56,7 @@ import GranaAICore
 
 @Test func commandWritesStructuredErrorForMissingContext() throws {
     try expectCommandError(
-        input: """
-        {
-          "version": "classification.v1",
-          "transactions": [
-            { "id": "tx-1", "description": "PADARIA CENTRAL" }
-          ],
-          "taxonomy": {
-            "categories": [
-              { "id": "alimentacao", "name": "Alimentação" }
-            ]
-          }
-        }
-        """,
+        input: fixtureString("error-missing-context.json"),
         code: .missingContext,
         message: "Classification request must include context."
     )
@@ -191,21 +139,28 @@ private func packageRoot() -> URL {
         .deletingLastPathComponent()
 }
 
-private func validRequestJSON(version: String = "classification.v1") -> String {
-    """
-    {
-      "version": "\(version)",
-      "transactions": [
-        { "id": "tx-1", "description": "PADARIA CENTRAL" }
-      ],
-      "taxonomy": {
-        "categories": [
-          { "id": "alimentacao", "name": "Alimentação" }
-        ]
-      },
-      "context": {
-        "locale": "pt-BR"
-      }
-    }
-    """
+private func fixtureResponse(_ name: String) throws -> ClassificationResponse {
+    try JSONDecoder().decode(ClassificationResponse.self, from: fixtureData(name))
+}
+
+private func fixtureString(_ name: String) throws -> String {
+    let data = try fixtureData(name)
+    return String(decoding: data, as: UTF8.self)
+}
+
+private func fixtureData(_ name: String) throws -> Data {
+    try Data(contentsOf: fixtureURL(name))
+}
+
+private func fixtureURL(_ name: String) -> URL {
+    packageRoot()
+        .appendingPathComponent("Tests")
+        .appendingPathComponent("Fixtures")
+        .appendingPathComponent("classification.v1")
+        .appendingPathComponent(name)
+}
+
+private func unsupportedVersionRequestJSON() throws -> String {
+    try fixtureString("request-padaria.json")
+        .replacingOccurrences(of: "classification.v1", with: "classification.v0")
 }

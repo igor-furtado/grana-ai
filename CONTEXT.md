@@ -48,6 +48,10 @@ _Evite_: UI de correção do GranaAI, etapa de treinamento do modelo
 Capacidade futura do GranaAI que pode persistir sinais locais de classificação entre requests. Ela não é a fonte de verdade financeira.
 _Evite_: réplica do Supabase, store de transações, livro financeiro do usuário
 
+**Regra Determinística**:
+Estratégia local explícita que classifica uma transação por padrões previsíveis na descrição e pela taxonomia recebida. Ela só pode sugerir categoria/subcategoria existentes na taxonomia do request.
+_Evite_: heurística remota, prompt, modelo treinado
+
 **Fonte de Verdade Financeira**:
 O Supabase, sob responsabilidade do GranaApp, continua sendo o store autoritativo para dados financeiros e estado commitado das transações.
 _Evite_: banco de dados do GranaAI, memória local, cache do classificador

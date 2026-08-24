@@ -1,0 +1,10 @@
+{
+  "version": "classification.v1",
+  "results": [
+    {
+      "transactionId": "tx-padaria",
+      "outcome": "fallback",
+      "fallbackReason": "unknown"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "version": "classification.v1",
+  "transactions": [
+    {
+      "id": "tx-fallback",
+      "description": "UBER TRIP",
+      "amountInMinorUnits": -2575,
+      "currencyCode": "BRL"
+    }
+  ],
+  "taxonomy": {
+    "categories": [
+      {
+        "id": "alimentacao",
+        "name": "Alimentação",
+        "subcategories": [
+          {
+            "id": "padaria",
+            "name": "Padaria"
+          }
+        ]
+      }
+    ]
+  },
+  "context": {
+    "locale": "pt-BR"
+  }
+}

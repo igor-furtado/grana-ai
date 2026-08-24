@@ -1,0 +1,28 @@
+{
+  "version": "classification.v1",
+  "transactions": [
+    {
+      "id": "tx-padaria",
+      "description": "PADARIA CENTRAL",
+      "amountInMinorUnits": -1890,
+      "currencyCode": "BRL"
+    }
+  ],
+  "taxonomy": {
+    "categories": [
+      {
+        "id": "transporte",
+        "name": "Transporte",
+        "subcategories": [
+          {
+            "id": "corrida",
+            "name": "Corrida"
+          }
+        ]
+      }
+    ]
+  },
+  "context": {
+    "locale": "pt-BR"
+  }
+}

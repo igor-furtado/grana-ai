@@ -1,0 +1,28 @@
+{
+  "version": "classification.v1",
+  "transactions": [
+    {
+      "id": "tx-padaria",
+      "description": "PADARIA CENTRAL",
+      "amountInMinorUnits": -1890,
+      "currencyCode": "BRL"
+    }
+  ],
+  "taxonomy": {
+    "categories": [
+      {
+        "id": "alimentacao",
+        "name": "Alimentação",
+        "subcategories": [
+          {
+            "id": "mercado",
+            "name": "Mercado"
+          }
+        ]
+      }
+    ]
+  },
+  "context": {
+    "locale": "pt-BR"
+  }
+}

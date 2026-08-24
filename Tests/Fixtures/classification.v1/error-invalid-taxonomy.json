@@ -1,0 +1,15 @@
+{
+  "version": "classification.v1",
+  "transactions": [
+    {
+      "id": "tx-1",
+      "description": "PADARIA CENTRAL"
+    }
+  ],
+  "taxonomy": {
+    "categories": []
+  },
+  "context": {
+    "locale": "pt-BR"
+  }
+}
