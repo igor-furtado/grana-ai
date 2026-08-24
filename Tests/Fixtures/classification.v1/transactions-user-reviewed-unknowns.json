@@ -208,5 +208,160 @@
     "id": "tx-steam",
     "description": "PAG Steam Sao Paulo BRA",
     "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-showsystem",
+    "description": "ShowSystem SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-zara-dotcom",
+    "description": "Zara.com",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-lagofast",
+    "description": "LAGOFAST 19H MAXGRAND KOW",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-pg-ton-daniele",
+    "description": "PG TON DANIELE RODR PACO DO LUMIA BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-cea-rib",
+    "description": "CEA RIB 436 ECPC SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-super-mercadinhos",
+    "description": "SUPER MERCADINHOS SAO FORTALEZA BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-bioformula",
+    "description": "BIOFORMULA SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-silencio",
+    "description": "SILENCIO RIO DE JANEIR BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-mp-expressar",
+    "description": "MP EXPRESSAR So Lus MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-barkabao",
+    "description": "BarKabao SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-digital-audio-e-luz",
+    "description": "DigitalAudioELuz SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-rei-do-churrasco",
+    "description": "REI DO CHURRASCO CALHA SAO LUIS MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-iof-diario",
+    "description": "IOF DIARIO DB PF",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-juros-mora",
+    "description": "JUROS DE MORA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-encargos-rotativo",
+    "description": "ENCARGOS ROTATIVO",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-iof-adicional",
+    "description": "IOF ADICIONAL DB PF",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-mp-undiesstore",
+    "description": "MP UNDIESSTORE",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-nord-vpn",
+    "description": "ac Nord VPNcom Florianopolis BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-zara-com-brasil",
+    "description": "ZARA COM BRASIL SAO PAULO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-microsoft",
+    "description": "PPRO MICROSOFT SAO PAULO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-frutaria-bianca",
+    "description": "FRUTARIA BIANCA PACO DO LUMIA MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-marco-aureli",
+    "description": "MARCO AURELI MARCOAURE SAO BERNARDO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-polyelle",
+    "description": "POLYELLE SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-pg-ton-mercearia",
+    "description": "PG TON MERCEARIA E SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-ponto-da-moda",
+    "description": "PONTO DA MODA FORTALEZA BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-pirata-bar-turismo",
+    "description": "PIRATA BAR TURISMO FORTALEZA BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-mp-villermonteles",
+    "description": "MP VILLERMONTELES SAO LUIS MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-guga-lanches",
+    "description": "GUGA LANCHES J SAO LUIS MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-ifd-face-lanches",
+    "description": "IFD FACE LANCHES LTDA SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-sao-luis-meias",
+    "description": "SaoLuisMeias SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-trackfield",
+    "description": "TRACKFIELD SAO LUIS BRA",
+    "currencyCode": "BRL"
   }
 ]

@@ -252,6 +252,192 @@
       "outcome": "classified",
       "categoryId": "streaming-e-apps",
       "subcategoryId": "jogos"
+    },
+    {
+      "transactionId": "tx-showsystem",
+      "outcome": "classified",
+      "categoryId": "festas",
+      "subcategoryId": "shows-e-festivais"
+    },
+    {
+      "transactionId": "tx-zara-dotcom",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-lagofast",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "apps-e-softwares"
+    },
+    {
+      "transactionId": "tx-pg-ton-daniele",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "lanchonetes"
+    },
+    {
+      "transactionId": "tx-cea-rib",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-super-mercadinhos",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "supermercados"
+    },
+    {
+      "transactionId": "tx-bioformula",
+      "outcome": "classified",
+      "categoryId": "saude",
+      "subcategoryId": "farmacias-e-medicamentos"
+    },
+    {
+      "transactionId": "tx-silencio",
+      "outcome": "classified",
+      "categoryId": "festas",
+      "subcategoryId": "bares"
+    },
+    {
+      "transactionId": "tx-mp-expressar",
+      "outcome": "classified",
+      "categoryId": "danca",
+      "subcategoryId": "bailes"
+    },
+    {
+      "transactionId": "tx-barkabao",
+      "outcome": "classified",
+      "categoryId": "festas",
+      "subcategoryId": "bares"
+    },
+    {
+      "transactionId": "tx-digital-audio-e-luz",
+      "outcome": "classified",
+      "categoryId": "festas",
+      "subcategoryId": "bares"
+    },
+    {
+      "transactionId": "tx-rei-do-churrasco",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "delivery-de-comida"
+    },
+    {
+      "transactionId": "tx-iof-diario",
+      "outcome": "classified",
+      "categoryId": "impostos",
+      "subcategoryId": "iof"
+    },
+    {
+      "transactionId": "tx-juros-mora",
+      "outcome": "classified",
+      "categoryId": "impostos",
+      "subcategoryId": "taxas-bancarias"
+    },
+    {
+      "transactionId": "tx-encargos-rotativo",
+      "outcome": "classified",
+      "categoryId": "impostos",
+      "subcategoryId": "taxas-bancarias"
+    },
+    {
+      "transactionId": "tx-iof-adicional",
+      "outcome": "classified",
+      "categoryId": "impostos",
+      "subcategoryId": "iof"
+    },
+    {
+      "transactionId": "tx-mp-undiesstore",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-nord-vpn",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "apps-e-softwares"
+    },
+    {
+      "transactionId": "tx-zara-com-brasil",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-microsoft",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "apps-e-softwares"
+    },
+    {
+      "transactionId": "tx-frutaria-bianca",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "mercearias"
+    },
+    {
+      "transactionId": "tx-marco-aureli",
+      "outcome": "classified",
+      "categoryId": "exercicios",
+      "subcategoryId": "personal-trainer"
+    },
+    {
+      "transactionId": "tx-polyelle",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-pg-ton-mercearia",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "mercearias"
+    },
+    {
+      "transactionId": "tx-ponto-da-moda",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-pirata-bar-turismo",
+      "outcome": "classified",
+      "categoryId": "danca",
+      "subcategoryId": "congressos"
+    },
+    {
+      "transactionId": "tx-mp-villermonteles",
+      "outcome": "classified",
+      "categoryId": "danca",
+      "subcategoryId": "workshops"
+    },
+    {
+      "transactionId": "tx-guga-lanches",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "lanchonetes"
+    },
+    {
+      "transactionId": "tx-ifd-face-lanches",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "delivery-de-comida"
+    },
+    {
+      "transactionId": "tx-sao-luis-meias",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-trackfield",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
     }
   ]
 }
