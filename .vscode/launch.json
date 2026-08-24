@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:grana_ai}",
+      "name": "Debug grana-ai",
+      "target": "grana-ai",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug grana-ai"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:grana_ai}",
+      "name": "Release grana-ai",
+      "target": "grana-ai",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release grana-ai"
+    }
+  ]
+}
