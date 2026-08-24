@@ -1,0 +1,212 @@
+[
+  {
+    "id": "tx-a-de-c-brito",
+    "description": "A DE C BRITO DE SOUSA SAO JOSE DE R MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-seresta",
+    "description": "SERESTA DO PRESIDENTE SAO LUIS MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-amazon-servicos",
+    "description": "AMAZON SERVICOS DE VAR SAO PAULO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-apple-bill",
+    "description": "APPLE COM BILL SAO PAULO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-selfit-maiobom",
+    "description": "SELFITMAIOBO PACO DO LUMIA MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-fribal",
+    "description": "FRIBAL PACO DO LUMIA BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-mateus-3",
+    "description": "MATEUS SUPERMERCADOS 3 SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-amazon-prime-city",
+    "description": "AmazonPrimeBR SAO PAULO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-renner",
+    "description": "LOJAS RENNER FL 494 SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-certisi",
+    "description": "CERTISI CERTI04018979 SAO PAULO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-kabum",
+    "description": "KABUM LIMEIRA BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-31mateus",
+    "description": "31MATEUS SUPERMERCADOS SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-food-park",
+    "description": "FOOD PARK DAMAMEL SAO JOSE DE BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-servicos-cla",
+    "description": "SERVICOS CLA 489881618 RIO DE JANEIR BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-faceburguer",
+    "description": "Faceburguer SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-brooksfield",
+    "description": "BROOKSFIELD SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-arabian-grill",
+    "description": "ARABIAN GRILL SAO JOSE DE R MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-extrafarma-shopping",
+    "description": "EXTRAFARMA SHOPPING PA SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-gaspar-matriz",
+    "description": "GASPAR MATRIZ SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-farmacias-pague-menos",
+    "description": "FARMACIAS PAGUE MENOS PACO DO LUMIA BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-mp-facelanche",
+    "description": "MP FACELANCHE OSASCO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-pague-menos-0413",
+    "description": "PAGUE MENOS 0413 MA MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-marco-aurelio",
+    "description": "MARCO AURELIO TREINAME SAO BERNARDO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-rutra",
+    "description": "Rutra SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-mercadao-lima-verde",
+    "description": "MERCADAO LIMA VERDE SAO JOSE DE R MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-fixpay-j-martins",
+    "description": "fixpay J MARTINS PERFU Sao Luis MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-rl-dois-vendas",
+    "description": "RL DOIS VENDAS SAO LUIS MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-mateus-9",
+    "description": "MATEUS SUPERMERCADOS 9 SAO JOSE DE R BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-selfit-maiobao",
+    "description": "SELFIT MAIOBAO PACO DO LUMIA MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-galeria",
+    "description": "GALERIA SAO LUIS MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-netflix",
+    "description": "NETFLIX COM SAO PAULO BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-pague-menos-1391",
+    "description": "PAGUE MENOS 1391 MA MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-frutaria-louro",
+    "description": "FRUTARIA DO LOURO PACO DO LUMIA MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-espeto-nordestino",
+    "description": "ESPETO NORDESTINO SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-chilli-beans",
+    "description": "CHILLI BEANS SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-granado",
+    "description": "GRANADO PHARMACIAS SAO LUIS BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-j-martins",
+    "description": "J MARTINS PERFUMES SAO LUIS MA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-iof-internacional",
+    "description": "IOF INTERNACIONAL",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-r-m-rodrigues",
+    "description": "R M RODRIGUES DE SOUSA FORTALEZA BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-ingresso",
+    "description": "Ingresso com RIO DE JANEIR BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-comfy",
+    "description": "COMFY COM BR GASPAR BRA",
+    "currencyCode": "BRL"
+  },
+  {
+    "id": "tx-steam",
+    "description": "PAG Steam Sao Paulo BRA",
+    "currencyCode": "BRL"
+  }
+]

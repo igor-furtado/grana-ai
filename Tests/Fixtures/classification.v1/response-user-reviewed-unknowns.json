@@ -1,0 +1,257 @@
+{
+  "version": "classification.v1",
+  "results": [
+    {
+      "transactionId": "tx-a-de-c-brito",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "delivery-de-comida"
+    },
+    {
+      "transactionId": "tx-seresta",
+      "outcome": "classified",
+      "categoryId": "festas",
+      "subcategoryId": "bares"
+    },
+    {
+      "transactionId": "tx-amazon-servicos",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "streaming-de-video"
+    },
+    {
+      "transactionId": "tx-apple-bill",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "apps-e-softwares"
+    },
+    {
+      "transactionId": "tx-selfit-maiobom",
+      "outcome": "classified",
+      "categoryId": "exercicios",
+      "subcategoryId": "academia"
+    },
+    {
+      "transactionId": "tx-fribal",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "mercearias"
+    },
+    {
+      "transactionId": "tx-mateus-3",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "supermercados"
+    },
+    {
+      "transactionId": "tx-amazon-prime-city",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "streaming-de-video"
+    },
+    {
+      "transactionId": "tx-renner",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-certisi",
+      "outcome": "classified",
+      "categoryId": "servicos-profissionais",
+      "subcategoryId": "contabilidade"
+    },
+    {
+      "transactionId": "tx-kabum",
+      "outcome": "classified",
+      "categoryId": "trabalho",
+      "subcategoryId": "hardware"
+    },
+    {
+      "transactionId": "tx-31mateus",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "supermercados"
+    },
+    {
+      "transactionId": "tx-food-park",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "delivery-de-comida"
+    },
+    {
+      "transactionId": "tx-servicos-cla",
+      "outcome": "classified",
+      "categoryId": "conectividade",
+      "subcategoryId": "celular"
+    },
+    {
+      "transactionId": "tx-faceburguer",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "delivery-de-comida"
+    },
+    {
+      "transactionId": "tx-brooksfield",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-arabian-grill",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "restaurantes"
+    },
+    {
+      "transactionId": "tx-extrafarma-shopping",
+      "outcome": "classified",
+      "categoryId": "saude",
+      "subcategoryId": "farmacias-e-medicamentos"
+    },
+    {
+      "transactionId": "tx-gaspar-matriz",
+      "outcome": "classified",
+      "categoryId": "saude",
+      "subcategoryId": "exames"
+    },
+    {
+      "transactionId": "tx-farmacias-pague-menos",
+      "outcome": "classified",
+      "categoryId": "saude",
+      "subcategoryId": "farmacias-e-medicamentos"
+    },
+    {
+      "transactionId": "tx-mp-facelanche",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "delivery-de-comida"
+    },
+    {
+      "transactionId": "tx-pague-menos-0413",
+      "outcome": "classified",
+      "categoryId": "saude",
+      "subcategoryId": "farmacias-e-medicamentos"
+    },
+    {
+      "transactionId": "tx-marco-aurelio",
+      "outcome": "classified",
+      "categoryId": "exercicios",
+      "subcategoryId": "personal-trainer"
+    },
+    {
+      "transactionId": "tx-rutra",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-mercadao-lima-verde",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "mercearias"
+    },
+    {
+      "transactionId": "tx-fixpay-j-martins",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "perfumaria"
+    },
+    {
+      "transactionId": "tx-rl-dois-vendas",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "roupas-e-calcados"
+    },
+    {
+      "transactionId": "tx-mateus-9",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "supermercados"
+    },
+    {
+      "transactionId": "tx-selfit-maiobao",
+      "outcome": "classified",
+      "categoryId": "exercicios",
+      "subcategoryId": "academia"
+    },
+    {
+      "transactionId": "tx-galeria",
+      "outcome": "classified",
+      "categoryId": "festas",
+      "subcategoryId": "baladas-e-boates"
+    },
+    {
+      "transactionId": "tx-netflix",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "streaming-de-video"
+    },
+    {
+      "transactionId": "tx-pague-menos-1391",
+      "outcome": "classified",
+      "categoryId": "saude",
+      "subcategoryId": "farmacias-e-medicamentos"
+    },
+    {
+      "transactionId": "tx-frutaria-louro",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "mercearias"
+    },
+    {
+      "transactionId": "tx-espeto-nordestino",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "restaurantes"
+    },
+    {
+      "transactionId": "tx-chilli-beans",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "acessorios-e-joias"
+    },
+    {
+      "transactionId": "tx-granado",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "perfumaria"
+    },
+    {
+      "transactionId": "tx-j-martins",
+      "outcome": "classified",
+      "categoryId": "compras",
+      "subcategoryId": "perfumaria"
+    },
+    {
+      "transactionId": "tx-iof-internacional",
+      "outcome": "classified",
+      "categoryId": "impostos",
+      "subcategoryId": "iof"
+    },
+    {
+      "transactionId": "tx-r-m-rodrigues",
+      "outcome": "classified",
+      "categoryId": "alimentacao",
+      "subcategoryId": "acougues"
+    },
+    {
+      "transactionId": "tx-ingresso",
+      "outcome": "classified",
+      "categoryId": "festas",
+      "subcategoryId": "shows-e-festivais"
+    },
+    {
+      "transactionId": "tx-comfy",
+      "outcome": "classified",
+      "categoryId": "moradia",
+      "subcategoryId": "moveis"
+    },
+    {
+      "transactionId": "tx-steam",
+      "outcome": "classified",
+      "categoryId": "streaming-e-apps",
+      "subcategoryId": "jogos"
+    }
+  ]
+}

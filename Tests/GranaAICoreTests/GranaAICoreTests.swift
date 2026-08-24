@@ -108,11 +108,26 @@ import GranaAITestSupport
     ]))
 }
 
+@Test func userReviewedUnknownRulesClassifyWithGranaAppTaxonomyFixture() throws {
+    let service = ClassificationService()
+    let request = ClassificationRequest(
+        version: .current,
+        transactions: try FixtureStore.classificationV1Transactions("transactions-user-reviewed-unknowns.json"),
+        taxonomy: try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json"),
+        context: ClassificationContext(locale: "pt-BR")
+    )
+    let expected = try FixtureStore.classificationV1Response("response-user-reviewed-unknowns.json")
+
+    let response = try service.classify(request)
+
+    #expect(response == expected)
+}
+
 @Test func granaAppTaxonomyFixtureDecodesToContractShape() throws {
     let taxonomy = try FixtureStore.classificationV1Taxonomy("taxonomy-granaapp.json")
 
-    #expect(taxonomy.categories.count == 15)
-    #expect(taxonomy.categories.flatMap(\.subcategories).count == 85)
+    #expect(taxonomy.categories.count == 23)
+    #expect(taxonomy.categories.flatMap(\.subcategories).count == 136)
 
     let alimentacao = try #require(taxonomy.categories.first { $0.id == "alimentacao" })
     #expect(alimentacao.name == "Alimentação")

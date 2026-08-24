@@ -69,6 +69,10 @@
         {
           "id": "hobbies-e-colecoes",
           "name": "Hobbies e Coleções"
+        },
+        {
+          "id": "perfumaria",
+          "name": "Perfumaria"
         }
       ]
     },
@@ -427,6 +431,254 @@
         {
           "id": "celular",
           "name": "Celular"
+        }
+      ]
+    },
+    {
+      "id": "exercicios",
+      "name": "Exercícios",
+      "subcategories": [
+        {
+          "id": "academia",
+          "name": "Academia"
+        },
+        {
+          "id": "personal-trainer",
+          "name": "Personal Trainer"
+        },
+        {
+          "id": "crossfit",
+          "name": "Crossfit"
+        },
+        {
+          "id": "pilates",
+          "name": "Pilates"
+        }
+      ]
+    },
+    {
+      "id": "servicos-profissionais",
+      "name": "Serviços Profissionais",
+      "subcategories": [
+        {
+          "id": "contabilidade",
+          "name": "Contabilidade"
+        },
+        {
+          "id": "juridico-e-advocacia",
+          "name": "Jurídico e Advocacia"
+        },
+        {
+          "id": "consultoria",
+          "name": "Consultoria"
+        },
+        {
+          "id": "limpeza-domestica",
+          "name": "Limpeza Doméstica"
+        }
+      ]
+    },
+    {
+      "id": "saude",
+      "name": "Saúde",
+      "subcategories": [
+        {
+          "id": "plano-de-saude",
+          "name": "Plano de Saúde"
+        },
+        {
+          "id": "consultas-medicas",
+          "name": "Consultas Médicas"
+        },
+        {
+          "id": "consultas-dentarias",
+          "name": "Consultas Dentárias"
+        },
+        {
+          "id": "nutricionista",
+          "name": "Nutricionista"
+        },
+        {
+          "id": "psicoterapia",
+          "name": "Psicoterapia"
+        },
+        {
+          "id": "fisioterapia",
+          "name": "Fisioterapia"
+        },
+        {
+          "id": "farmacias-e-medicamentos",
+          "name": "Farmácias e Medicamentos"
+        },
+        {
+          "id": "exames",
+          "name": "Exames"
+        },
+        {
+          "id": "vacinas",
+          "name": "Vacinas"
+        },
+        {
+          "id": "cirurgias",
+          "name": "Cirurgias"
+        },
+        {
+          "id": "emergencias-medicas",
+          "name": "Emergências Médicas"
+        },
+        {
+          "id": "oculos-e-lentes",
+          "name": "Óculos e Lentes"
+        },
+        {
+          "id": "aparelhos-ortodonticos",
+          "name": "Aparelhos Ortodônticos"
+        },
+        {
+          "id": "suplementos",
+          "name": "Suplementos"
+        }
+      ]
+    },
+    {
+      "id": "investimentos",
+      "name": "Investimentos",
+      "subcategories": [
+        {
+          "id": "poupanca",
+          "name": "Poupança"
+        },
+        {
+          "id": "cdb",
+          "name": "CDB"
+        },
+        {
+          "id": "tesouro-direto",
+          "name": "Tesouro Direto"
+        },
+        {
+          "id": "lci-lca",
+          "name": "LCI/LCA"
+        },
+        {
+          "id": "fundos-de-investimento",
+          "name": "Fundos de Investimento"
+        },
+        {
+          "id": "acoes-bolsa",
+          "name": "Ações Bolsa"
+        },
+        {
+          "id": "fiis",
+          "name": "FIIs"
+        },
+        {
+          "id": "etfs",
+          "name": "ETFs"
+        },
+        {
+          "id": "previdencia-privada",
+          "name": "Previdência Privada"
+        },
+        {
+          "id": "criptomoedas",
+          "name": "Criptomoedas"
+        }
+      ]
+    },
+    {
+      "id": "impostos",
+      "name": "Impostos",
+      "subcategories": [
+        {
+          "id": "imposto-de-renda",
+          "name": "Imposto de Renda"
+        },
+        {
+          "id": "das",
+          "name": "DAS"
+        },
+        {
+          "id": "inss-autonomo",
+          "name": "INSS Autônomo"
+        },
+        {
+          "id": "iss",
+          "name": "ISS"
+        },
+        {
+          "id": "itbi",
+          "name": "ITBI"
+        },
+        {
+          "id": "taxas-cartoriais",
+          "name": "Taxas Cartoriais"
+        },
+        {
+          "id": "taxas-bancarias",
+          "name": "Taxas Bancárias"
+        },
+        {
+          "id": "iof",
+          "name": "IOF"
+        }
+      ]
+    },
+    {
+      "id": "saques",
+      "name": "Saques",
+      "subcategories": [
+        {
+          "id": "saque-em-agencia",
+          "name": "Saque em Agência"
+        },
+        {
+          "id": "taxa-de-saque",
+          "name": "Taxa de Saque"
+        }
+      ]
+    },
+    {
+      "id": "nao-classificado",
+      "name": "Não Classificado",
+      "subcategories": [
+        {
+          "id": "pendente-de-revisao",
+          "name": "Pendente de Revisão"
+        }
+      ]
+    },
+    {
+      "id": "transferencias",
+      "name": "Transferências",
+      "subcategories": [
+        {
+          "id": "pix-enviado",
+          "name": "PIX Enviado"
+        },
+        {
+          "id": "pix-recebido",
+          "name": "PIX Recebido"
+        },
+        {
+          "id": "ted-enviada",
+          "name": "TED Enviada"
+        },
+        {
+          "id": "ted-recebida",
+          "name": "TED Recebida"
+        },
+        {
+          "id": "transferencia-entre-contas",
+          "name": "Transferência entre Contas"
+        },
+        {
+          "id": "transferencia-internacional",
+          "name": "Transferência Internacional"
+        },
+        {
+          "id": "deposito-em-conta",
+          "name": "Depósito em Conta"
         }
       ]
     }
